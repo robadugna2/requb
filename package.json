@@ -1,0 +1,22 @@
+{
+  "name": "equb-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Digital Equb Platform - Modern Ethiopian Rotating Savings System",
+  "scripts": {
+    "dev:api": "cd apps/api && npm run start:dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "build:api": "cd apps/api && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=packages/database/prisma/schema.prisma",
+    "db:push": "npx prisma db push --schema=packages/database/prisma/schema.prisma",
+    "db:studio": "npx prisma studio --schema=packages/database/prisma/schema.prisma",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

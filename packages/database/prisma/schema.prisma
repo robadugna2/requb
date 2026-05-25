@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum GroupStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  REMOVED
+}
+
+enum CycleStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum LotteryMethod {
+  RANDOM
+  LIVE_DRAW
+}
+
+enum PayoutStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  groups EqubGroup[]
+
+  @@map("admins")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String   @unique
+  telegramId String?  @unique @map("telegram_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  memberships GroupMembership[]
+  deposits    Deposit[]
+  cyclesWon   Cycle[]          @relation("CycleWinner")
+  lotteryWins LotteryResult[]
+
+  @@map("users")
+}
+
+model EqubGroup {
+  id                 String        @id @default(cuid())
+  name               String
+  description        String?
+  contributionAmount Float         @map("contribution_amount")
+  currency           String        @default("ETB")
+  cycleType          String        @map("cycle_type") // monthly, weekly, biweekly, custom
+  cycleDays          Int?          @map("cycle_days") // for custom cycle type
+  maxMembers         Int           @map("max_members")
+  lotteryMethod      LotteryMethod @default(RANDOM) @map("lottery_method")
+  status             GroupStatus   @default(ACTIVE)
+  bankAccount        String?       @map("bank_account") // shared deposit account number
+  bankName           String?       @map("bank_name")
+  createdById        String        @map("created_by_id")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  createdBy   Admin             @relation(fields: [createdById], references: [id])
+  memberships GroupMembership[]
+  cycles      Cycle[]
+
+  @@map("equb_groups")
+}
+
+model GroupMembership {
+  id       String           @id @default(cuid())
+  groupId  String           @map("group_id")
+  userId   String           @map("user_id")
+  status   MembershipStatus @default(ACTIVE)
+  joinedAt DateTime         @default(now()) @map("joined_at")
+
+  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_memberships")
+}
+
+model Cycle {
+  id          String      @id @default(cuid())
+  groupId     String      @map("group_id")
+  cycleNumber Int         @map("cycle_number")
+  startDate   DateTime    @map("start_date")
+  endDate     DateTime    @map("end_date")
+  status      CycleStatus @default(PENDING)
+  winnerId    String?     @map("winner_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  group         EqubGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  winner        User?          @relation("CycleWinner", fields: [winnerId], references: [id])
+  deposits      Deposit[]
+  lotteryResult LotteryResult?
+
+  @@unique([groupId, cycleNumber])
+  @@map("cycles")
+}
+
+model Deposit {
+  id                 String             @id @default(cuid())
+  cycleId            String             @map("cycle_id")
+  userId             String             @map("user_id")
+  imageUrl           String             @map("image_url")
+  ocrData            Json?              @map("ocr_data")
+  ftNumber           String?            @map("ft_number")
+  amount             Float?
+  bankName           String?            @map("bank_name")
+  depositDate        DateTime?          @map("deposit_date")
+  senderName         String?            @map("sender_name")
+  senderAccount      String?            @map("sender_account")
+  receiverAccount    String?            @map("receiver_account")
+  branch             String?
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  verifiedById       String?            @map("verified_by_id")
+  rejectionReason    String?            @map("rejection_reason")
+  confidence         Float?             // OCR confidence score 0-1
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  cycle Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([ftNumber])
+  @@map("deposits")
+}
+
+model LotteryResult {
+  id         String        @id @default(cuid())
+  cycleId    String        @unique @map("cycle_id")
+  winnerId   String        @map("winner_id")
+  method     LotteryMethod
+  amountWon  Float         @map("amount_won")
+  drawnAt    DateTime      @default(now()) @map("drawn_at")
+  drawnBy    String?       @map("drawn_by") // admin id who triggered
+
+  cycle  Cycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  winner User   @relation(fields: [winnerId], references: [id])
+  payout Payout?
+
+  @@map("lottery_results")
+}
+
+model Payout {
+  id              String       @id @default(cuid())
+  lotteryResultId String       @unique @map("lottery_result_id")
+  status          PayoutStatus @default(PENDING)
+  payoutDate      DateTime?    @map("payout_date")
+  transactionRef  String?      @map("transaction_ref")
+  notes           String?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  lotteryResult LotteryResult @relation(fields: [lotteryResultId], references: [id], onDelete: Cascade)
+
+  @@map("payouts")
+}
