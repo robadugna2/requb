@@ -7,10 +7,9 @@ import {
   Receipt,
   CircleDollarSign,
   ArrowRight,
+  AlertCircle,
 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -21,69 +20,27 @@ import {
 } from 'recharts';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import StatsCard from '@/components/ui/StatsCard';
-import Badge from '@/components/ui/Badge';
 import { getDashboardStats, getRecentActivity, getDepositChart } from '@/lib/api';
-import { format } from 'date-fns';
-
-// Mock data for when API is not connected
-const mockStats = {
-  totalGroups: 12,
-  activeMembers: 156,
-  pendingReceipts: 23,
-  totalCollected: 'ETB 1.2M',
-};
-
-const mockActivity = [
-  {
-    id: '1',
-    type: 'deposit',
-    message: 'Abebe Kebede deposited ETB 5,000 to Weekly Equb #3',
-    time: '2 minutes ago',
-  },
-  {
-    id: '2',
-    type: 'verification',
-    message: 'Receipt verified for Meron Tadesse in Monthly Equb #1',
-    time: '15 minutes ago',
-  },
-  {
-    id: '3',
-    type: 'lottery',
-    message: 'Lottery draw completed for Bi-Weekly Equb #5 - Winner: Dawit Haile',
-    time: '1 hour ago',
-  },
-  {
-    id: '4',
-    type: 'member',
-    message: 'New member Sara Tekle joined Weekly Equb #2',
-    time: '2 hours ago',
-  },
-  {
-    id: '5',
-    type: 'deposit',
-    message: 'Yohannes Gebre deposited ETB 10,000 to Monthly Equb #1',
-    time: '3 hours ago',
-  },
-];
-
-const mockChartData = [
-  { date: 'Jan', deposits: 45000, verified: 42000 },
-  { date: 'Feb', deposits: 52000, verified: 48000 },
-  { date: 'Mar', deposits: 61000, verified: 58000 },
-  { date: 'Apr', deposits: 58000, verified: 55000 },
-  { date: 'May', deposits: 72000, verified: 69000 },
-  { date: 'Jun', deposits: 85000, verified: 80000 },
-  { date: 'Jul', deposits: 91000, verified: 88000 },
-];
+import type { DashboardStats, ActivityItem, ChartDataItem } from '@/lib/api';
+import { useLanguage } from '@/components/layout/LanguageContext';
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState(mockStats);
-  const [activity, setActivity] = useState(mockActivity);
-  const [chartData, setChartData] = useState(mockChartData);
+  const { t } = useLanguage();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalGroups: 0,
+    activeMembers: 0,
+    pendingReceipts: 0,
+    totalCollected: 'ETB 0',
+  });
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [chartData, setChartData] = useState<ChartDataItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const [statsData, activityData, chartDataRes] = await Promise.allSettled([
           getDashboardStats(),
@@ -94,9 +51,12 @@ export default function DashboardPage() {
         if (statsData.status === 'fulfilled') setStats(statsData.value);
         if (activityData.status === 'fulfilled') setActivity(activityData.value);
         if (chartDataRes.status === 'fulfilled') setChartData(chartDataRes.value);
-      } catch (error) {
-        // Use mock data if API is not available
-        console.log('Using mock data - API not connected');
+
+        if (statsData.status === 'rejected' && activityData.status === 'rejected') {
+          setError('Failed to load dashboard data. Please check your connection and try again.');
+        }
+      } catch (err) {
+        setError('Failed to load dashboard data. Please check your connection and try again.');
       } finally {
         setLoading(false);
       }
@@ -105,41 +65,59 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+            <p className="text-sm text-gray-500">{t('db.loading')}</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t('db.title')}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Overview of your Equb platform activity
+          {t('db.subtitle')}
         </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
-          title="Total Groups"
+          title={t('db.stat_groups')}
           value={stats.totalGroups}
           icon={<Users className="h-6 w-6 text-primary-600" />}
-          trend={{ value: 12, label: 'vs last month' }}
         />
         <StatsCard
-          title="Active Members"
+          title={t('db.stat_members')}
           value={stats.activeMembers}
           icon={<UserCheck className="h-6 w-6 text-primary-600" />}
-          trend={{ value: 8, label: 'vs last month' }}
         />
         <StatsCard
-          title="Pending Receipts"
+          title={t('db.stat_receipts')}
           value={stats.pendingReceipts}
           icon={<Receipt className="h-6 w-6 text-primary-600" />}
-          trend={{ value: -5, label: 'vs last week' }}
         />
         <StatsCard
-          title="Total Collected"
+          title={t('db.stat_collected')}
           value={stats.totalCollected}
           icon={<CircleDollarSign className="h-6 w-6 text-primary-600" />}
-          trend={{ value: 23, label: 'vs last month' }}
         />
       </div>
 
@@ -150,68 +128,74 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Deposits Over Time
+                {t('db.chart_title')}
               </h3>
               <p className="text-sm text-gray-500">
-                Monthly deposit and verification trends
+                {t('db.chart_subtitle')}
               </p>
             </div>
           </div>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="date"
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                  }}
-                  formatter={(value: number) => [`ETB ${value.toLocaleString()}`, '']}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="deposits"
-                  stroke="#4f46e5"
-                  strokeWidth={2}
-                  fill="url(#colorDeposits)"
-                  name="Total Deposits"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="verified"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fill="url(#colorVerified)"
-                  name="Verified"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#94a3b8"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                    }}
+                    formatter={(value: number) => [`ETB ${value.toLocaleString()}`, '']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="deposits"
+                    stroke="#4f46e5"
+                    strokeWidth={2}
+                    fill="url(#colorDeposits)"
+                    name={t('db.chart_total')}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="verified"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fill="url(#colorVerified)"
+                    name={t('db.chart_verified')}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                <p className="text-sm">{t('db.chart_no_data')}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -219,37 +203,43 @@ export default function DashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">
-              Recent Activity
+              {t('db.activity_title')}
             </h3>
             <button className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
-              View all <ArrowRight className="h-3 w-3" />
+              {t('db.activity_view_all')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           <div className="space-y-4">
-            {activity.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
-              >
+            {activity.length > 0 ? (
+              activity.map((item) => (
                 <div
-                  className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
-                    item.type === 'deposit'
-                      ? 'bg-green-500'
-                      : item.type === 'verification'
-                      ? 'bg-blue-500'
-                      : item.type === 'lottery'
-                      ? 'bg-purple-500'
-                      : 'bg-orange-500'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {item.message}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">{item.time}</p>
+                  key={item.id}
+                  className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <div
+                    className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
+                      item.type === 'deposit'
+                        ? 'bg-green-500'
+                        : item.type === 'verification'
+                        ? 'bg-blue-500'
+                        : item.type === 'lottery'
+                        ? 'bg-purple-500'
+                        : 'bg-orange-500'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {item.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">{item.time}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <p className="text-sm">{t('db.activity_no_data')}</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

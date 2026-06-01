@@ -3,13 +3,16 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma, VerificationStatus, PenaltyReason } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RulesEnforcementService } from '../groups/rules-enforcement.service';
+import { PenaltiesService } from '../groups/penalties.service';
 
 export interface CreateDepositData {
   cycleId: string;
   userId: string;
   imageUrl: string;
-  ocrData?: any;
+  ocrData?: Prisma.InputJsonValue;
   ftNumber?: string;
   amount?: number;
   bankName?: string;
@@ -23,7 +26,11 @@ export interface CreateDepositData {
 
 @Injectable()
 export class DepositsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rulesEnforcement: RulesEnforcementService,
+    private readonly penaltiesService: PenaltiesService,
+  ) {}
 
   async findAll(filters?: {
     cycleId?: string;
@@ -31,7 +38,7 @@ export class DepositsService {
     groupId?: string;
     verificationStatus?: string;
   }) {
-    const where: any = {};
+    const where: Prisma.DepositWhereInput = {};
 
     if (filters?.cycleId) {
       where.cycleId = filters.cycleId;
@@ -42,17 +49,21 @@ export class DepositsService {
     }
 
     if (filters?.groupId) {
-      where.cycle = { groupId: filters.groupId };
+      where.cycle = {
+        groupId: filters.groupId,
+      };
     }
 
     if (filters?.verificationStatus) {
-      where.verificationStatus = filters.verificationStatus;
+      where.verificationStatus = filters.verificationStatus as VerificationStatus;
     }
 
     return this.prisma.deposit.findMany({
       where,
       include: {
-        user: true,
+        user: {
+          select: { id: true, name: true, phone: true },
+        },
         cycle: {
           include: {
             group: {
@@ -94,7 +105,7 @@ export class DepositsService {
       );
     }
 
-    return this.prisma.deposit.update({
+    const result = await this.prisma.deposit.update({
       where: { id },
       data: {
         verificationStatus: 'VERIFIED',
@@ -107,6 +118,66 @@ export class DepositsService {
         },
       },
     });
+
+    // Check rules for lateness and apply penalties
+    if (result.depositDate) {
+      const isLateInfo = await this.rulesEnforcement.isDepositLate(
+        result.cycle.groupId,
+        result.depositDate,
+      );
+
+      if (isLateInfo.isLate) {
+        await this.prisma.deposit.update({
+          where: { id },
+          data: { isLate: true },
+        });
+
+        if (isLateInfo.isPastGrace) {
+          const penaltyCalc = await this.rulesEnforcement.calculatePenalty(
+            result.cycle.groupId,
+          );
+
+          if (penaltyCalc) {
+            await this.penaltiesService.createPenalty({
+              groupId: result.cycle.groupId,
+              userId: result.userId,
+              cycleId: result.cycleId,
+              reason: PenaltyReason.LATE_PAYMENT,
+              amount: penaltyCalc.amount,
+              notes: `Auto-generated: ${penaltyCalc.reason} for deposit ${result.ftNumber || result.id}.`,
+            });
+
+            await this.prisma.deposit.update({
+              where: { id },
+              data: { penaltyApplied: true },
+            });
+          }
+        }
+      }
+    }
+
+    // Trigger update of user reliability score
+    await this.rulesEnforcement.updateReliabilityScore(result.userId);
+
+    // If max missed payments is exceeded, check and auto-suspend member
+    const suspendCheck = await this.rulesEnforcement.shouldAutoSuspendMember(
+      result.cycle.groupId,
+      result.userId,
+    );
+
+    if (suspendCheck.shouldSuspend) {
+      await this.prisma.groupMembership.update({
+        where: {
+          groupId_userId: {
+            groupId: result.cycle.groupId,
+            userId: result.userId,
+          },
+        },
+        data: { status: 'SUSPENDED' },
+      });
+    }
+
+    return result;
   }
 
   async reject(id: string, adminId: string, reason?: string) {
@@ -118,7 +189,7 @@ export class DepositsService {
       );
     }
 
-    return this.prisma.deposit.update({
+    const result = await this.prisma.deposit.update({
       where: { id },
       data: {
         verificationStatus: 'REJECTED',
@@ -132,6 +203,11 @@ export class DepositsService {
         },
       },
     });
+
+    // Update user reliability score
+    await this.rulesEnforcement.updateReliabilityScore(result.userId);
+
+    return result;
   }
 
   async create(data: CreateDepositData) {
@@ -151,6 +227,21 @@ export class DepositsService {
 
     if (!user) {
       throw new NotFoundException(`User with ID ${data.userId} not found`);
+    }
+
+    // Validate deposit details against rules
+    const violations = await this.rulesEnforcement.validateDeposit(
+      cycle.groupId,
+      data.userId,
+      data.amount,
+      data.depositDate || new Date(),
+    );
+
+    const errorViolations = violations.filter(v => v.severity === 'ERROR');
+    if (errorViolations.length > 0) {
+      throw new BadRequestException(
+        `Deposit violates rules: ${errorViolations.map(v => v.message).join(', ')}`
+      );
     }
 
     // Check for duplicate FT number

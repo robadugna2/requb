@@ -7,10 +7,15 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
+import { UpdateGroupRulesDto } from './dto/group-rules.dto';
+import { RulesEnforcementService } from './rules-enforcement.service';
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rulesEnforcement: RulesEnforcementService,
+  ) {}
 
   async create(createGroupDto: CreateGroupDto, adminId: string) {
     return this.prisma.equbGroup.create({
@@ -72,6 +77,7 @@ export class GroupsService {
             },
           },
         },
+        rules: true,
       },
     });
 
@@ -102,13 +108,13 @@ export class GroupsService {
   async addMember(groupId: string, userId: string) {
     const group = await this.findOne(groupId);
 
-    // Check if user exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+    // Enforce group rules on member addition
+    const violations = await this.rulesEnforcement.validateMemberAddition(groupId, userId);
+    const errorViolations = violations.filter(v => v.severity === 'ERROR');
+    if (errorViolations.length > 0) {
+      throw new BadRequestException(
+        `Failed to add member due to rule violations: ${errorViolations.map(v => v.message).join(', ')}`
+      );
     }
 
     // Check max members
@@ -155,10 +161,39 @@ export class GroupsService {
       throw new NotFoundException('Membership not found');
     }
 
+    // Enforce rules on member removal (could return warnings, we block if they are severe or just log/notify them)
+    const violations = await this.rulesEnforcement.validateMemberRemoval(groupId, userId);
+    const errorViolations = violations.filter(v => v.severity === 'ERROR');
+    if (errorViolations.length > 0) {
+      throw new BadRequestException(
+        `Cannot remove member: ${errorViolations.map(v => v.message).join(', ')}`
+      );
+    }
+
     return this.prisma.groupMembership.update({
       where: { id: membership.id },
       data: { status: 'REMOVED' },
       include: { user: true },
+    });
+  }
+
+  async getGroupRules(groupId: string) {
+    await this.findOne(groupId);
+
+    return this.prisma.groupRules.upsert({
+      where: { groupId },
+      create: { groupId },
+      update: {},
+    });
+  }
+
+  async updateGroupRules(groupId: string, dto: UpdateGroupRulesDto) {
+    await this.findOne(groupId);
+
+    return this.prisma.groupRules.upsert({
+      where: { groupId },
+      create: { groupId, ...dto },
+      update: dto,
     });
   }
 
@@ -167,6 +202,18 @@ export class GroupsService {
 
     if (group.status !== 'ACTIVE') {
       throw new BadRequestException('Cannot create cycle for inactive group');
+    }
+
+    // Enforce minMembersToStart
+    const rules = await this.prisma.groupRules.findUnique({ where: { groupId } });
+    const activeMembersCount = await this.prisma.groupMembership.count({
+      where: { groupId, status: 'ACTIVE' },
+    });
+
+    if (rules && activeMembersCount < rules.minMembersToStart) {
+      throw new BadRequestException(
+        `Cannot start cycle. The group has ${activeMembersCount} active members, but rules require at least ${rules.minMembersToStart} to start.`
+      );
     }
 
     // Get the last cycle number

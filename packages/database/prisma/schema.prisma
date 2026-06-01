@@ -22,6 +22,7 @@ enum MembershipStatus {
   ACTIVE
   INACTIVE
   REMOVED
+  SUSPENDED
 }
 
 enum CycleStatus {
@@ -39,6 +40,7 @@ enum VerificationStatus {
 enum LotteryMethod {
   RANDOM
   LIVE_DRAW
+  FIXED_ORDER
 }
 
 enum PayoutStatus {
@@ -56,23 +58,61 @@ model Admin {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  groups EqubGroup[]
+  groups         EqubGroup[]
+  ruleTemplates  RuleTemplate[]
 
   @@map("admins")
 }
 
-model User {
-  id         String   @id @default(cuid())
-  name       String
-  phone      String   @unique
-  telegramId String?  @unique @map("telegram_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
 
-  memberships GroupMembership[]
-  deposits    Deposit[]
-  cyclesWon   Cycle[]          @relation("CycleWinner")
-  lotteryWins LotteryResult[]
+enum EmploymentType {
+  PRIVATE
+  GOVERNMENT
+  NGO
+  SELF_EMPLOYED
+  UNEMPLOYED
+  STUDENT
+  RETIRED
+}
+
+model User {
+  id               String          @id @default(cuid())
+  name             String
+  phone            String          @unique
+  telegramId       String?         @unique @map("telegram_id")
+  governmentId     String?         @map("government_id")
+  photoUrl         String?         @map("photo_url")
+  employmentType   EmploymentType? @map("employment_type")
+  employerName     String?         @map("employer_name")
+  maritalStatus    MaritalStatus?  @map("marital_status")
+  country          String?         @default("Ethiopia")
+  city             String?
+  subCity          String?         @map("sub_city")
+  woreda           String?
+  houseNumber      String?         @map("house_number")
+  language         String          @default("en")
+  reliabilityScore Float           @default(100) @map("reliability_score") // 0-100 scale
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  memberships       GroupMembership[]
+  deposits          Deposit[]
+  cyclesWon         Cycle[]          @relation("CycleWinner")
+  lotteryWins       LotteryResult[]
+  guarantorOf       Guarantor[]      @relation("GuarantorUser")
+  guaranteedBy      Guarantor[]      @relation("GuaranteedUser")
+  penaltyRecords    PenaltyRecord[]
+  payoutOrders      PayoutOrder[]
+  swapRequestsSent  TurnSwapRequest[] @relation("SwapRequester")
+  swapRequestsRecv  TurnSwapRequest[] @relation("SwapTarget")
+  disputesFiled     Dispute[]         @relation("DisputeFiler")
+  disputesAgainst   Dispute[]         @relation("DisputeTarget")
 
   @@map("users")
 }
@@ -83,7 +123,7 @@ model EqubGroup {
   description        String?
   contributionAmount Float         @map("contribution_amount")
   currency           String        @default("ETB")
-  cycleType          String        @map("cycle_type") // monthly, weekly, biweekly, custom
+  cycleType          String        @map("cycle_type") // monthly, weekly, biweekly, daily, custom
   cycleDays          Int?          @map("cycle_days") // for custom cycle type
   maxMembers         Int           @map("max_members")
   lotteryMethod      LotteryMethod @default(RANDOM) @map("lottery_method")
@@ -94,9 +134,15 @@ model EqubGroup {
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  createdBy   Admin             @relation(fields: [createdById], references: [id])
-  memberships GroupMembership[]
-  cycles      Cycle[]
+  createdBy      Admin             @relation(fields: [createdById], references: [id])
+  memberships    GroupMembership[]
+  cycles         Cycle[]
+  rules          GroupRules?
+  guarantors     Guarantor[]
+  penaltyRecords PenaltyRecord[]
+  payoutOrders   PayoutOrder[]
+  swapRequests   TurnSwapRequest[]
+  disputes       Dispute[]
 
   @@map("equb_groups")
 }
@@ -106,6 +152,7 @@ model GroupMembership {
   groupId  String           @map("group_id")
   userId   String           @map("user_id")
   status   MembershipStatus @default(ACTIVE)
+  shares   Int              @default(1) // number of lots/shares held by this member
   joinedAt DateTime         @default(now()) @map("joined_at")
 
   group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -125,10 +172,11 @@ model Cycle {
   winnerId    String?     @map("winner_id")
   createdAt   DateTime    @default(now()) @map("created_at")
 
-  group         EqubGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  winner        User?          @relation("CycleWinner", fields: [winnerId], references: [id])
-  deposits      Deposit[]
-  lotteryResult LotteryResult?
+  group          EqubGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  winner         User?           @relation("CycleWinner", fields: [winnerId], references: [id])
+  deposits       Deposit[]
+  lotteryResult  LotteryResult?
+  penaltyRecords PenaltyRecord[]
 
   @@unique([groupId, cycleNumber])
   @@map("cycles")
@@ -152,6 +200,8 @@ model Deposit {
   verifiedById       String?            @map("verified_by_id")
   rejectionReason    String?            @map("rejection_reason")
   confidence         Float?             // OCR confidence score 0-1
+  isLate             Boolean            @default(false) @map("is_late") // was deposit submitted after deadline?
+  penaltyApplied     Boolean            @default(false) @map("penalty_applied") // was a late penalty created?
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
@@ -181,6 +231,8 @@ model LotteryResult {
 model Payout {
   id              String       @id @default(cuid())
   lotteryResultId String       @unique @map("lottery_result_id")
+  amount          Float?       // actual payout amount (after admin fee deduction)
+  adminFeeAmount  Float?       @map("admin_fee_amount") // fee deducted
   status          PayoutStatus @default(PENDING)
   payoutDate      DateTime?    @map("payout_date")
   transactionRef  String?      @map("transaction_ref")
@@ -191,4 +243,345 @@ model Payout {
   lotteryResult LotteryResult @relation(fields: [lotteryResultId], references: [id], onDelete: Cascade)
 
   @@map("payouts")
+}
+
+// ─── Guarantor System ───────────────────────────────────────────────
+
+enum GuarantorStatus {
+  ACTIVE
+  RELEASED
+  CALLED     // guarantor was called upon due to default
+}
+
+model Guarantor {
+  id               String          @id @default(cuid())
+  groupId          String          @map("group_id")
+  guarantorUserId  String          @map("guarantor_user_id")   // the person guaranteeing
+  guaranteedUserId String          @map("guaranteed_user_id")  // the person being guaranteed
+  status           GuarantorStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  group          EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  guarantorUser  User      @relation("GuarantorUser", fields: [guarantorUserId], references: [id])
+  guaranteedUser User      @relation("GuaranteedUser", fields: [guaranteedUserId], references: [id])
+
+  @@unique([groupId, guarantorUserId, guaranteedUserId])
+  @@map("guarantors")
+}
+
+// ─── Penalty Tracking ───────────────────────────────────────────────
+
+enum PenaltyStatus {
+  PENDING
+  PAID
+  WAIVED
+}
+
+enum PenaltyReason {
+  LATE_PAYMENT
+  MISSED_PAYMENT
+  POST_WIN_DEFAULT
+  RULE_VIOLATION
+}
+
+model PenaltyRecord {
+  id        String        @id @default(cuid())
+  groupId   String        @map("group_id")
+  userId    String        @map("user_id")
+  cycleId   String?       @map("cycle_id")
+  reason    PenaltyReason
+  amount    Float         // calculated penalty amount in ETB
+  status    PenaltyStatus @default(PENDING)
+  notes     String?
+  paidAt    DateTime?     @map("paid_at")
+  waivedBy  String?       @map("waived_by") // admin id who waived
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id])
+  cycle Cycle?    @relation(fields: [cycleId], references: [id])
+
+  @@index([groupId, userId])
+  @@index([status])
+  @@map("penalty_records")
+}
+
+// ─── Fixed Payout Order (for FIXED_ORDER lottery method) ────────────
+
+enum PayoutOrderStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+model PayoutOrder {
+  id       String           @id @default(cuid())
+  groupId  String           @map("group_id")
+  userId   String           @map("user_id")
+  position Int              // 1-based position in payout rotation
+  status   PayoutOrderStatus @default(PENDING)
+
+  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, position])
+  @@unique([groupId, userId])
+  @@map("payout_orders")
+}
+
+// ─── Turn Swap Requests ─────────────────────────────────────────────
+
+enum SwapRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model TurnSwapRequest {
+  id            String            @id @default(cuid())
+  groupId       String            @map("group_id")
+  requesterId   String            @map("requester_id")
+  targetId      String            @map("target_id")
+  requesterTurn Int               @map("requester_turn") // current position of requester
+  targetTurn    Int               @map("target_turn")    // current position of target
+  reason        String?
+  status        SwapRequestStatus @default(PENDING)
+  reviewedBy    String?           @map("reviewed_by") // admin who approved/rejected
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  group     EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requester User      @relation("SwapRequester", fields: [requesterId], references: [id])
+  target    User      @relation("SwapTarget", fields: [targetId], references: [id])
+
+  @@map("turn_swap_requests")
+}
+
+// ─── Dispute Management ─────────────────────────────────────────────
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum DisputeType {
+  PAYMENT_DISPUTE
+  PAYOUT_DISPUTE
+  MEMBERSHIP_DISPUTE
+  LOTTERY_DISPUTE
+  GENERAL
+}
+
+model Dispute {
+  id              String        @id @default(cuid())
+  groupId         String        @map("group_id")
+  filedByUserId   String        @map("filed_by_user_id")
+  againstUserId   String?       @map("against_user_id")
+  type            DisputeType
+  description     String
+  status          DisputeStatus @default(OPEN)
+  resolution      String?       // final resolution text
+  resolvedBy      String?       @map("resolved_by") // admin id
+  resolvedAt      DateTime?     @map("resolved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  group       EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  filedBy     User      @relation("DisputeFiler", fields: [filedByUserId], references: [id])
+  againstUser User?     @relation("DisputeTarget", fields: [againstUserId], references: [id])
+
+  @@index([groupId])
+  @@index([status])
+  @@map("disputes")
+}
+
+// ─── Group Rules ────────────────────────────────────────────────────
+
+enum PenaltyType {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum PayoutSchedule {
+  IMMEDIATE
+  NEXT_DAY
+  END_OF_CYCLE
+  CUSTOM
+}
+
+enum EarlyWithdrawalPolicy {
+  NOT_ALLOWED
+  WITH_FEE
+  ALLOWED
+}
+
+enum DisputeResolution {
+  ADMIN_DECISION
+  MEMBER_VOTE
+  THIRD_PARTY
+}
+
+enum AdminFeeType {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+model GroupRules {
+  id                    String               @id @default(cuid())
+  groupId               String               @unique @map("group_id")
+
+  // Late Payment Penalties
+  latePenaltyType       PenaltyType          @default(NONE) @map("late_penalty_type")
+  latePenaltyAmount     Float?               @map("late_penalty_amount")
+  latePenaltyPercent    Float?               @map("late_penalty_percent")
+  gracePeriodDays       Int                  @default(3) @map("grace_period_days")
+  maxMissedPayments     Int                  @default(3) @map("max_missed_payments")
+
+  // Deposit Rules
+  requireExactAmount    Boolean              @default(true) @map("require_exact_amount")
+  depositDeadlineDay    Int?                 @map("deposit_deadline_day")
+  minVerificationHours  Int                  @default(24) @map("min_verification_hours")
+
+  // Member Rules
+  allowSkipRound        Boolean              @default(false) @map("allow_skip_round")
+  maxSkipsAllowed       Int                  @default(0) @map("max_skips_allowed")
+  requireGuarantor      Boolean              @default(false) @map("require_guarantor")
+  minMembersToStart     Int                  @default(3) @map("min_members_to_start")
+  allowMidCycleJoin     Boolean              @default(false) @map("allow_mid_cycle_join")
+  requireGovernmentId   Boolean              @default(false) @map("require_government_id")
+
+  // Contribution Rules
+  postWinContributionRequired Boolean        @default(true) @map("post_win_contribution_required")
+  autoCompleteGroup     Boolean              @default(true) @map("auto_complete_group")
+
+  // Admin/Organizer Fee
+  adminFeeType          AdminFeeType         @default(NONE) @map("admin_fee_type")
+  adminFeeAmount        Float?               @map("admin_fee_amount")
+  adminFeePercent       Float?               @map("admin_fee_percent")
+
+  // Payout Rules
+  payoutSchedule        PayoutSchedule       @default(IMMEDIATE) @map("payout_schedule")
+  payoutDelayDays       Int                  @default(0) @map("payout_delay_days")
+  earlyWithdrawalPolicy EarlyWithdrawalPolicy @default(NOT_ALLOWED) @map("early_withdrawal_policy")
+  earlyWithdrawalFee    Float?               @map("early_withdrawal_fee")
+
+  // Dispute & Governance
+  disputeResolution     DisputeResolution    @default(ADMIN_DECISION) @map("dispute_resolution")
+
+  // Custom free-form text
+  customRules           String?              @map("custom_rules")
+
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  group                 EqubGroup            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("group_rules")
+}
+
+model RuleTemplate {
+  id                    String               @id @default(cuid())
+  name                  String
+  description           String?
+
+  // Late Payment Penalties
+  latePenaltyType       PenaltyType          @default(NONE) @map("late_penalty_type")
+  latePenaltyAmount     Float?               @map("late_penalty_amount")
+  latePenaltyPercent    Float?               @map("late_penalty_percent")
+  gracePeriodDays       Int                  @default(3) @map("grace_period_days")
+  maxMissedPayments     Int                  @default(3) @map("max_missed_payments")
+
+  // Deposit Rules
+  requireExactAmount    Boolean              @default(true) @map("require_exact_amount")
+  depositDeadlineDay    Int?                 @map("deposit_deadline_day")
+  minVerificationHours  Int                  @default(24) @map("min_verification_hours")
+
+  // Member Rules
+  allowSkipRound        Boolean              @default(false) @map("allow_skip_round")
+  maxSkipsAllowed       Int                  @default(0) @map("max_skips_allowed")
+  requireGuarantor      Boolean              @default(false) @map("require_guarantor")
+  minMembersToStart     Int                  @default(3) @map("min_members_to_start")
+  allowMidCycleJoin     Boolean              @default(false) @map("allow_mid_cycle_join")
+  requireGovernmentId   Boolean              @default(false) @map("require_government_id")
+
+  // Contribution Rules
+  postWinContributionRequired Boolean        @default(true) @map("post_win_contribution_required")
+  autoCompleteGroup     Boolean              @default(true) @map("auto_complete_group")
+
+  // Admin/Organizer Fee
+  adminFeeType          AdminFeeType         @default(NONE) @map("admin_fee_type")
+  adminFeeAmount        Float?               @map("admin_fee_amount")
+  adminFeePercent       Float?               @map("admin_fee_percent")
+
+  // Payout Rules
+  payoutSchedule        PayoutSchedule       @default(IMMEDIATE) @map("payout_schedule")
+  payoutDelayDays       Int                  @default(0) @map("payout_delay_days")
+  earlyWithdrawalPolicy EarlyWithdrawalPolicy @default(NOT_ALLOWED) @map("early_withdrawal_policy")
+  earlyWithdrawalFee    Float?               @map("early_withdrawal_fee")
+
+  // Dispute & Governance
+  disputeResolution     DisputeResolution    @default(ADMIN_DECISION) @map("dispute_resolution")
+
+  // Custom free-form text
+  customRules           String?              @map("custom_rules")
+
+  createdById           String               @map("created_by_id")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  createdBy             Admin                @relation(fields: [createdById], references: [id])
+
+  @@map("rule_templates")
+}
+
+// ─── Notifications ──────────────────────────────────────────────────
+
+enum NotificationType {
+  DEADLINE_APPROACHING
+  PAYMENT_OVERDUE
+  DEPOSIT_VERIFIED
+  DEPOSIT_REJECTED
+  LOTTERY_WIN
+  MEMBER_JOINED
+  MEMBER_REMOVED
+  MEMBER_SUSPENDED
+  RULE_VIOLATION
+  PENALTY_CREATED
+  PENALTY_PAID
+  CYCLE_STARTED
+  CYCLE_COMPLETED
+  GROUP_COMPLETED
+  TURN_SWAP_REQUEST
+  TURN_SWAP_APPROVED
+  TURN_SWAP_REJECTED
+  DISPUTE_FILED
+  DISPUTE_RESOLVED
+  GENERAL
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String
+  read        Boolean          @default(false)
+
+  // Optional references
+  groupId     String?          @map("group_id")
+  userId      String?          @map("user_id")
+  depositId   String?          @map("deposit_id")
+
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
 }

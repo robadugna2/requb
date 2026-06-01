@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "main": "./src/index.ts",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "push": "prisma db push",
-    "studio": "prisma studio"
+    "studio": "prisma studio",
+    "seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

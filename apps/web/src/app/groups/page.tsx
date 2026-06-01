@@ -2,91 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Users, Calendar, CircleDollarSign, Search } from 'lucide-react';
+import { Plus, Users, Calendar, CircleDollarSign, Search, AlertCircle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import { getGroups, createGroup } from '@/lib/api';
-
-interface Group {
-  id: string;
-  name: string;
-  membersCount: number;
-  maxMembers: number;
-  contributionAmount: number;
-  status: 'active' | 'inactive' | 'completed';
-  cycleDuration: string;
-  currentCycle: number;
-  totalCycles: number;
-  createdAt: string;
-}
-
-const mockGroups: Group[] = [
-  {
-    id: '1',
-    name: 'Weekly Equb #1',
-    membersCount: 12,
-    maxMembers: 12,
-    contributionAmount: 5000,
-    status: 'active',
-    cycleDuration: 'Weekly',
-    currentCycle: 8,
-    totalCycles: 12,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Monthly Savings Group',
-    membersCount: 20,
-    maxMembers: 25,
-    contributionAmount: 10000,
-    status: 'active',
-    cycleDuration: 'Monthly',
-    currentCycle: 3,
-    totalCycles: 25,
-    createdAt: '2024-02-01',
-  },
-  {
-    id: '3',
-    name: 'Bi-Weekly Equb #5',
-    membersCount: 8,
-    maxMembers: 10,
-    contributionAmount: 2500,
-    status: 'active',
-    cycleDuration: 'Bi-Weekly',
-    currentCycle: 5,
-    totalCycles: 10,
-    createdAt: '2024-01-20',
-  },
-  {
-    id: '4',
-    name: 'Premium Monthly',
-    membersCount: 15,
-    maxMembers: 15,
-    contributionAmount: 25000,
-    status: 'completed',
-    cycleDuration: 'Monthly',
-    currentCycle: 15,
-    totalCycles: 15,
-    createdAt: '2023-09-01',
-  },
-  {
-    id: '5',
-    name: 'New Weekly Group',
-    membersCount: 3,
-    maxMembers: 12,
-    contributionAmount: 3000,
-    status: 'inactive',
-    cycleDuration: 'Weekly',
-    currentCycle: 0,
-    totalCycles: 12,
-    createdAt: '2024-03-01',
-  },
-];
+import type { GroupListItem } from '@/lib/api';
 
 export default function GroupsPage() {
-  const [groups, setGroups] = useState<Group[]>(mockGroups);
+  const { t } = useLanguage();
+  const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,17 +28,21 @@ export default function GroupsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const fetchGroups = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getGroups();
+      setGroups(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load groups. Please try again.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const data = await getGroups();
-        if (data && data.length > 0) setGroups(data);
-      } catch (error) {
-        console.log('Using mock data');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchGroups();
   }, []);
 
@@ -140,15 +71,13 @@ export default function GroupsPage() {
         maxMembers: '',
         description: '',
       });
-      setSuccess('Equb group created successfully!');
+      setSuccess(t('groups.success_create'));
       setTimeout(() => setSuccess(null), 4000);
-      // Refresh groups
-      const data = await getGroups();
-      if (data) setGroups(data);
-    } catch (err: any) {
-      console.error('Failed to create group', err);
+      await fetchGroups();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(
-        err.response?.data?.message || 'Failed to create group. Please check fields or try again.'
+        axiosErr.response?.data?.message || 'Failed to create group. Please check fields or try again.'
       );
     } finally {
       setCreating(false);
@@ -159,19 +88,32 @@ export default function GroupsPage() {
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+            <p className="text-sm text-gray-500">{t('groups.loading')}</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Equb Groups</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t('groups.title')}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Manage all rotating savings groups
+            {t('groups.subtitle')}
           </p>
         </div>
         <Button onClick={openCreateModal}>
           <Plus className="h-4 w-4 mr-2" />
-          Create Group
+          {t('groups.create_btn')}
         </Button>
       </div>
 
@@ -182,13 +124,21 @@ export default function GroupsPage() {
         </div>
       )}
 
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+        </div>
+      )}
+
       {/* Search */}
       <div className="mb-6">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search groups..."
+            placeholder={t('groups.search_placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="input-field pl-10"
@@ -197,90 +147,108 @@ export default function GroupsPage() {
       </div>
 
       {/* Groups Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredGroups.map((group) => (
-          <Link
-            key={group.id}
-            href={`/groups/${group.id}`}
-            className="card-hover group cursor-pointer"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                  {group.name}
-                </h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {group.cycleDuration} cycle
-                </p>
-              </div>
-              <Badge status={group.status} />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-gray-500">
-                  <Users className="h-4 w-4" />
-                  Members
-                </span>
-                <span className="font-medium text-gray-900">
-                  {group.membersCount}/{group.maxMembers}
-                </span>
+      {filteredGroups.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredGroups.map((group) => (
+            <Link
+              key={group.id}
+              href={`/groups/${group.id}`}
+              className="card-hover group cursor-pointer"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                    {group.name}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {group.cycleDuration === 'Weekly' ? t('groups.frequency_weekly') : group.cycleDuration === 'Monthly' ? t('groups.frequency_monthly') : group.cycleDuration} {t('groups.cycle').toLowerCase()}
+                  </p>
+                </div>
+                <Badge status={group.status} />
               </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-gray-500">
-                  <CircleDollarSign className="h-4 w-4" />
-                  Contribution
-                </span>
-                <span className="font-medium text-gray-900">
-                  ETB {group.contributionAmount.toLocaleString()}
-                </span>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-gray-500">
+                    <Users className="h-4 w-4" />
+                    {t('groups.members')}
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {group.membersCount}/{group.maxMembers}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-gray-500">
+                    <CircleDollarSign className="h-4 w-4" />
+                    {t('groups.contribution')}
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    ETB {group.contributionAmount.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-gray-500">
+                    <Calendar className="h-4 w-4" />
+                    {t('groups.cycle')}
+                  </span>
+                  <span className="font-medium text-gray-900">
+                    {group.currentCycle}/{group.totalCycles}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-gray-500">
-                  <Calendar className="h-4 w-4" />
-                  Cycle
-                </span>
-                <span className="font-medium text-gray-900">
-                  {group.currentCycle}/{group.totalCycles}
-                </span>
+              {/* Progress bar */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                  <span>{t('groups.progress')}</span>
+                  <span>
+                    {group.totalCycles > 0
+                      ? Math.round((group.currentCycle / group.totalCycles) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                  <div
+                    className="bg-primary-600 h-1.5 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${
+                        group.totalCycles > 0
+                          ? (group.currentCycle / group.totalCycles) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-
-            {/* Progress bar */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                <span>Progress</span>
-                <span>
-                  {group.totalCycles > 0
-                    ? Math.round((group.currentCycle / group.totalCycles) * 100)
-                    : 0}
-                  %
-                </span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                <div
-                  className="bg-primary-600 h-1.5 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      group.totalCycles > 0
-                        ? (group.currentCycle / group.totalCycles) * 100
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-16 card">
+          <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-1">{t('groups.no_groups')}</h3>
+          <p className="text-gray-500 text-sm">
+            {searchQuery
+              ? t('groups.no_groups_match')
+              : t('groups.no_groups_desc')}
+          </p>
+          {!searchQuery && (
+            <Button onClick={openCreateModal} className="mt-4">
+              <Plus className="h-4 w-4 mr-2" />
+              {t('groups.create_btn')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Create Group Modal */}
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        title="Create New Equb Group"
+        title={t('groups.modal_title')}
         size="md"
       >
         <form onSubmit={handleCreateGroup} className="space-y-4">
@@ -291,7 +259,7 @@ export default function GroupsPage() {
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Group Name
+              {t('groups.label_name')}
             </label>
             <input
               type="text"
@@ -308,7 +276,7 @@ export default function GroupsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Contribution (ETB)
+                {t('groups.label_amount')}
               </label>
               <input
                 type="number"
@@ -326,7 +294,7 @@ export default function GroupsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Max Members
+                {t('groups.label_max_members')}
               </label>
               <input
                 type="number"
@@ -343,7 +311,7 @@ export default function GroupsPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Cycle Duration
+              {t('groups.label_duration')}
             </label>
             <select
               value={formData.cycleDuration}
@@ -352,15 +320,15 @@ export default function GroupsPage() {
               }
               className="input-field"
             >
-              <option value="Weekly">Weekly</option>
+              <option value="Weekly">{t('groups.frequency_weekly')}</option>
               <option value="Bi-Weekly">Bi-Weekly</option>
-              <option value="Monthly">Monthly</option>
+              <option value="Monthly">{t('groups.frequency_monthly')}</option>
             </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Description (Optional)
+              {t('groups.label_description')}
             </label>
             <textarea
               value={formData.description}
@@ -379,10 +347,10 @@ export default function GroupsPage() {
               variant="secondary"
               onClick={() => setShowCreateModal(false)}
             >
-              Cancel
+              {t('groups.btn_cancel')}
             </Button>
             <Button type="submit" loading={creating}>
-              Create Group
+              {t('groups.btn_create')}
             </Button>
           </div>
         </form>

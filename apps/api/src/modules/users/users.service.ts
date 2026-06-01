@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -45,6 +47,9 @@ export class UsersService {
         memberships: {
           include: { group: true },
         },
+        deposits: {
+          select: { amount: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -59,10 +64,23 @@ export class UsersService {
         },
         deposits: {
           orderBy: { createdAt: 'desc' },
-          take: 10,
+          include: {
+            cycle: {
+              include: { group: true },
+            },
+          },
         },
         lotteryWins: {
           orderBy: { drawnAt: 'desc' },
+          include: {
+            cycle: {
+              include: { group: true },
+            },
+          },
+        },
+        cyclesWon: {
+          orderBy: { startDate: 'desc' },
+          include: { group: true },
         },
       },
     });
@@ -108,6 +126,31 @@ export class UsersService {
 
   async remove(id: string) {
     await this.findOne(id);
+
+    return this.prisma.user.delete({
+      where: { id },
+    });
+  }
+
+  async removeWithPassword(id: string, adminId: string, password: string) {
+    if (!password) {
+      throw new UnauthorizedException('Password is required');
+    }
+
+    await this.findOne(id);
+
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!admin) {
+      throw new UnauthorizedException('Admin not found');
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid admin password');
+    }
 
     return this.prisma.user.delete({
       where: { id },

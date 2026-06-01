@@ -27,17 +27,17 @@ export class OcrService {
       this.openai = new OpenAI({ apiKey });
     } else {
       this.logger.warn(
-        'OPENAI_API_KEY not configured. OCR service will return mock data.',
+        'OPENAI_API_KEY not configured. OCR processing is disabled.',
       );
     }
   }
 
   async processReceipt(imageUrl: string): Promise<OcrResult> {
     if (!this.openai) {
-      this.logger.warn('OpenAI not configured, returning empty OCR result');
+      this.logger.warn('OpenAI not configured, OCR processing is disabled');
       return {
         confidence: 0,
-        errors: ['OpenAI API key not configured'],
+        errors: ['OCR processing is disabled. Please configure OPENAI_API_KEY.'],
       };
     }
 
@@ -114,11 +114,11 @@ Return ONLY valid JSON. If a field cannot be determined, omit it from the respon
         confidence: parsed.confidence || 0.5,
         rawText: content,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.logger.error('OCR processing error', error);
       return {
         confidence: 0,
-        errors: [error.message || 'OCR processing failed'],
+        errors: [error instanceof Error ? error.message : 'OCR processing failed'],
       };
     }
   }

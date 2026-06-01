@@ -37,14 +37,14 @@ export class DepositsController {
   }
 
   @Patch(':id/verify')
-  verify(@Param('id') id: string, @Request() req: any) {
+  verify(@Param('id') id: string, @Request() req: { user: { id: string } }) {
     return this.depositsService.verify(id, req.user.id);
   }
 
   @Patch(':id/reject')
   reject(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() req: { user: { id: string } },
     @Body('reason') reason?: string,
   ) {
     return this.depositsService.reject(id, req.user.id, reason);

@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -87,5 +88,34 @@ export class AuthService {
         role: admin.role,
       },
     };
+  }
+
+  async changePassword(adminId: string, dto: ChangePasswordDto) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+    });
+
+    if (!admin) {
+      throw new UnauthorizedException('Admin not found');
+    }
+
+    const isCurrentValid = await bcrypt.compare(
+      dto.currentPassword,
+      admin.passwordHash,
+    );
+
+    if (!isCurrentValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const saltRounds = 10;
+    const newHash = await bcrypt.hash(dto.newPassword, saltRounds);
+
+    await this.prisma.admin.update({
+      where: { id: adminId },
+      data: { passwordHash: newHash },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 }

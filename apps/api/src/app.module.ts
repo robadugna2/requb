@@ -9,6 +9,9 @@ import { LotteryModule } from './modules/lottery/lottery.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
+import { RuleTemplatesModule } from './modules/rule-templates/rule-templates.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +28,9 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     TelegramModule,
     OcrModule,
     DashboardModule,
+    UploadsModule,
+    RuleTemplatesModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

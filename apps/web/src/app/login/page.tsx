@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { CircleDollarSign, Eye, EyeOff } from 'lucide-react';
 import { login } from '@/lib/api';
 import Button from '@/components/ui/Button';
+import { useLanguage } from '@/components/layout/LanguageContext';
 
 export default function LoginPage() {
+  const { t } = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,13 +46,13 @@ export default function LoginPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold">Equb</h1>
-              <p className="text-sm text-white/70">Digital Savings Platform</p>
+              <p className="text-sm text-white/70">{t('login.subtitle')}</p>
             </div>
           </div>
           <h2 className="text-4xl font-bold leading-tight mb-4">
             Manage Your Rotating
             <br />
-            Savings Groups
+            {t('login.savings')}
           </h2>
           <p className="text-lg text-white/80 max-w-md">
             A modern platform for managing traditional Ethiopian Equb savings
@@ -78,9 +80,9 @@ export default function LoginPage() {
 
           <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
+              <h2 className="text-2xl font-bold text-gray-900">{t('login.welcome')}</h2>
               <p className="mt-2 text-sm text-gray-500">
-                Sign in to your admin account to continue
+                {t('login.welcome')}
               </p>
             </div>
 
@@ -96,7 +98,7 @@ export default function LoginPage() {
                   htmlFor="email"
                   className="block text-sm font-medium text-gray-700 mb-1.5"
                 >
-                  Email address
+                  {t('login.email')}
                 </label>
                 <input
                   id="email"
@@ -114,7 +116,7 @@ export default function LoginPage() {
                   htmlFor="password"
                   className="block text-sm font-medium text-gray-700 mb-1.5"
                 >
-                  Password
+                  {t('login.password')}
                 </label>
                 <div className="relative">
                   <input
@@ -146,7 +148,7 @@ export default function LoginPage() {
                     type="checkbox"
                     className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
-                  <span className="text-sm text-gray-600">Remember me</span>
+                  <span className="text-sm text-gray-600">{t('login.remember')}</span>
                 </label>
                 <a
                   href="#"
@@ -162,7 +164,7 @@ export default function LoginPage() {
                 className="w-full"
                 size="lg"
               >
-                Sign in
+                {t('login.signin')}
               </Button>
             </form>
           </div>

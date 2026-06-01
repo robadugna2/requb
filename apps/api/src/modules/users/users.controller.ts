@@ -3,10 +3,10 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
   Param,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
@@ -38,8 +38,12 @@ export class UsersController {
     return this.usersService.update(id, updateUserDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  @Post(':id/delete')
+  removeWithPassword(
+    @Param('id') id: string,
+    @Body('password') password: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.usersService.removeWithPassword(id, req.user.id, password);
   }
 }
