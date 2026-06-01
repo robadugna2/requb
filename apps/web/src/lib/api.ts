@@ -7,6 +7,16 @@ const api = axios.create({
   },
 });
 
+export const getMediaUrl = (url?: string): string => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  const rootUrl = baseUrl.replace(/\/api$/, '');
+  return `${rootUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 // Request interceptor to add JWT token
 api.interceptors.request.use(
   (config) => {

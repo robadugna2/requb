@@ -12,7 +12,7 @@ import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
-const uploadDir = join(__dirname, '..', '..', 'uploads');
+const uploadDir = join(__dirname, '..', '..', '..', 'uploads');
 
 if (!existsSync(uploadDir)) {
   mkdirSync(uploadDir, { recursive: true });

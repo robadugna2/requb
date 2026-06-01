@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { Camera } from 'lucide-react';
-import { uploadPhoto } from '@/lib/api';
+import { uploadPhoto, getMediaUrl } from '@/lib/api';
 
 interface PhotoUploadProps {
   value: string;
@@ -58,7 +58,7 @@ export default function PhotoUpload({ value, onChange, name, size = 'md' }: Phot
         className={`relative ${sizeClasses[size]} rounded-full overflow-hidden bg-primary-100 flex items-center justify-center group transition-all hover:ring-2 hover:ring-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-500`}
       >
         {value ? (
-          <img src={value} alt={name} className="w-full h-full object-cover" />
+          <img src={getMediaUrl(value)} alt={name} className="w-full h-full object-cover" />
         ) : (
           <span className="text-sm font-bold text-primary-700">{initials}</span>
         )}

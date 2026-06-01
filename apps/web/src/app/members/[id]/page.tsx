@@ -22,7 +22,7 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getMember, deleteUserWithPassword, updateMember } from '@/lib/api';
+import { getMember, deleteUserWithPassword, updateMember, getMediaUrl } from '@/lib/api';
 import type { UserDetail } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
@@ -238,7 +238,7 @@ export default function MemberDetailPage() {
             <div className="w-20 h-20 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden flex-shrink-0">
               {user.photoUrl ? (
                 <img
-                  src={user.photoUrl}
+                  src={getMediaUrl(user.photoUrl)}
                   alt={user.name}
                   className="w-full h-full object-cover"
                 />

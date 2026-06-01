@@ -34,7 +34,7 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl } from '@/lib/api';
 import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
@@ -695,7 +695,7 @@ export default function GroupDetailPage() {
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                               {member.photoUrl ? (
-                                <img src={member.photoUrl} alt={member.name} className="w-full h-full object-cover" />
+                                <img src={getMediaUrl(member.photoUrl)} alt={member.name} className="w-full h-full object-cover" />
                               ) : (
                                 <span className="text-xs font-bold text-primary-700">
                                   {member.name.split(' ').map((n) => n[0]).join('')}
