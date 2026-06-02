@@ -22,6 +22,7 @@ import { useLanguage, Language } from './LanguageContext';
 const navigation = [
   { name: 'Dashboard', key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Groups', key: 'nav.groups', href: '/groups', icon: Users },
+  { name: 'Members', key: 'nav.members', href: '/members', icon: Users },
   { name: 'Receipts', key: 'nav.receipts', href: '/receipts', icon: Receipt },
   { name: 'Lottery', key: 'nav.lottery', href: '/lottery', icon: Ticket },
   { name: 'Rule Templates', key: 'nav.rules', href: '/rule-templates', icon: BookTemplate },

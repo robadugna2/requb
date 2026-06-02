@@ -14,7 +14,7 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getDeposits, verifyDeposit, rejectDeposit } from '@/lib/api';
+import { getDeposits, verifyDeposit, rejectDeposit, getMediaUrl } from '@/lib/api';
 import type { ReceiptItem } from '@/lib/api';
 
 export default function ReceiptsPage() {
@@ -291,13 +291,21 @@ export default function ReceiptsPage() {
             </div>
 
             {/* Receipt Image */}
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-              <ImageIcon className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">{t('receipts.image_label')}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {selectedReceipt.receiptImageUrl || t('receipts.no_image')}
-              </p>
-            </div>
+            {selectedReceipt.receiptImageUrl ? (
+              <div className="rounded-xl overflow-hidden border border-gray-200">
+                <img
+                  src={getMediaUrl(selectedReceipt.receiptImageUrl)}
+                  alt="Receipt"
+                  className="w-full max-h-80 object-contain bg-gray-50"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
+                <ImageIcon className="h-12 w-12 text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">{t('receipts.no_image')}</p>
+              </div>
+            )}
 
             {/* {t('receipts.ocr_title')} */}
             {selectedReceipt.ocrData && (
