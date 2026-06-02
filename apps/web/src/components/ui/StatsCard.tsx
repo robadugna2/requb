@@ -8,12 +8,44 @@ interface StatsCardProps {
   title: string;
   value: string | number;
   icon: React.ReactNode;
-  trend?: {
-    value: number;
-    label: string;
-  };
+  trend?: { value: number; label: string };
   className?: string;
+  accentColor?: 'indigo' | 'emerald' | 'amber' | 'rose' | 'violet';
+  gradient?: boolean;
 }
+
+const accentMap = {
+  indigo: {
+    border: 'border-l-indigo-500',
+    iconBg: 'bg-indigo-50',
+    trendPos: 'text-indigo-600',
+    glow: 'shadow-indigo-100',
+  },
+  emerald: {
+    border: 'border-l-emerald-500',
+    iconBg: 'bg-emerald-50',
+    trendPos: 'text-emerald-600',
+    glow: 'shadow-emerald-100',
+  },
+  amber: {
+    border: 'border-l-amber-500',
+    iconBg: 'bg-amber-50',
+    trendPos: 'text-amber-600',
+    glow: 'shadow-amber-100',
+  },
+  rose: {
+    border: 'border-l-rose-500',
+    iconBg: 'bg-rose-50',
+    trendPos: 'text-rose-600',
+    glow: 'shadow-rose-100',
+  },
+  violet: {
+    border: 'border-l-violet-500',
+    iconBg: 'bg-violet-50',
+    trendPos: 'text-violet-600',
+    glow: 'shadow-violet-100',
+  },
+};
 
 export default function StatsCard({
   title,
@@ -21,34 +53,55 @@ export default function StatsCard({
   icon,
   trend,
   className,
+  accentColor = 'indigo',
+  gradient = false,
 }: StatsCardProps) {
+  const accent = accentMap[accentColor];
+
   return (
-    <div className={clsx('card', className)}>
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+    <div
+      className={clsx(
+        'relative bg-white rounded-2xl border border-gray-100 border-l-4 p-5 transition-all duration-200',
+        'hover:shadow-lg hover:-translate-y-0.5',
+        accent.border,
+        accent.glow,
+        'shadow-sm',
+        className
+      )}
+    >
+      {/* Subtle gradient overlay */}
+      {gradient && (
+        <div className="absolute inset-0 rounded-2xl opacity-[0.03] bg-gradient-to-br from-gray-900 to-transparent pointer-events-none" />
+      )}
+
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider truncate">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 leading-none">{value}</p>
+
           {trend && (
-            <div className="mt-2 flex items-center">
-              {trend.value >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-              )}
+            <div className="mt-2.5 flex items-center gap-1.5">
               <span
                 className={clsx(
-                  'text-xs font-medium',
-                  trend.value >= 0 ? 'text-green-600' : 'text-red-600'
+                  'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold',
+                  trend.value >= 0
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-red-50 text-red-700'
                 )}
               >
-                {trend.value >= 0 ? '+' : ''}
-                {trend.value}%
+                {trend.value >= 0 ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : (
+                  <TrendingDown className="h-3 w-3" />
+                )}
+                {trend.value >= 0 ? '+' : ''}{trend.value}%
               </span>
-              <span className="ml-1 text-xs text-gray-500">{trend.label}</span>
+              <span className="text-[11px] text-gray-400">{trend.label}</span>
             </div>
           )}
         </div>
-        <div className="flex-shrink-0 p-3 bg-primary-50 rounded-xl">
+
+        <div className={clsx('p-3 rounded-xl flex-shrink-0', accent.iconBg)}>
           {icon}
         </div>
       </div>
