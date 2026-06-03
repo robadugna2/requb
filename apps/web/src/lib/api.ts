@@ -953,4 +953,53 @@ export const uploadPhoto = async (file: File): Promise<string> => {
   return (response.data as { url: string }).url;
 };
 
+// ─── Guarantors (Wase / ዋስ) ──────────────────────────────────────────────────
+
+export interface GuarantorItem {
+  id: string;
+  groupId: string;
+  guarantorUserId: string;
+  guaranteedUserId: string;
+  status: 'ACTIVE' | 'RELEASED' | 'CALLED';
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  guarantorUser: { id: string; name: string; phone: string };
+  guaranteedUser: { id: string; name: string; phone: string };
+}
+
+export const getGroupGuarantors = async (groupId: string): Promise<GuarantorItem[]> => {
+  const response = await api.get(`/groups/${groupId}/guarantors`);
+  return response.data as GuarantorItem[];
+};
+
+export const addGuarantor = async (data: {
+  groupId: string;
+  guarantorUserId: string;
+  guaranteedUserId: string;
+  notes?: string;
+}): Promise<GuarantorItem> => {
+  const response = await api.post(`/groups/${data.groupId}/guarantors`, {
+    guarantorUserId: data.guarantorUserId,
+    guaranteedUserId: data.guaranteedUserId,
+    notes: data.notes,
+  });
+  return response.data as GuarantorItem;
+};
+
+export const updateGuarantorStatus = async (
+  guarantorId: string,
+  status: 'ACTIVE' | 'RELEASED' | 'CALLED',
+  notes?: string,
+): Promise<GuarantorItem> => {
+  const response = await api.patch(`/groups/guarantors/${guarantorId}/status`, { status, notes });
+  return response.data as GuarantorItem;
+};
+
+export const deleteGuarantor = async (guarantorId: string): Promise<{ success: boolean }> => {
+  const response = await api.delete(`/groups/guarantors/${guarantorId}`);
+  return response.data as { success: boolean };
+};
+
 export default api;
+

@@ -36,8 +36,8 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap } from '@/lib/api';
-import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor } from '@/lib/api';
+import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
 const PENALTY_TYPES = [
@@ -105,13 +105,19 @@ export default function GroupDetailPage() {
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawLoading, setDrawLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps'>('deposits');
+  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors'>('deposits');
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
   const [disputesLoading, setDisputesLoading] = useState(false);
   const [swaps, setSwaps] = useState<TurnSwapRequest[]>([]);
   const [swapsLoading, setSwapsLoading] = useState(false);
+  const [guarantors, setGuarantors] = useState<GuarantorItem[]>([]);
+  const [guarantorsLoading, setGuarantorsLoading] = useState(false);
+  const [showAssignGuarantorModal, setShowAssignGuarantorModal] = useState(false);
+  const [guarantorForm, setGuarantorForm] = useState({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
+  const [assigningGuarantor, setAssigningGuarantor] = useState(false);
+  const [updatingGuarantorId, setUpdatingGuarantorId] = useState<string | null>(null);
   const [showFileDisputeModal, setShowFileDisputeModal] = useState(false);
   const [disputeForm, setDisputeForm] = useState({ type: 'PAYMENT', description: '', againstUserId: '' });
   const [filingDispute, setFilingDispute] = useState(false);
@@ -431,6 +437,10 @@ export default function GroupDetailPage() {
     setSwapsLoading(true);
     try { const data = await getGroupTurnSwaps(groupId); setSwaps(data); } catch {} finally { setSwapsLoading(false); }
   };
+  const fetchGuarantors = async () => {
+    setGuarantorsLoading(true);
+    try { const data = await getGroupGuarantors(groupId); setGuarantors(data); } catch {} finally { setGuarantorsLoading(false); }
+  };
 
   const handlePayPenalty = async (id: string) => {
     try { await payPenalty(id); setSuccess('Penalty marked as paid.'); setTimeout(() => setSuccess(null), 3000); await fetchPenalties(); } catch { setError('Failed to pay penalty.'); }
@@ -472,12 +482,47 @@ export default function GroupDetailPage() {
     } catch { setError('Failed to send swap request.'); } finally { setRequestingSwap(false); }
   };
 
-  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps') => {
+  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors') => {
     setActiveTab(tab);
     if (tab === 'rules') { fetchRules(); fetchTemplates(); }
     if (tab === 'penalties') fetchPenalties();
     if (tab === 'disputes') fetchDisputes();
     if (tab === 'swaps') fetchSwaps();
+    if (tab === 'guarantors') fetchGuarantors();
+  };
+
+  const handleAssignGuarantor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssigningGuarantor(true);
+    try {
+      await addGuarantor({ groupId, guarantorUserId: guarantorForm.guarantorUserId, guaranteedUserId: guarantorForm.guaranteedUserId, notes: guarantorForm.notes || undefined });
+      setShowAssignGuarantorModal(false);
+      setGuarantorForm({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
+      setSuccess('Guarantor (ዋስ) assigned successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchGuarantors();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to assign guarantor.');
+    } finally { setAssigningGuarantor(false); }
+  };
+  const handleUpdateGuarantorStatus = async (guarantorId: string, status: 'ACTIVE' | 'RELEASED' | 'CALLED') => {
+    setUpdatingGuarantorId(guarantorId);
+    try {
+      await updateGuarantorStatus(guarantorId, status);
+      setSuccess(`Guarantor status updated to ${status}.`);
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchGuarantors();
+    } catch { setError('Failed to update guarantor status.'); } finally { setUpdatingGuarantorId(null); }
+  };
+  const handleDeleteGuarantor = async (guarantorId: string) => {
+    if (!confirm('Remove this guarantor arrangement?')) return;
+    try {
+      await deleteGuarantor(guarantorId);
+      setSuccess('Guarantor arrangement removed.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchGuarantors();
+    } catch { setError('Failed to remove guarantor.'); }
   };
 
   const handleLotteryDraw = async () => {
@@ -679,6 +724,12 @@ export default function GroupDetailPage() {
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'swaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <span className="flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" />Turn Swaps</span>
+        </button>
+        <button
+          onClick={() => handleTabChange('guarantors')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'guarantors' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />Wase / ዋስ</span>
         </button>
       </div>
 
@@ -1591,6 +1642,138 @@ export default function GroupDetailPage() {
         </div>
       )}
 
+      {/* Guarantors (Wase / ዋስ) Tab */}
+      {activeTab === 'guarantors' && (
+        <div className="space-y-6">
+          {/* Ethiopian Context Card */}
+          <div className="card bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+                <Shield className="h-5 w-5 text-amber-700" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-amber-900">Wase System (ዋስ / Guarantor)</h4>
+                <p className="text-sm text-amber-700 mt-0.5">
+                  In traditional Ethiopian Equb, a <strong>Wase (ዋስ)</strong> is a trusted co-signer who guarantees a member’s
+                  financial obligations to the group. If the guaranteed member defaults after winning the pot,
+                  the Wase becomes responsible. A Wase must not have won the current Equb yet.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Active Guarantor Arrangements</h3>
+                <p className="text-sm text-gray-500">Manage wase (guarantor) relationships for this group.</p>
+              </div>
+              <Button size="sm" onClick={() => setShowAssignGuarantorModal(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Assign Wase / Guarantor
+              </Button>
+            </div>
+
+            {guarantorsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+              </div>
+            ) : guarantors.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="table-header">Guarantor (Wase)</th>
+                      <th className="table-header">Guaranteed Member</th>
+                      <th className="table-header">Status</th>
+                      <th className="table-header">Notes</th>
+                      <th className="table-header">Assigned On</th>
+                      <th className="table-header text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {guarantors.map((g) => (
+                      <tr key={g.id} className="hover:bg-gray-50/30 transition-colors">
+                        <td className="table-cell">
+                          <div>
+                            <p className="font-medium text-gray-900">{g.guarantorUser?.name}</p>
+                            <p className="text-xs text-gray-400">{g.guarantorUser?.phone}</p>
+                          </div>
+                        </td>
+                        <td className="table-cell">
+                          <div>
+                            <p className="font-medium text-gray-900">{g.guaranteedUser?.name}</p>
+                            <p className="text-xs text-gray-400">{g.guaranteedUser?.phone}</p>
+                          </div>
+                        </td>
+                        <td className="table-cell">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              g.status === 'ACTIVE'
+                                ? 'bg-green-100 text-green-700'
+                                : g.status === 'CALLED'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {g.status === 'ACTIVE' ? '✅ Active' : g.status === 'CALLED' ? '🚨 Called' : '⚪ Released'}
+                          </span>
+                        </td>
+                        <td className="table-cell text-gray-500 text-sm max-w-xs truncate" title={g.notes}>
+                          {g.notes || '-'}
+                        </td>
+                        <td className="table-cell text-gray-500 text-sm">
+                          {new Date(g.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="table-cell text-right">
+                          <div className="flex justify-end gap-1.5">
+                            {g.status === 'ACTIVE' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  loading={updatingGuarantorId === g.id}
+                                  onClick={() => handleUpdateGuarantorStatus(g.id, 'RELEASED')}
+                                >
+                                  Release
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="primary"
+                                  loading={updatingGuarantorId === g.id}
+                                  onClick={() => handleUpdateGuarantorStatus(g.id, 'CALLED')}
+                                >
+                                  Call
+                                </Button>
+                              </>
+                            )}
+                            {(g.status === 'RELEASED' || g.status === 'CALLED') && (
+                              <button
+                                onClick={() => handleDeleteGuarantor(g.id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Remove record"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Shield className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">No guarantor arrangements for this group.</p>
+                <p className="text-xs text-gray-400 mt-1">Enable “Require Guarantor” in Group Rules to make this mandatory.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Save Template Modal */}
       <Modal
         isOpen={showSaveTemplateModal}
@@ -2177,6 +2360,93 @@ export default function GroupDetailPage() {
             </Button>
             <Button type="submit" loading={requestingSwap} disabled={!swapForm.targetId}>
               Send Request
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Assign Guarantor (Wase) Modal */}
+      <Modal
+        isOpen={showAssignGuarantorModal}
+        onClose={() => {
+          setShowAssignGuarantorModal(false);
+          setGuarantorForm({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
+        }}
+        title="Assign Wase / ዋስ (Guarantor)"
+        size="sm"
+      >
+        <form onSubmit={handleAssignGuarantor} className="space-y-4">
+          <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
+            <p className="text-sm text-amber-700">
+              <strong>Wase Rule:</strong> The guarantor must be an active group member who has <strong>not yet won</strong> in this Equb cycle.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Guarantor (Wase) *</label>
+            <select
+              value={guarantorForm.guarantorUserId}
+              onChange={(e) => setGuarantorForm({ ...guarantorForm, guarantorUserId: e.target.value })}
+              className="input-field"
+              required
+            >
+              <option value="" disabled>Select guarantor member...</option>
+              {group?.members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}{member.hasWon ? ' ⚠️ (Already Won)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Member Being Guaranteed *</label>
+            <select
+              value={guarantorForm.guaranteedUserId}
+              onChange={(e) => setGuarantorForm({ ...guarantorForm, guaranteedUserId: e.target.value })}
+              className="input-field"
+              required
+            >
+              <option value="" disabled>Select member to guarantee...</option>
+              {group?.members
+                .filter((m) => m.id !== guarantorForm.guarantorUserId)
+                .map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (Optional)</label>
+            <textarea
+              value={guarantorForm.notes}
+              onChange={(e) => setGuarantorForm({ ...guarantorForm, notes: e.target.value })}
+              className="input-field"
+              rows={2}
+              placeholder="Any additional context or agreement notes..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowAssignGuarantorModal(false);
+                setGuarantorForm({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              loading={assigningGuarantor}
+              disabled={!guarantorForm.guarantorUserId || !guarantorForm.guaranteedUserId}
+            >
+              <Shield className="h-4 w-4 mr-1.5" />
+              Assign Guarantor
             </Button>
           </div>
         </form>

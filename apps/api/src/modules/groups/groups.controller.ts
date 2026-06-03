@@ -17,11 +17,12 @@ import { DepositsService } from '../deposits/deposits.service';
 import { LotteryService } from '../lottery/lottery.service';
 import { PenaltiesService } from './penalties.service';
 import { DisputesService } from './disputes.service';
+import { GuarantorsService } from './guarantors.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupRulesDto } from './dto/group-rules.dto';
-import { DisputeType } from '@prisma/client';
+import { DisputeType, GuarantorStatus } from '@prisma/client';
 
 @Controller('groups')
 @UseGuards(JwtAuthGuard)
@@ -32,6 +33,7 @@ export class GroupsController {
     private readonly lotteryService: LotteryService,
     private readonly penaltiesService: PenaltiesService,
     private readonly disputesService: DisputesService,
+    private readonly guarantorsService: GuarantorsService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -151,5 +153,38 @@ export class GroupsController {
     @Body() body: { resolution: string; status?: any },
   ) {
     return this.disputesService.resolveDispute(disputeId, req.user.id, body);
+  }
+
+  // ─── Guarantor Endpoints ────────────────────────────────────────
+
+  @Get(':id/guarantors')
+  getGroupGuarantors(@Param('id') id: string) {
+    return this.guarantorsService.findGroupGuarantors(id);
+  }
+
+  @Post(':id/guarantors')
+  addGuarantor(
+    @Param('id') id: string,
+    @Body() body: { guarantorUserId: string; guaranteedUserId: string; notes?: string },
+  ) {
+    return this.guarantorsService.createGuarantor({
+      groupId: id,
+      guarantorUserId: body.guarantorUserId,
+      guaranteedUserId: body.guaranteedUserId,
+      notes: body.notes,
+    });
+  }
+
+  @Patch('guarantors/:guarantorId/status')
+  updateGuarantorStatus(
+    @Param('guarantorId') guarantorId: string,
+    @Body() body: { status: GuarantorStatus; notes?: string },
+  ) {
+    return this.guarantorsService.updateStatus(guarantorId, body.status, body.notes);
+  }
+
+  @Delete('guarantors/:guarantorId')
+  deleteGuarantor(@Param('guarantorId') guarantorId: string) {
+    return this.guarantorsService.deleteGuarantor(guarantorId);
   }
 }
