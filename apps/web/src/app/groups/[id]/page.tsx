@@ -711,25 +711,25 @@ export default function GroupDetailPage() {
           onClick={() => handleTabChange('penalties')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'penalties' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          <span className="flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" />Penalties</span>
+          <span className="flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" />{t('group.tab_penalties')}</span>
         </button>
         <button
           onClick={() => handleTabChange('disputes')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'disputes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          <span className="flex items-center gap-1.5"><Gavel className="h-3.5 w-3.5" />Disputes</span>
+          <span className="flex items-center gap-1.5"><Gavel className="h-3.5 w-3.5" />{t('group.tab_disputes')}</span>
         </button>
         <button
           onClick={() => handleTabChange('swaps')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'swaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          <span className="flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" />Turn Swaps</span>
+          <span className="flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" />{t('group.tab_swaps')}</span>
         </button>
         <button
           onClick={() => handleTabChange('guarantors')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'guarantors' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />Wase / ዋስ</span>
+          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />{t('group.tab_guarantors')}</span>
         </button>
       </div>
 

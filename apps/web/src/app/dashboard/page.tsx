@@ -412,47 +412,47 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Traditional Experience</span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Active System</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">{t('db.traditional_experience')}</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{t('db.active_system')}</span>
             </div>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight">ዕቁብ (Equb) Trust & Community Metrics</h2>
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight">{t('db.traditional_metrics_title')}</h2>
             <p className="text-sm text-indigo-200 mt-1 max-w-xl">
-              Traditional Ethiopian community structures digitized. High reliability indexes indicate solid group trust and minimal payment defaults.
+              {t('db.traditional_metrics_desc')}
             </p>
           </div>
           
           <div className="flex flex-wrap gap-4 md:self-center">
             <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <p className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">Ge'ez Calendar</p>
+              <p className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">{t('db.geez_calendar')}</p>
               <p className="text-base font-bold mt-0.5 text-white">{getEthiopianDateString()}</p>
             </div>
             <div className="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-              <p className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">Average Reliability Score</p>
-              <p className="text-base font-bold mt-0.5 text-emerald-400">96.8% (Excellent)</p>
+              <p className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider">{t('db.reliability_score')}</p>
+              <p className="text-base font-bold mt-0.5 text-emerald-400">96.8% ({t('db.excellent')})</p>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/10 relative z-10">
           <div>
-            <p className="text-xs text-indigo-300">Active Wase (ዋስትናዎች)</p>
-            <p className="text-lg font-bold mt-1 text-white">12 Guarantees</p>
-            <p className="text-xs text-emerald-400 mt-0.5 font-medium">100% Active without Default</p>
+            <p className="text-xs text-indigo-300">{t('db.active_wase')}</p>
+            <p className="text-lg font-bold mt-1 text-white">{t('db.guarantees_value')}</p>
+            <p className="text-xs text-emerald-400 mt-0.5 font-medium">{t('db.guarantees_desc')}</p>
           </div>
           <div>
-            <p className="text-xs text-indigo-300">Emergency Skips Requested</p>
-            <p className="text-lg font-bold mt-1 text-white">2 Requests</p>
-            <p className="text-xs text-indigo-200 mt-0.5 font-medium">Both approved by consensus</p>
+            <p className="text-xs text-indigo-300">{t('db.emergency_skips')}</p>
+            <p className="text-lg font-bold mt-1 text-white">{t('db.requests_value')}</p>
+            <p className="text-xs text-indigo-200 mt-0.5 font-medium">{t('db.requests_desc')}</p>
           </div>
           <div>
-            <p className="text-xs text-indigo-300">Coffee Ceremony Draw Mode</p>
-            <p className="text-lg font-bold mt-1 text-white">Active in 4 Groups</p>
-            <p className="text-xs text-amber-400 mt-0.5 font-medium">3D Incense & Rekebot themes enabled</p>
+            <p className="text-xs text-indigo-300">{t('db.coffee_mode')}</p>
+            <p className="text-lg font-bold mt-1 text-white">{t('db.groups_value')}</p>
+            <p className="text-xs text-amber-400 mt-0.5 font-medium">{t('db.coffee_desc')}</p>
           </div>
           <div>
-            <p className="text-xs text-indigo-300">Auction Equb (የጨረታ ዕቁብ)</p>
-            <p className="text-lg font-bold mt-1 text-white">ETB 14,500 Disbursed</p>
-            <p className="text-xs text-emerald-400 mt-0.5 font-medium">Average 8.5% bidding discount</p>
+            <p className="text-xs text-indigo-300">{t('db.auction_equb')}</p>
+            <p className="text-lg font-bold mt-1 text-white">{t('db.disbursed_value')}</p>
+            <p className="text-xs text-emerald-400 mt-0.5 font-medium">{t('db.bidding_desc')}</p>
           </div>
         </div>
       </div>
