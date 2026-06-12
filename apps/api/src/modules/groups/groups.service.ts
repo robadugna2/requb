@@ -3,18 +3,25 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupRulesDto } from './dto/group-rules.dto';
 import { RulesEnforcementService } from './rules-enforcement.service';
+import { MergedMembersService } from './merged-members.service';
+import { FeeWaiversService } from './fee-waivers.service';
 
 @Injectable()
 export class GroupsService {
+  private readonly logger = new Logger(GroupsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rulesEnforcement: RulesEnforcementService,
+    private readonly mergedMembersService: MergedMembersService,
+    private readonly feeWaiversService: FeeWaiversService,
   ) {}
 
   async create(createGroupDto: CreateGroupDto, adminId: string) {
@@ -264,7 +271,7 @@ export class GroupsService {
       });
     }
 
-    return this.prisma.cycle.create({
+    const newCycle = await this.prisma.cycle.create({
       data: {
         groupId,
         cycleNumber: newCycleNumber,
@@ -277,5 +284,27 @@ export class GroupsService {
         deposits: true,
       },
     });
+
+    // Run compliance enforcement asynchronously for the previous cycle
+    const previousCycleId = lastCycle?.id;
+    void (async () => {
+      try {
+        // Advance fee waivers (expire/increment counters)
+        await this.feeWaiversService.processWaiverCycleAdvance(groupId);
+
+        // Enforce merged member compliance for the previous cycle
+        if (previousCycleId) {
+          const mergedGroups = await this.mergedMembersService.getMergedGroupsByGroup(groupId);
+          const activeGroups = mergedGroups.filter((mg) => mg.status === 'ACTIVE');
+          for (const mg of activeGroups) {
+            await this.mergedMembersService.enforceMergedMemberCompliance(mg.id, previousCycleId);
+          }
+        }
+      } catch (err) {
+        this.logger.error(`Cycle advance enforcement failed for group ${groupId}: ${err}`);
+      }
+    })();
+
+    return newCycle;
   }
 }

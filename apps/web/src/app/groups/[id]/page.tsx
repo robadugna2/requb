@@ -36,8 +36,8 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor } from '@/lib/api';
-import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory } from '@/lib/api';
+import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
 const PENALTY_TYPES = [
@@ -105,7 +105,7 @@ export default function GroupDetailPage() {
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawLoading, setDrawLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors'>('deposits');
+  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares'>('deposits');
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
@@ -114,6 +114,30 @@ export default function GroupDetailPage() {
   const [swapsLoading, setSwapsLoading] = useState(false);
   const [guarantors, setGuarantors] = useState<GuarantorItem[]>([]);
   const [guarantorsLoading, setGuarantorsLoading] = useState(false);
+  const [memberDues, setMemberDues] = useState<MemberDueCalculation[]>([]);
+  const [mergedGroups, setMergedGroups] = useState<MergedGroupItem[]>([]);
+  const [feeWaivers, setFeeWaivers] = useState<FeeWaiverItem[]>([]);
+  const [sharesLoading, setSharesLoading] = useState(false);
+  const [showEditSharesModal, setShowEditSharesModal] = useState<{ userId: string; userName: string; currentShares: number } | null>(null);
+  const [editingShares, setEditingShares] = useState(1);
+  const [savingShares, setSavingShares] = useState(false);
+  const [showGrantWaiverModal, setShowGrantWaiverModal] = useState(false);
+  const [waiverForm, setWaiverForm] = useState({ userId: '', reason: '', durationCycles: 1 });
+  const [grantingWaiver, setGrantingWaiver] = useState(false);
+  const [showCreateMergedModal, setShowCreateMergedModal] = useState(false);
+  const [mergedForm, setMergedForm] = useState<{ name: string; selectedUserIds: string[]; totalShares: number }>({ name: '', selectedUserIds: [], totalShares: 1 });
+  const [creatingMerged, setCreatingMerged] = useState(false);
+  const [dissolvingMergedId, setDissolvingMergedId] = useState<string | null>(null);
+  const [cancellingWaiverId, setCancellingWaiverId] = useState<string | null>(null);
+  const [mergedDepositStatuses, setMergedDepositStatuses] = useState<Record<string, MergedMemberDepositStatusItem[]>>({});
+  const [loadingDepositStatus, setLoadingDepositStatus] = useState<string | null>(null);
+  const [enforcingCompliance, setEnforcingCompliance] = useState<string | null>(null);
+  const [depositHistory, setDepositHistory] = useState<Record<string, MergedGroupDepositHistoryItem>>({});
+  const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
+  const [expandedHistoryCycles, setExpandedHistoryCycles] = useState<Record<string, boolean>>({});
+  const [showEditPercentagesModal, setShowEditPercentagesModal] = useState<MergedGroupItem | null>(null);
+  const [percentageForm, setPercentageForm] = useState<Array<{ userId: string; userName: string; sharePercentage: number }>>([]);
+  const [savingPercentages, setSavingPercentages] = useState(false);
   const [showAssignGuarantorModal, setShowAssignGuarantorModal] = useState(false);
   const [guarantorForm, setGuarantorForm] = useState({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
   const [assigningGuarantor, setAssigningGuarantor] = useState(false);
@@ -441,6 +465,19 @@ export default function GroupDetailPage() {
     setGuarantorsLoading(true);
     try { const data = await getGroupGuarantors(groupId); setGuarantors(data); } catch {} finally { setGuarantorsLoading(false); }
   };
+  const fetchSharesData = async () => {
+    setSharesLoading(true);
+    try {
+      const [duesData, mergedData, waiversData] = await Promise.allSettled([
+        getGroupMemberDues(groupId),
+        getMergedGroups(groupId),
+        getGroupFeeWaivers(groupId),
+      ]);
+      if (duesData.status === 'fulfilled') setMemberDues(duesData.value);
+      if (mergedData.status === 'fulfilled') setMergedGroups(mergedData.value);
+      if (waiversData.status === 'fulfilled') setFeeWaivers(waiversData.value);
+    } catch {} finally { setSharesLoading(false); }
+  };
 
   const handlePayPenalty = async (id: string) => {
     try { await payPenalty(id); setSuccess('Penalty marked as paid.'); setTimeout(() => setSuccess(null), 3000); await fetchPenalties(); } catch { setError('Failed to pay penalty.'); }
@@ -482,13 +519,156 @@ export default function GroupDetailPage() {
     } catch { setError('Failed to send swap request.'); } finally { setRequestingSwap(false); }
   };
 
-  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors') => {
+  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares') => {
     setActiveTab(tab);
     if (tab === 'rules') { fetchRules(); fetchTemplates(); }
     if (tab === 'penalties') fetchPenalties();
     if (tab === 'disputes') fetchDisputes();
     if (tab === 'swaps') fetchSwaps();
     if (tab === 'guarantors') fetchGuarantors();
+    if (tab === 'shares') fetchSharesData();
+  };
+
+  const handleUpdateShares = async () => {
+    if (!showEditSharesModal) return;
+    setSavingShares(true);
+    try {
+      await updateMemberShares(groupId, showEditSharesModal.userId, editingShares);
+      setShowEditSharesModal(null);
+      setSuccess('Member shares updated successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to update shares.');
+    } finally { setSavingShares(false); }
+  };
+
+  const handleGrantWaiver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGrantingWaiver(true);
+    try {
+      await grantFeeWaiver({ groupId, userId: waiverForm.userId, reason: waiverForm.reason, durationCycles: waiverForm.durationCycles });
+      setShowGrantWaiverModal(false);
+      setWaiverForm({ userId: '', reason: '', durationCycles: 1 });
+      setSuccess('Fee waiver granted successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to grant fee waiver.');
+    } finally { setGrantingWaiver(false); }
+  };
+
+  const handleCancelWaiver = async (waiverId: string) => {
+    setCancellingWaiverId(waiverId);
+    try {
+      await cancelFeeWaiver(waiverId);
+      setSuccess('Fee waiver cancelled.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch { setError('Failed to cancel waiver.'); } finally { setCancellingWaiverId(null); }
+  };
+
+  const handleCreateMergedGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingMerged(true);
+    try {
+      await createMergedGroup({ groupId, name: mergedForm.name || undefined, userIds: mergedForm.selectedUserIds, totalShares: mergedForm.totalShares });
+      setShowCreateMergedModal(false);
+      setMergedForm({ name: '', selectedUserIds: [], totalShares: 1 });
+      setSuccess('Merged group created successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to create merged group.');
+    } finally { setCreatingMerged(false); }
+  };
+
+  const fetchMergedGroupStatus = async (mergedGroupId: string) => {
+    setLoadingDepositStatus(mergedGroupId);
+    try {
+      const statuses = await getMergedGroupDepositStatus(mergedGroupId);
+      setMergedDepositStatuses((prev) => ({ ...prev, [mergedGroupId]: statuses }));
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to fetch deposit status.');
+    } finally { setLoadingDepositStatus(null); }
+  };
+
+  const handleEnforceCompliance = async (mergedGroupId: string) => {
+    if (!confirm('Enforce compliance? This will create penalties for members who have not paid their portion.')) return;
+    setEnforcingCompliance(mergedGroupId);
+    try {
+      const result = await enforceMergedMemberCompliance(mergedGroupId);
+      if (result.penaltiesCreated.length > 0) {
+        setSuccess(`Compliance enforced: ${result.penaltiesCreated.length} penalty(ies) created.`);
+      } else {
+        setSuccess('All members are compliant — no penalties needed.');
+      }
+      setTimeout(() => setSuccess(null), 4000);
+      await fetchMergedGroupStatus(mergedGroupId);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to enforce compliance.');
+    } finally { setEnforcingCompliance(null); }
+  };
+
+  const fetchDepositHistory = async (mergedGroupId: string) => {
+    setLoadingHistory(mergedGroupId);
+    try {
+      const history = await getMergedGroupDepositHistory(mergedGroupId);
+      setDepositHistory((prev) => ({ ...prev, [mergedGroupId]: history }));
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to load deposit history.');
+    } finally { setLoadingHistory(null); }
+  };
+
+  const toggleHistoryCycle = (cycleId: string) => {
+    setExpandedHistoryCycles((prev) => ({ ...prev, [cycleId]: !prev[cycleId] }));
+  };
+
+  const handleDissolveMergedGroup = async (mergedGroupId: string) => {
+    if (!confirm('Are you sure you want to dissolve this merged group?')) return;
+    setDissolvingMergedId(mergedGroupId);
+    try {
+      await dissolveMergedGroup(mergedGroupId);
+      setSuccess('Merged group dissolved.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch { setError('Failed to dissolve merged group.'); } finally { setDissolvingMergedId(null); }
+  };
+
+  const openEditPercentages = (mg: MergedGroupItem) => {
+    const activeSlots = mg.slots.filter((s) => s.status === 'ACTIVE');
+    setPercentageForm(
+      activeSlots.map((slot) => ({
+        userId: slot.user.id,
+        userName: slot.user.name,
+        sharePercentage: slot.sharePercentage,
+      }))
+    );
+    setShowEditPercentagesModal(mg);
+  };
+
+  const handleSavePercentages = async () => {
+    if (!showEditPercentagesModal) return;
+    setSavingPercentages(true);
+    try {
+      await updateMergedGroupPercentages(
+        showEditPercentagesModal.id,
+        percentageForm.map(({ userId, sharePercentage }) => ({ userId, sharePercentage })),
+      );
+      setShowEditPercentagesModal(null);
+      setSuccess('Share percentages updated successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchSharesData();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to update percentages.');
+    } finally { setSavingPercentages(false); }
   };
 
   const handleAssignGuarantor = async (e: React.FormEvent) => {
@@ -730,6 +910,12 @@ export default function GroupDetailPage() {
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'guarantors' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />{t('group.tab_guarantors')}</span>
+        </button>
+        <button
+          onClick={() => handleTabChange('shares')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'shares' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <span className="flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" />{t('group.tab_shares')}</span>
         </button>
       </div>
 
@@ -1026,7 +1212,7 @@ export default function GroupDetailPage() {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{t('group.label_require_exact')}</p>
-                      <p className="text-xs text-gray-500">Deposits must match the contribution amount exactly</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_require_exact')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1039,7 +1225,7 @@ export default function GroupDetailPage() {
                     </label>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit Deadline (Day of Month)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_deposit_deadline')}</label>
                     <input
                       type="number"
                       value={rules.depositDeadlineDay ?? ''}
@@ -1051,7 +1237,7 @@ export default function GroupDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Verification Time (Hours)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_min_verification')}</label>
                     <input
                       type="number"
                       value={rules.minVerificationHours}
@@ -1075,7 +1261,7 @@ export default function GroupDetailPage() {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{t('group.label_allow_skip')}</p>
-                      <p className="text-xs text-gray-500">Members can skip a contribution round</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_skip_round')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1102,7 +1288,7 @@ export default function GroupDetailPage() {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{t('group.label_require_guarantor')}</p>
-                      <p className="text-xs text-gray-500">Members must have a guarantor to join</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_require_guarantor')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1126,8 +1312,8 @@ export default function GroupDetailPage() {
                   </div>
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Allow Mid-Cycle Join</p>
-                      <p className="text-xs text-gray-500">New members can join after a cycle has started</p>
+                      <p className="text-sm font-medium text-gray-900">{t('group.label_mid_cycle_join')}</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_mid_cycle_join')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1142,7 +1328,7 @@ export default function GroupDetailPage() {
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm font-medium text-gray-900">{t('group.label_require_gov_id')}</p>
-                      <p className="text-xs text-gray-500">Members must provide a kebele/national ID</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_require_gov_id')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1156,8 +1342,8 @@ export default function GroupDetailPage() {
                   </div>
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Post-Win Contribution Required</p>
-                      <p className="text-xs text-gray-500">Winners must continue paying after receiving payout</p>
+                      <p className="text-sm font-medium text-gray-900">{t('group.label_post_win')}</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_post_win')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1171,8 +1357,8 @@ export default function GroupDetailPage() {
                   </div>
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Auto-Complete Group</p>
-                      <p className="text-xs text-gray-500">Group auto-completes when all members have won</p>
+                      <p className="text-sm font-medium text-gray-900">{t('group.label_auto_complete')}</p>
+                      <p className="text-xs text-gray-500">{t('group.desc_auto_complete')}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1334,14 +1520,14 @@ export default function GroupDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Custom Rules & Notes
+                    {t('group.label_custom_rules')}
                   </label>
                   <textarea
                     value={rules.customRules ?? ''}
                     onChange={(e) => setRules({ ...rules, customRules: e.target.value || undefined })}
                     className="input-field"
                     rows={4}
-                    placeholder="Enter any additional group-specific rules, agreements, or notes here..."
+                    placeholder={t('group.placeholder_custom_rules')}
                   />
                 </div>
               </div>
@@ -1358,7 +1544,7 @@ export default function GroupDetailPage() {
             <div className="text-center py-16 card">
               <Settings className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-1">{t('group.rules_unable')}</h3>
-              <p className="text-gray-500 text-sm">Please try refreshing the page.</p>
+              <p className="text-gray-500 text-sm">{t('group.rules_refresh')}</p>
             </div>
           )}
         </div>
@@ -1370,8 +1556,8 @@ export default function GroupDetailPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Group Penalties</h3>
-                <p className="text-sm text-gray-500">Track and manage member penalties for late payments or rules violations.</p>
+                <h3 className="text-lg font-semibold text-gray-900">{t('group.penalties_title')}</h3>
+                <p className="text-sm text-gray-500">{t('group.penalties_desc')}</p>
               </div>
             </div>
 
@@ -1384,12 +1570,12 @@ export default function GroupDetailPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="table-header">Member</th>
-                      <th className="table-header">Reason</th>
-                      <th className="table-header text-right">Amount (ETB)</th>
-                      <th className="table-header">Status</th>
-                      <th className="table-header">Date</th>
-                      <th className="table-header text-right">Actions</th>
+                      <th className="table-header">{t('group.col_member')}</th>
+                      <th className="table-header">{t('group.col_reason')}</th>
+                      <th className="table-header text-right">{t('group.col_amount_etb')}</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                      <th className="table-header">{t('group.col_date')}</th>
+                      <th className="table-header text-right">{t('group.col_actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1428,14 +1614,14 @@ export default function GroupDetailPage() {
                                 variant="primary"
                                 onClick={() => handlePayPenalty(penalty.id)}
                               >
-                                Mark Paid
+                                {t('group.btn_mark_paid')}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="secondary"
                                 onClick={() => handleWaivePenalty(penalty.id)}
                               >
-                                Waive
+                                {t('group.btn_waive')}
                               </Button>
                             </div>
                           )}
@@ -1448,7 +1634,7 @@ export default function GroupDetailPage() {
             ) : (
               <div className="text-center py-12">
                 <Ban className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No penalties recorded for this group.</p>
+                <p className="text-gray-500 text-sm">{t('group.no_penalties')}</p>
               </div>
             )}
           </div>
@@ -1461,12 +1647,12 @@ export default function GroupDetailPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Member Disputes</h3>
-                <p className="text-sm text-gray-500">View and resolve group disputes filed by members.</p>
+                <h3 className="text-lg font-semibold text-gray-900">{t('group.disputes_title')}</h3>
+                <p className="text-sm text-gray-500">{t('group.disputes_desc')}</p>
               </div>
               <Button size="sm" onClick={() => setShowFileDisputeModal(true)}>
                 <Gavel className="h-4 w-4 mr-1.5" />
-                File a Dispute
+                {t('group.btn_file_dispute')}
               </Button>
             </div>
 
@@ -1479,13 +1665,13 @@ export default function GroupDetailPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="table-header">Filed By</th>
-                      <th className="table-header">Against</th>
-                      <th className="table-header">Type</th>
-                      <th className="table-header">Description</th>
-                      <th className="table-header">Status</th>
-                      <th className="table-header">Resolution</th>
-                      <th className="table-header text-right">Actions</th>
+                      <th className="table-header">{t('group.col_filed_by')}</th>
+                      <th className="table-header">{t('group.col_against')}</th>
+                      <th className="table-header">{t('group.col_type')}</th>
+                      <th className="table-header">{t('group.col_description')}</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                      <th className="table-header">{t('group.col_resolution')}</th>
+                      <th className="table-header text-right">{t('group.col_actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1528,7 +1714,7 @@ export default function GroupDetailPage() {
                               variant="primary"
                               onClick={() => setShowResolveModal(dispute.id)}
                             >
-                              Resolve
+                              {t('group.btn_resolve')}
                             </Button>
                           )}
                         </td>
@@ -1540,7 +1726,7 @@ export default function GroupDetailPage() {
             ) : (
               <div className="text-center py-12">
                 <Gavel className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No disputes filed for this group.</p>
+                <p className="text-gray-500 text-sm">{t('group.no_disputes')}</p>
               </div>
             )}
           </div>
@@ -1553,12 +1739,12 @@ export default function GroupDetailPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Turn Swap Requests</h3>
-                <p className="text-sm text-gray-500">Manage cycle turn swaps negotiated between group members.</p>
+                <h3 className="text-lg font-semibold text-gray-900">{t('group.swaps_title')}</h3>
+                <p className="text-sm text-gray-500">{t('group.swaps_desc')}</p>
               </div>
               <Button size="sm" onClick={() => setShowRequestSwapModal(true)}>
                 <ArrowLeftRight className="h-4 w-4 mr-1.5" />
-                Request Swap
+                {t('group.btn_request_swap')}
               </Button>
             </div>
 
@@ -1571,13 +1757,13 @@ export default function GroupDetailPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="table-header">Requester</th>
-                      <th className="table-header">Target Member</th>
-                      <th className="table-header text-center">Req Turn</th>
-                      <th className="table-header text-center">Tgt Turn</th>
-                      <th className="table-header">Reason</th>
-                      <th className="table-header">Status</th>
-                      <th className="table-header text-right">Actions</th>
+                      <th className="table-header">{t('group.col_requester')}</th>
+                      <th className="table-header">{t('group.col_target_member')}</th>
+                      <th className="table-header text-center">{t('group.col_req_turn')}</th>
+                      <th className="table-header text-center">{t('group.col_tgt_turn')}</th>
+                      <th className="table-header">{t('group.col_reason')}</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                      <th className="table-header text-right">{t('group.col_actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1615,14 +1801,14 @@ export default function GroupDetailPage() {
                                 variant="primary"
                                 onClick={() => handleRespondSwap(swap.id, true)}
                               >
-                                Approve
+                                {t('group.btn_approve')}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="secondary"
                                 onClick={() => handleRespondSwap(swap.id, false)}
                               >
-                                Reject
+                                {t('group.btn_reject')}
                               </Button>
                             </div>
                           )}
@@ -1635,7 +1821,7 @@ export default function GroupDetailPage() {
             ) : (
               <div className="text-center py-12">
                 <ArrowLeftRight className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No turn swap requests recorded for this group.</p>
+                <p className="text-gray-500 text-sm">{t('group.no_swaps')}</p>
               </div>
             )}
           </div>
@@ -1652,11 +1838,9 @@ export default function GroupDetailPage() {
                 <Shield className="h-5 w-5 text-amber-700" />
               </div>
               <div>
-                <h4 className="font-semibold text-amber-900">Wase System (ዋስ / Guarantor)</h4>
+                <h4 className="font-semibold text-amber-900">{t('group.wase_title')}</h4>
                 <p className="text-sm text-amber-700 mt-0.5">
-                  In traditional Ethiopian Equb, a <strong>Wase (ዋስ)</strong> is a trusted co-signer who guarantees a member’s
-                  financial obligations to the group. If the guaranteed member defaults after winning the pot,
-                  the Wase becomes responsible. A Wase must not have won the current Equb yet.
+                  {t('group.wase_desc')}
                 </p>
               </div>
             </div>
@@ -1665,12 +1849,12 @@ export default function GroupDetailPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Active Guarantor Arrangements</h3>
-                <p className="text-sm text-gray-500">Manage wase (guarantor) relationships for this group.</p>
+                <h3 className="text-lg font-semibold text-gray-900">{t('group.guarantors_title')}</h3>
+                <p className="text-sm text-gray-500">{t('group.guarantors_desc')}</p>
               </div>
               <Button size="sm" onClick={() => setShowAssignGuarantorModal(true)}>
                 <Plus className="h-4 w-4 mr-1.5" />
-                Assign Wase / Guarantor
+                {t('group.btn_assign_guarantor')}
               </Button>
             </div>
 
@@ -1683,12 +1867,12 @@ export default function GroupDetailPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="table-header">Guarantor (Wase)</th>
-                      <th className="table-header">Guaranteed Member</th>
-                      <th className="table-header">Status</th>
-                      <th className="table-header">Notes</th>
-                      <th className="table-header">Assigned On</th>
-                      <th className="table-header text-right">Actions</th>
+                      <th className="table-header">{t('group.col_guarantor')}</th>
+                      <th className="table-header">{t('group.col_guaranteed')}</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                      <th className="table-header">{t('group.col_notes')}</th>
+                      <th className="table-header">{t('group.col_assigned_on')}</th>
+                      <th className="table-header text-right">{t('group.col_actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1716,7 +1900,7 @@ export default function GroupDetailPage() {
                                 : 'bg-gray-100 text-gray-600'
                             }`}
                           >
-                            {g.status === 'ACTIVE' ? '✅ Active' : g.status === 'CALLED' ? '🚨 Called' : '⚪ Released'}
+                            {g.status === 'ACTIVE' ? `✅ ${t('group.status_active')}` : g.status === 'CALLED' ? `🚨 ${t('group.status_called')}` : `⚪ ${t('group.status_released')}`}
                           </span>
                         </td>
                         <td className="table-cell text-gray-500 text-sm max-w-xs truncate" title={g.notes}>
@@ -1735,7 +1919,7 @@ export default function GroupDetailPage() {
                                   loading={updatingGuarantorId === g.id}
                                   onClick={() => handleUpdateGuarantorStatus(g.id, 'RELEASED')}
                                 >
-                                  Release
+                                  {t('group.btn_release')}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1743,7 +1927,7 @@ export default function GroupDetailPage() {
                                   loading={updatingGuarantorId === g.id}
                                   onClick={() => handleUpdateGuarantorStatus(g.id, 'CALLED')}
                                 >
-                                  Call
+                                  {t('group.btn_call')}
                                 </Button>
                               </>
                             )}
@@ -1766,13 +1950,715 @@ export default function GroupDetailPage() {
             ) : (
               <div className="text-center py-12">
                 <Shield className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No guarantor arrangements for this group.</p>
-                <p className="text-xs text-gray-400 mt-1">Enable “Require Guarantor” in Group Rules to make this mandatory.</p>
+                <p className="text-gray-500 text-sm">{t('group.no_guarantors')}</p>
+                <p className="text-xs text-gray-400 mt-1">{t('group.no_guarantors_hint')}</p>
               </div>
             )}
           </div>
         </div>
       )}
+
+      {/* Shares & Dues Tab */}
+      {activeTab === 'shares' && (
+        <div className="space-y-6">
+          {sharesLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                <p className="text-sm text-gray-500">{t('group.rules_loading')}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Dues Breakdown Section */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{t('group.shares_title')}</h3>
+                    <p className="text-sm text-gray-500">{t('group.shares_desc')}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setShowGrantWaiverModal(true)}>
+                      <CircleDollarSign className="h-4 w-4 mr-1.5" />
+                      {t('group.btn_grant_waiver')}
+                    </Button>
+                  </div>
+                </div>
+
+                {memberDues.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="table-header">{t('group.col_member')}</th>
+                          <th className="table-header text-center">{t('group.col_shares')}</th>
+                          <th className="table-header text-right">{t('group.col_contribution')}</th>
+                          <th className="table-header text-right">{t('group.col_admin_fee')}</th>
+                          <th className="table-header text-right">{t('group.col_total_due')}</th>
+                          <th className="table-header text-center">{t('group.col_merged')}</th>
+                          <th className="table-header text-right">{t('group.col_actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {memberDues.map((due) => (
+                          <tr key={due.userId} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="table-cell">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900">{due.userName}</span>
+                                {due.mergedGroupName && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-violet-50 text-violet-600 font-medium">
+                                    {due.mergedGroupName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="table-cell text-center">
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 font-bold text-sm">
+                                {due.shares}
+                              </span>
+                            </td>
+                            <td className="table-cell text-right text-gray-700">
+                              ETB {due.contributionDue.toLocaleString()}
+                            </td>
+                            <td className="table-cell text-right text-gray-500">
+                              ETB {due.adminFeeDue.toLocaleString()}
+                            </td>
+                            <td className="table-cell text-right font-semibold text-gray-900">
+                              ETB {due.totalDue.toLocaleString()}
+                            </td>
+                            <td className="table-cell text-center">
+                              {due.isMerged ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">Yes</span>
+                              ) : (
+                                <span className="text-gray-400 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="table-cell text-right">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setShowEditSharesModal({ userId: due.userId, userName: due.userName, currentShares: due.shares });
+                                  setEditingShares(due.shares);
+                                }}
+                              >
+                                {t('group.btn_edit_shares')}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Wallet className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 text-sm">{t('group.no_dues')}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Merged Groups Section */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{t('group.merged_title')}</h3>
+                    <p className="text-sm text-gray-500">{t('group.merged_desc')}</p>
+                  </div>
+                  <Button size="sm" onClick={() => setShowCreateMergedModal(true)}>
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    {t('group.btn_create_merged')}
+                  </Button>
+                </div>
+
+                {mergedGroups.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {mergedGroups.map((mg) => (
+                      <div key={mg.id} className={`border rounded-xl p-4 transition-all ${mg.status === 'DISSOLVED' ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                              <Users className="h-4 w-4 text-violet-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900 text-sm">{mg.name}</h4>
+                              <p className="text-xs text-gray-400">{mg.slots.length} {t('group.merged_members_count')} · {mg.totalShares} {t('group.merged_shares')}</p>
+                            </div>
+                          </div>
+                          {mg.status === 'ACTIVE' && (
+                            <div className="flex gap-1.5 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={loadingDepositStatus === mg.id}
+                                onClick={() => fetchMergedGroupStatus(mg.id)}
+                              >
+                                {t('group.btn_check_status')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={loadingHistory === mg.id}
+                                onClick={() => fetchDepositHistory(mg.id)}
+                              >
+                                <Clock className="h-3.5 w-3.5 mr-1" />
+                                {t('group.btn_view_history')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                loading={enforcingCompliance === mg.id}
+                                onClick={() => handleEnforceCompliance(mg.id)}
+                              >
+                                {t('group.btn_enforce')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openEditPercentages(mg)}
+                              >
+                                {t('group.btn_edit_percentages')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={dissolvingMergedId === mg.id}
+                                onClick={() => handleDissolveMergedGroup(mg.id)}
+                              >
+                                {t('group.btn_dissolve')}
+                              </Button>
+                            </div>
+                          )}
+                          {mg.status === 'DISSOLVED' && (
+                            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">Dissolved</span>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {mg.slots.map((slot) => {
+                            const depositStatus = mergedDepositStatuses[mg.id]?.find((s) => s.userId === slot.user.id);
+                            return (
+                              <div key={slot.id} className="rounded-md bg-gray-50 overflow-hidden">
+                                <div className="flex items-center justify-between py-1.5 px-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center">
+                                      <span className="text-[10px] font-bold text-primary-700">
+                                        {slot.user.name.split(' ').map((n) => n[0]).join('')}
+                                      </span>
+                                    </div>
+                                    <span className="text-sm text-gray-700">{slot.user.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {depositStatus && (
+                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                        depositStatus.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                                        depositStatus.status === 'PARTIAL' ? 'bg-amber-100 text-amber-700' :
+                                        depositStatus.status === 'LATE' ? 'bg-red-100 text-red-700' :
+                                        'bg-gray-200 text-gray-600'
+                                      }`}>
+                                        {depositStatus.status}
+                                      </span>
+                                    )}
+                                    <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                                      {(slot.sharePercentage * 100).toFixed(0)}%
+                                    </span>
+                                  </div>
+                                </div>
+                                {depositStatus && (
+                                  <div className="px-2 pb-2 pt-0.5">
+                                    <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                                      <span>ETB {depositStatus.paidAmount.toLocaleString()} / {depositStatus.expectedTotal.toLocaleString()}</span>
+                                      <span className="text-gray-400">
+                                        (Fee: ETB {depositStatus.expectedAdminFee.toLocaleString()})
+                                      </span>
+                                    </div>
+                                    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${
+                                          depositStatus.status === 'PAID' ? 'bg-green-500' :
+                                          depositStatus.status === 'PARTIAL' ? 'bg-amber-500' :
+                                          depositStatus.status === 'LATE' ? 'bg-red-500' :
+                                          'bg-gray-400'
+                                        }`}
+                                        style={{ width: `${Math.min(100, depositStatus.expectedTotal > 0 ? (depositStatus.paidAmount / depositStatus.expectedTotal) * 100 : 0)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Deposit History Timeline */}
+                        {depositHistory[mg.id] && (
+                          <div className="mt-3 border-t border-gray-100 pt-3">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('group.history_title')}</p>
+                            {depositHistory[mg.id].cycles.length > 0 ? (
+                              <div className="space-y-1">
+                                {depositHistory[mg.id].cycles.map((cycle) => {
+                                  const paymentRatio = cycle.totalExpected > 0 ? cycle.totalPaid / cycle.totalExpected : 0;
+                                  const isExpanded = expandedHistoryCycles[cycle.cycleId] ?? false;
+                                  const borderColor = paymentRatio >= 0.99 ? 'border-green-400' : paymentRatio > 0 ? 'border-amber-400' : 'border-red-400';
+                                  const bgColor = paymentRatio >= 0.99 ? 'bg-green-50' : paymentRatio > 0 ? 'bg-amber-50' : 'bg-red-50';
+
+                                  return (
+                                    <div key={cycle.cycleId} className={`border-l-4 ${borderColor} rounded-r-lg overflow-hidden`}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleHistoryCycle(cycle.cycleId)}
+                                        className={`w-full flex items-center justify-between px-3 py-2 ${bgColor} hover:brightness-95 transition-all text-left`}
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="text-xs font-bold text-gray-700">Cycle {cycle.cycleNumber}</span>
+                                          <span className="text-[10px] text-gray-400 hidden sm:inline">
+                                            {new Date(cycle.startDate).toLocaleDateString('en-CA')} → {new Date(cycle.endDate).toLocaleDateString('en-CA')}
+                                          </span>
+                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                            cycle.cycleStatus === 'COMPLETED' ? 'bg-gray-200 text-gray-600' : 'bg-blue-100 text-blue-700'
+                                          }`}>
+                                            {cycle.cycleStatus}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${
+                                                paymentRatio >= 0.99 ? 'bg-green-500' : paymentRatio > 0 ? 'bg-amber-500' : 'bg-red-500'
+                                              }`}
+                                              style={{ width: `${Math.min(100, paymentRatio * 100)}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-[10px] font-semibold text-gray-600 w-8 text-right">
+                                            {Math.round(paymentRatio * 100)}%
+                                          </span>
+                                          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                        </div>
+                                      </button>
+
+                                      {isExpanded && (
+                                        <div className="px-3 py-2 bg-white border-t border-gray-100">
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="text-gray-500">
+                                                <th className="text-left py-1 font-medium">Member</th>
+                                                <th className="text-right py-1 font-medium">Expected</th>
+                                                <th className="text-right py-1 font-medium">Paid</th>
+                                                <th className="text-right py-1 font-medium">Status</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                              {cycle.members.map((member) => (
+                                                <tr key={member.userId}>
+                                                  <td className="py-1.5 text-gray-700 font-medium">{member.userName}</td>
+                                                  <td className="py-1.5 text-right text-gray-500">
+                                                    ETB {member.expectedTotal.toLocaleString()}
+                                                  </td>
+                                                  <td className="py-1.5 text-right text-gray-700 font-medium">
+                                                    ETB {member.paidAmount.toLocaleString()}
+                                                  </td>
+                                                  <td className="py-1.5 text-right">
+                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                                      member.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                                                      member.status === 'PARTIAL' ? 'bg-amber-100 text-amber-700' :
+                                                      member.status === 'LATE' ? 'bg-red-100 text-red-700' :
+                                                      'bg-gray-200 text-gray-600'
+                                                    }`}>
+                                                      {member.status}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                          <div className="flex justify-between mt-1.5 pt-1.5 border-t border-gray-100 text-[10px] text-gray-500">
+                                            <span>Total Expected: ETB {cycle.totalExpected.toLocaleString()}</span>
+                                            <span>Total Paid: ETB {cycle.totalPaid.toLocaleString()}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 italic">{t('group.no_history')}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 text-sm">{t('group.no_merged')}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('group.no_merged_hint')}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Fee Waivers Section */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{t('group.waivers_title')}</h3>
+                    <p className="text-sm text-gray-500">{t('group.waivers_desc')}</p>
+                  </div>
+                </div>
+
+                {feeWaivers.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="table-header">{t('group.col_member')}</th>
+                          <th className="table-header">{t('group.col_reason')}</th>
+                          <th className="table-header text-center">{t('group.col_cycles_used')}</th>
+                          <th className="table-header text-center">{t('group.col_duration')}</th>
+                          <th className="table-header text-center">{t('group.col_missed')}</th>
+                          <th className="table-header">{t('group.col_status')}</th>
+                          <th className="table-header text-right">{t('group.col_actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {feeWaivers.map((waiver) => (
+                          <tr key={waiver.id} className="hover:bg-gray-50/30 transition-colors">
+                            <td className="table-cell font-medium text-gray-900">
+                              {waiver.user?.name || 'Unknown'}
+                            </td>
+                            <td className="table-cell text-gray-500 max-w-xs truncate" title={waiver.reason}>
+                              {waiver.reason}
+                            </td>
+                            <td className="table-cell text-center">
+                              <span className="font-semibold text-gray-900">{waiver.cyclesUsed}</span>
+                              <span className="text-gray-400"> / {waiver.durationCycles}</span>
+                            </td>
+                            <td className="table-cell text-center text-gray-700">
+                              {waiver.durationCycles} cycles
+                            </td>
+                            <td className="table-cell text-center">
+                              {waiver.missedAfterExpiry > 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                  {waiver.missedAfterExpiry}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">0</span>
+                              )}
+                            </td>
+                            <td className="table-cell">
+                              <Badge
+                                status={
+                                  waiver.status === 'ACTIVE'
+                                    ? 'active'
+                                    : waiver.status === 'EXPIRED'
+                                    ? 'completed'
+                                    : 'inactive'
+                                }
+                              >
+                                {waiver.status}
+                              </Badge>
+                            </td>
+                            <td className="table-cell text-right">
+                              {waiver.status === 'ACTIVE' && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  loading={cancellingWaiverId === waiver.id}
+                                  onClick={() => handleCancelWaiver(waiver.id)}
+                                >
+                                  {t('group.btn_cancel_waiver')}
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <CircleDollarSign className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 text-sm">{t('group.no_waivers')}</p>
+                    <p className="text-xs text-gray-400 mt-1">{t('group.no_waivers_hint')}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Edit Shares Modal */}
+      <Modal
+        isOpen={!!showEditSharesModal}
+        onClose={() => setShowEditSharesModal(null)}
+        title={t('group.modal_edit_shares')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Update the number of shares for <strong>{showEditSharesModal?.userName}</strong>. Each share multiplies the contribution and admin fee amounts.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_shares_count')}</label>
+            <input
+              type="number"
+              value={editingShares}
+              onChange={(e) => setEditingShares(Math.max(1, Number(e.target.value)))}
+              className="input-field"
+              min={1}
+              max={10}
+            />
+            {group && (
+              <p className="text-xs text-gray-400 mt-1.5">
+                Contribution: ETB {(group.contributionAmount * editingShares).toLocaleString()} / cycle
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setShowEditSharesModal(null)}>
+              {t('group.btn_cancel')}
+            </Button>
+            <Button onClick={handleUpdateShares} loading={savingShares}>
+              {t('group.save_changes')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Grant Waiver Modal */}
+      <Modal
+        isOpen={showGrantWaiverModal}
+        onClose={() => {
+          setShowGrantWaiverModal(false);
+          setWaiverForm({ userId: '', reason: '', durationCycles: 1 });
+        }}
+        title={t('group.modal_grant_waiver')}
+        size="sm"
+      >
+        <form onSubmit={handleGrantWaiver} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.col_member')} *</label>
+            <select
+              value={waiverForm.userId}
+              onChange={(e) => setWaiverForm({ ...waiverForm, userId: e.target.value })}
+              className="input-field"
+              required
+            >
+              <option value="" disabled>{t('group.placeholder_select_member')}</option>
+              {group?.members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_waiver_reason')}</label>
+            <textarea
+              value={waiverForm.reason}
+              onChange={(e) => setWaiverForm({ ...waiverForm, reason: e.target.value })}
+              className="input-field"
+              rows={3}
+              placeholder={t('group.placeholder_waiver_reason')}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_waiver_duration')}</label>
+            <input
+              type="number"
+              value={waiverForm.durationCycles}
+              onChange={(e) => setWaiverForm({ ...waiverForm, durationCycles: Math.max(1, Number(e.target.value)) })}
+              className="input-field"
+              min={1}
+              max={52}
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowGrantWaiverModal(false);
+                setWaiverForm({ userId: '', reason: '', durationCycles: 1 });
+              }}
+            >
+              {t('group.btn_cancel')}
+            </Button>
+            <Button type="submit" loading={grantingWaiver} disabled={!waiverForm.userId || !waiverForm.reason}>
+              {t('group.btn_grant_waiver')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Create Merged Group Modal */}
+      <Modal
+        isOpen={showCreateMergedModal}
+        onClose={() => {
+          setShowCreateMergedModal(false);
+          setMergedForm({ name: '', selectedUserIds: [], totalShares: 1 });
+        }}
+        title={t('group.modal_create_merged')}
+        size="sm"
+      >
+        <form onSubmit={handleCreateMergedGroup} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_merged_name')}</label>
+            <input
+              type="text"
+              value={mergedForm.name}
+              onChange={(e) => setMergedForm({ ...mergedForm, name: e.target.value })}
+              className="input-field"
+              placeholder={t('group.placeholder_merged_name')}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_merged_members')}</label>
+            <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+              {group?.members.map((member) => (
+                <label
+                  key={member.id}
+                  className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0"
+                >
+                  <input
+                    type="checkbox"
+                    checked={mergedForm.selectedUserIds.includes(member.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        if (mergedForm.selectedUserIds.length < 4) {
+                          setMergedForm({ ...mergedForm, selectedUserIds: [...mergedForm.selectedUserIds, member.id] });
+                        }
+                      } else {
+                        setMergedForm({ ...mergedForm, selectedUserIds: mergedForm.selectedUserIds.filter((id) => id !== member.id) });
+                      }
+                    }}
+                    disabled={!mergedForm.selectedUserIds.includes(member.id) && mergedForm.selectedUserIds.length >= 4}
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700">{member.name}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              {mergedForm.selectedUserIds.length}/4 members selected (min 2)
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_merged_shares')}</label>
+            <input
+              type="number"
+              value={mergedForm.totalShares}
+              onChange={(e) => setMergedForm({ ...mergedForm, totalShares: Math.max(1, Number(e.target.value)) })}
+              className="input-field"
+              min={1}
+              max={5}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowCreateMergedModal(false);
+                setMergedForm({ name: '', selectedUserIds: [], totalShares: 1 });
+              }}
+            >
+              {t('group.btn_cancel')}
+            </Button>
+            <Button type="submit" loading={creatingMerged} disabled={mergedForm.selectedUserIds.length < 2}>
+              {t('group.btn_create_merged')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Merged Group Percentages Modal */}
+      <Modal
+        isOpen={!!showEditPercentagesModal}
+        onClose={() => setShowEditPercentagesModal(null)}
+        title={t('group.modal_edit_percentages')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Assign custom share percentages for each member in <strong>{showEditPercentagesModal?.name}</strong>. Percentages must total 100%.
+          </p>
+          <div className="space-y-3">
+            {percentageForm.map((entry, idx) => (
+              <div key={entry.userId} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{entry.userName}</p>
+                </div>
+                <div className="flex items-center gap-2 w-32">
+                  <input
+                    type="number"
+                    value={parseFloat((entry.sharePercentage * 100).toFixed(2))}
+                    onChange={(e) => {
+                      const newPercentageForm = [...percentageForm];
+                      newPercentageForm[idx] = {
+                        ...newPercentageForm[idx],
+                        sharePercentage: Math.max(1, Math.min(99, parseFloat(e.target.value) || 0)) / 100,
+                      };
+                      setPercentageForm(newPercentageForm);
+                    }}
+                    className="input-field text-center w-20"
+                    min={1}
+                    max={99}
+                    step={0.01}
+                  />
+                  <span className="text-sm text-gray-500 font-medium">%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Sum indicator */}
+          {percentageForm.length > 0 && (
+            <div className={`text-sm font-medium text-center py-2 rounded-lg ${
+              Math.abs(percentageForm.reduce((s, p) => s + p.sharePercentage, 0) - 1.0) <= 0.01
+                ? 'bg-green-50 text-green-700'
+                : 'bg-red-50 text-red-700'
+            }`}>
+              Total: {Math.round(percentageForm.reduce((s, p) => s + p.sharePercentage, 0) * 100)}%
+              {Math.abs(percentageForm.reduce((s, p) => s + p.sharePercentage, 0) - 1.0) > 0.01 && (
+                <span className="ml-2">(must equal 100%)</span>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg">
+            <p className="text-xs text-blue-700">
+              <strong>Tip:</strong> {t('group.percentages_tip')}
+            </p>
+          </div>
+          <div className="flex justify-between pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const equalShare = 1 / percentageForm.length;
+                setPercentageForm(percentageForm.map((p) => ({ ...p, sharePercentage: equalShare })));
+              }}
+            >
+              {t('group.btn_equal_split')}
+            </Button>
+            <div className="flex gap-3">
+              <Button type="button" variant="secondary" onClick={() => setShowEditPercentagesModal(null)}>
+                {t('group.btn_cancel')}
+              </Button>
+              <Button
+                onClick={handleSavePercentages}
+                loading={savingPercentages}
+                disabled={Math.abs(percentageForm.reduce((s, p) => s + p.sharePercentage, 0) - 1.0) > 0.01}
+              >
+                {t('group.btn_save_percentages')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       {/* Save Template Modal */}
       <Modal
@@ -2194,33 +3080,33 @@ export default function GroupDetailPage() {
           setShowFileDisputeModal(false);
           setDisputeForm({ type: 'PAYMENT', description: '', againstUserId: '' });
         }}
-        title="File a Dispute"
+        title={t('group.modal_file_dispute')}
         size="sm"
       >
         <form onSubmit={handleFileDispute} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Dispute Type</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_dispute_type')}</label>
             <select
               value={disputeForm.type}
               onChange={(e) => setDisputeForm({ ...disputeForm, type: e.target.value })}
               className="input-field"
               required
             >
-              <option value="PAYMENT">Payment Issue</option>
-              <option value="RULE_VIOLATION">Rule Violation</option>
-              <option value="LOTTERY">Lottery Draw Issue</option>
-              <option value="OTHER">Other</option>
+              <option value="PAYMENT">{t('group.option_payment_issue')}</option>
+              <option value="RULE_VIOLATION">{t('group.option_rule_violation')}</option>
+              <option value="LOTTERY">{t('group.option_lottery_issue')}</option>
+              <option value="OTHER">{t('group.option_other')}</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Against Member (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_against_member')}</label>
             <select
               value={disputeForm.againstUserId}
               onChange={(e) => setDisputeForm({ ...disputeForm, againstUserId: e.target.value })}
               className="input-field"
             >
-              <option value="">General Group Dispute</option>
+              <option value="">{t('group.option_general_dispute')}</option>
               {group?.members.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.name}
@@ -2230,13 +3116,13 @@ export default function GroupDetailPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_description')}</label>
             <textarea
               value={disputeForm.description}
               onChange={(e) => setDisputeForm({ ...disputeForm, description: e.target.value })}
               className="input-field"
               rows={4}
-              placeholder="Describe the issue in detail..."
+              placeholder={t('group.placeholder_dispute')}
               required
             />
           </div>
@@ -2250,10 +3136,10 @@ export default function GroupDetailPage() {
                 setDisputeForm({ type: 'PAYMENT', description: '', againstUserId: '' });
               }}
             >
-              Cancel
+              {t('group.btn_cancel')}
             </Button>
             <Button type="submit" loading={filingDispute}>
-              Submit Dispute
+              {t('group.btn_submit_dispute')}
             </Button>
           </div>
         </form>
@@ -2266,18 +3152,18 @@ export default function GroupDetailPage() {
           setShowResolveModal(null);
           setResolveText('');
         }}
-        title="Resolve Dispute"
+        title={t('group.modal_resolve')}
         size="sm"
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Resolution Notes *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_resolution_notes')}</label>
             <textarea
               value={resolveText}
               onChange={(e) => setResolveText(e.target.value)}
               className="input-field"
               rows={4}
-              placeholder="Enter resolution actions or notes..."
+              placeholder={t('group.placeholder_resolution')}
               required
             />
           </div>
@@ -2291,14 +3177,14 @@ export default function GroupDetailPage() {
                 setResolveText('');
               }}
             >
-              Cancel
+              {t('group.btn_cancel')}
             </Button>
             <Button
               onClick={handleResolveDispute}
               loading={resolving}
               disabled={!resolveText.trim()}
             >
-              Mark Resolved
+              {t('group.btn_mark_resolved')}
             </Button>
           </div>
         </div>
@@ -2311,23 +3197,23 @@ export default function GroupDetailPage() {
           setShowRequestSwapModal(false);
           setSwapForm({ targetId: '', reason: '' });
         }}
-        title="Request a Turn Swap"
+        title={t('group.modal_request_swap')}
         size="sm"
       >
         <form onSubmit={handleRequestSwap} className="space-y-4">
           <p className="text-sm text-gray-500">
-            Request to swap your upcoming lottery draw turn with another group member.
+            {t('group.swap_desc')}
           </p>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Target Member *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_target_member')}</label>
             <select
               value={swapForm.targetId}
               onChange={(e) => setSwapForm({ ...swapForm, targetId: e.target.value })}
               className="input-field"
               required
             >
-              <option value="" disabled>Select a member...</option>
+              <option value="" disabled>{t('group.placeholder_select_member')}</option>
               {group?.members.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.name}
@@ -2337,13 +3223,13 @@ export default function GroupDetailPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_reason')}</label>
             <textarea
               value={swapForm.reason}
               onChange={(e) => setSwapForm({ ...swapForm, reason: e.target.value })}
               className="input-field"
               rows={3}
-              placeholder="Describe why you want to swap turns..."
+              placeholder={t('group.placeholder_swap_reason')}
             />
           </div>
 
@@ -2356,10 +3242,10 @@ export default function GroupDetailPage() {
                 setSwapForm({ targetId: '', reason: '' });
               }}
             >
-              Cancel
+              {t('group.btn_cancel')}
             </Button>
             <Button type="submit" loading={requestingSwap} disabled={!swapForm.targetId}>
-              Send Request
+              {t('group.btn_send_request')}
             </Button>
           </div>
         </form>
@@ -2372,42 +3258,42 @@ export default function GroupDetailPage() {
           setShowAssignGuarantorModal(false);
           setGuarantorForm({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
         }}
-        title="Assign Wase / ዋስ (Guarantor)"
+        title={t('group.modal_assign_guarantor')}
         size="sm"
       >
         <form onSubmit={handleAssignGuarantor} className="space-y-4">
           <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
             <p className="text-sm text-amber-700">
-              <strong>Wase Rule:</strong> The guarantor must be an active group member who has <strong>not yet won</strong> in this Equb cycle.
+              <strong>{t('group.wase_rule')}</strong> {t('group.wase_rule_desc')}
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Guarantor (Wase) *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_guarantor_select')}</label>
             <select
               value={guarantorForm.guarantorUserId}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, guarantorUserId: e.target.value })}
               className="input-field"
               required
             >
-              <option value="" disabled>Select guarantor member...</option>
+              <option value="" disabled>{t('group.placeholder_guarantor')}</option>
               {group?.members.map((member) => (
                 <option key={member.id} value={member.id}>
-                  {member.name}{member.hasWon ? ' ⚠️ (Already Won)' : ''}
+                  {member.name}{member.hasWon ? ` ⚠️ ${t('group.already_won')}` : ''}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Member Being Guaranteed *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_guaranteed_select')}</label>
             <select
               value={guarantorForm.guaranteedUserId}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, guaranteedUserId: e.target.value })}
               className="input-field"
               required
             >
-              <option value="" disabled>Select member to guarantee...</option>
+              <option value="" disabled>{t('group.placeholder_guaranteed')}</option>
               {group?.members
                 .filter((m) => m.id !== guarantorForm.guarantorUserId)
                 .map((member) => (
@@ -2419,13 +3305,13 @@ export default function GroupDetailPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_notes')}</label>
             <textarea
               value={guarantorForm.notes}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, notes: e.target.value })}
               className="input-field"
               rows={2}
-              placeholder="Any additional context or agreement notes..."
+              placeholder={t('group.placeholder_notes')}
             />
           </div>
 
@@ -2438,7 +3324,7 @@ export default function GroupDetailPage() {
                 setGuarantorForm({ guarantorUserId: '', guaranteedUserId: '', notes: '' });
               }}
             >
-              Cancel
+              {t('group.btn_cancel')}
             </Button>
             <Button
               type="submit"
@@ -2446,7 +3332,7 @@ export default function GroupDetailPage() {
               disabled={!guarantorForm.guarantorUserId || !guarantorForm.guaranteedUserId}
             >
               <Shield className="h-4 w-4 mr-1.5" />
-              Assign Guarantor
+              {t('group.btn_assign')}
             </Button>
           </div>
         </form>

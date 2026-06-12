@@ -113,6 +113,8 @@ model User {
   swapRequestsRecv  TurnSwapRequest[] @relation("SwapTarget")
   disputesFiled     Dispute[]         @relation("DisputeFiler")
   disputesAgainst   Dispute[]         @relation("DisputeTarget")
+  mergedSlots       MergedMemberSlot[]
+  adminFeeWaivers   AdminFeeWaiver[]
 
   @@map("users")
 }
@@ -134,29 +136,33 @@ model EqubGroup {
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  createdBy      Admin             @relation(fields: [createdById], references: [id])
-  memberships    GroupMembership[]
-  cycles         Cycle[]
-  rules          GroupRules?
-  guarantors     Guarantor[]
-  penaltyRecords PenaltyRecord[]
-  payoutOrders   PayoutOrder[]
-  swapRequests   TurnSwapRequest[]
-  disputes       Dispute[]
+  createdBy        Admin               @relation(fields: [createdById], references: [id])
+  memberships      GroupMembership[]
+  cycles           Cycle[]
+  rules            GroupRules?
+  guarantors       Guarantor[]
+  penaltyRecords   PenaltyRecord[]
+  payoutOrders     PayoutOrder[]
+  swapRequests     TurnSwapRequest[]
+  disputes         Dispute[]
+  mergedGroups     MergedMemberGroup[]
+  adminFeeWaivers  AdminFeeWaiver[]
 
   @@map("equb_groups")
 }
 
 model GroupMembership {
-  id       String           @id @default(cuid())
-  groupId  String           @map("group_id")
-  userId   String           @map("user_id")
-  status   MembershipStatus @default(ACTIVE)
-  shares   Int              @default(1) // number of lots/shares held by this member
-  joinedAt DateTime         @default(now()) @map("joined_at")
+  id             String           @id @default(cuid())
+  groupId        String           @map("group_id")
+  userId         String           @map("user_id")
+  status         MembershipStatus @default(ACTIVE)
+  shares         Int              @default(1) // number of lots/shares held by this member
+  mergedGroupId  String?          @map("merged_group_id") // if part of a merged member group
+  joinedAt       DateTime         @default(now()) @map("joined_at")
 
-  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group       EqubGroup          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mergedGroup MergedMemberGroup? @relation(fields: [mergedGroupId], references: [id])
 
   @@unique([groupId, userId])
   @@map("group_memberships")
@@ -401,6 +407,81 @@ model Dispute {
   @@map("disputes")
 }
 
+// ─── Merged Member Groups (ድርሻ ማጣመር) ─────────────────────────────
+
+enum MergedGroupStatus {
+  ACTIVE
+  DISSOLVED
+}
+
+model MergedMemberGroup {
+  id          String            @id @default(cuid())
+  groupId     String            @map("group_id")
+  name        String            // Combined name e.g. "ABFR"
+  totalShares Int               @default(1) @map("total_shares") // shares this merged group holds
+  maxMembers  Int               @default(4) @map("max_members") // 2-4
+  status      MergedGroupStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  group       EqubGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slots       MergedMemberSlot[]
+  memberships GroupMembership[]
+
+  @@map("merged_member_groups")
+}
+
+enum MergedSlotStatus {
+  ACTIVE
+  LEFT
+  REMOVED
+}
+
+model MergedMemberSlot {
+  id              String           @id @default(cuid())
+  mergedGroupId   String           @map("merged_group_id")
+  userId          String           @map("user_id")
+  sharePercentage Float            @map("share_percentage") // e.g. 0.25 for 25%
+  status          MergedSlotStatus @default(ACTIVE)
+  joinedAt        DateTime         @default(now()) @map("joined_at")
+  leftAt          DateTime?        @map("left_at")
+
+  mergedGroup MergedMemberGroup @relation(fields: [mergedGroupId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id])
+
+  @@unique([mergedGroupId, userId])
+  @@map("merged_member_slots")
+}
+
+// ─── Admin Fee Waivers ──────────────────────────────────────────────
+
+enum FeeWaiverStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model AdminFeeWaiver {
+  id              String          @id @default(cuid())
+  groupId         String          @map("group_id")
+  userId          String          @map("user_id")
+  reason          String
+  durationCycles  Int             @map("duration_cycles") // how many cycles the waiver lasts
+  cyclesUsed      Int             @default(0) @map("cycles_used") // how many cycles have passed since waiver
+  status          FeeWaiverStatus @default(ACTIVE)
+  missedAfterExpiry Int           @default(0) @map("missed_after_expiry") // escalation counter
+  grantedBy       String          @map("granted_by") // admin id
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id])
+
+  @@index([groupId, userId])
+  @@index([status])
+  @@map("admin_fee_waivers")
+}
+
 // ─── Group Rules ────────────────────────────────────────────────────
 
 enum PenaltyType {
@@ -475,6 +556,13 @@ model GroupRules {
 
   // Dispute & Governance
   disputeResolution     DisputeResolution    @default(ADMIN_DECISION) @map("dispute_resolution")
+
+  // Merged Members Rules
+  allowMergedMembers    Boolean              @default(false) @map("allow_merged_members")
+  maxMergedMembersPerSlot Int                @default(4) @map("max_merged_members_per_slot")
+
+  // Fee Waiver Escalation
+  feeWaiverGracePeriodDays Int              @default(7) @map("fee_waiver_grace_period_days")
 
   // Custom free-form text
   customRules           String?              @map("custom_rules")

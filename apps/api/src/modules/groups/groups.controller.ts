@@ -18,6 +18,9 @@ import { LotteryService } from '../lottery/lottery.service';
 import { PenaltiesService } from './penalties.service';
 import { DisputesService } from './disputes.service';
 import { GuarantorsService } from './guarantors.service';
+import { SharesCalculationService } from './shares-calculation.service';
+import { MergedMembersService } from './merged-members.service';
+import { FeeWaiversService } from './fee-waivers.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
@@ -34,6 +37,9 @@ export class GroupsController {
     private readonly penaltiesService: PenaltiesService,
     private readonly disputesService: DisputesService,
     private readonly guarantorsService: GuarantorsService,
+    private readonly sharesCalculation: SharesCalculationService,
+    private readonly mergedMembersService: MergedMembersService,
+    private readonly feeWaiversService: FeeWaiversService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -186,5 +192,129 @@ export class GroupsController {
   @Delete('guarantors/:guarantorId')
   deleteGuarantor(@Param('guarantorId') guarantorId: string) {
     return this.guarantorsService.deleteGuarantor(guarantorId);
+  }
+
+  // ─── Shares & Dues Calculation ──────────────────────────────────
+
+  @Get(':id/member-dues')
+  getGroupMemberDues(@Param('id') id: string) {
+    return this.sharesCalculation.calculateAllMemberDues(id);
+  }
+
+  @Get(':id/member-dues/:userId')
+  getMemberDue(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.sharesCalculation.calculateMemberDue(id, userId);
+  }
+
+  @Patch(':id/members/:userId/shares')
+  async updateMemberShares(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body('shares') shares: number,
+  ) {
+    return this.prisma.groupMembership.update({
+      where: { groupId_userId: { groupId: id, userId } },
+      data: { shares },
+      include: { user: true },
+    });
+  }
+
+  // ─── Merged Members Endpoints ───────────────────────────────────
+
+  @Get(':id/merged-groups')
+  getMergedGroups(@Param('id') id: string) {
+    return this.mergedMembersService.getMergedGroupsByGroup(id);
+  }
+
+  @Post(':id/merged-groups')
+  createMergedGroup(
+    @Param('id') id: string,
+    @Body() body: { name?: string; userIds: string[]; totalShares?: number },
+  ) {
+    return this.mergedMembersService.createMergedGroup({
+      groupId: id,
+      name: body.name,
+      userIds: body.userIds,
+      totalShares: body.totalShares,
+    });
+  }
+
+  @Get('merged-groups/:mergedGroupId')
+  getMergedGroupDetail(@Param('mergedGroupId') mergedGroupId: string) {
+    return this.mergedMembersService.getMergedGroupDetail(mergedGroupId);
+  }
+
+  @Post('merged-groups/:mergedGroupId/members')
+  addMergedGroupMember(
+    @Param('mergedGroupId') mergedGroupId: string,
+    @Body('userId') userId: string,
+  ) {
+    return this.mergedMembersService.addMemberToMergedGroup(mergedGroupId, userId);
+  }
+
+  @Delete('merged-groups/:mergedGroupId/members/:userId')
+  removeMergedGroupMember(
+    @Param('mergedGroupId') mergedGroupId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.mergedMembersService.removeMemberFromMergedGroup(mergedGroupId, userId, true);
+  }
+
+  @Post('merged-groups/:mergedGroupId/dissolve')
+  dissolveMergedGroup(@Param('mergedGroupId') mergedGroupId: string) {
+    return this.mergedMembersService.dissolveMergedGroup(mergedGroupId);
+  }
+
+  @Patch('merged-groups/:mergedGroupId/percentages')
+  updateMergedGroupPercentages(
+    @Param('mergedGroupId') mergedGroupId: string,
+    @Body('percentages') percentages: Array<{ userId: string; sharePercentage: number }>,
+  ) {
+    return this.mergedMembersService.updateSlotPercentages(mergedGroupId, percentages);
+  }
+
+  @Get('merged-groups/:mergedGroupId/deposit-status')
+  getMergedGroupDepositStatus(@Param('mergedGroupId') mergedGroupId: string) {
+    return this.mergedMembersService.getMergedGroupDepositStatus(mergedGroupId);
+  }
+
+  @Get('merged-groups/:mergedGroupId/deposit-history')
+  getMergedGroupDepositHistory(@Param('mergedGroupId') mergedGroupId: string) {
+    return this.mergedMembersService.getMergedGroupDepositHistory(mergedGroupId);
+  }
+
+  @Post('merged-groups/:mergedGroupId/enforce-compliance')
+  enforceMergedMemberCompliance(@Param('mergedGroupId') mergedGroupId: string) {
+    return this.mergedMembersService.enforceMergedMemberCompliance(mergedGroupId);
+  }
+
+  // ─── Fee Waiver Endpoints ───────────────────────────────────────
+
+  @Get(':id/fee-waivers')
+  getGroupFeeWaivers(@Param('id') id: string) {
+    return this.feeWaiversService.getGroupWaivers(id);
+  }
+
+  @Post(':id/fee-waivers')
+  grantFeeWaiver(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+    @Body() body: { userId: string; reason: string; durationCycles: number },
+  ) {
+    return this.feeWaiversService.grantWaiver({
+      groupId: id,
+      userId: body.userId,
+      reason: body.reason,
+      durationCycles: body.durationCycles,
+      grantedBy: req.user.id,
+    });
+  }
+
+  @Patch('fee-waivers/:waiverId/cancel')
+  cancelFeeWaiver(
+    @Param('waiverId') waiverId: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.feeWaiversService.cancelWaiver(waiverId, req.user.id);
   }
 }

@@ -953,6 +953,205 @@ export const uploadPhoto = async (file: File): Promise<string> => {
   return (response.data as { url: string }).url;
 };
 
+// ─── Member Dues & Shares ─────────────────────────────────────────────────────
+
+export interface MemberDueCalculation {
+  userId: string;
+  userName: string;
+  contributionDue: number;
+  adminFeeDue: number;
+  totalDue: number;
+  shares: number;
+  isMerged: boolean;
+  mergedGroupName?: string;
+}
+
+export const getGroupMemberDues = async (groupId: string): Promise<MemberDueCalculation[]> => {
+  const response = await api.get(`/groups/${groupId}/member-dues`);
+  return response.data as MemberDueCalculation[];
+};
+
+export const getMemberDue = async (groupId: string, userId: string): Promise<MemberDueCalculation> => {
+  const response = await api.get(`/groups/${groupId}/member-dues/${userId}`);
+  return response.data as MemberDueCalculation;
+};
+
+export const updateMemberShares = async (groupId: string, userId: string, shares: number) => {
+  const response = await api.patch(`/groups/${groupId}/members/${userId}/shares`, { shares });
+  return response.data;
+};
+
+// ─── Merged Member Groups (ድርሻ ማጣመር) ────────────────────────────────────────
+
+export interface MergedMemberSlotItem {
+  id: string;
+  userId: string;
+  sharePercentage: number;
+  status: 'ACTIVE' | 'LEFT' | 'REMOVED';
+  joinedAt: string;
+  leftAt?: string;
+  user: { id: string; name: string; phone: string };
+}
+
+export interface MergedGroupItem {
+  id: string;
+  groupId: string;
+  name: string;
+  totalShares: number;
+  maxMembers: number;
+  status: 'ACTIVE' | 'DISSOLVED';
+  createdAt: string;
+  updatedAt: string;
+  slots: MergedMemberSlotItem[];
+}
+
+export const getMergedGroups = async (groupId: string): Promise<MergedGroupItem[]> => {
+  const response = await api.get(`/groups/${groupId}/merged-groups`);
+  return response.data as MergedGroupItem[];
+};
+
+export const createMergedGroup = async (data: {
+  groupId: string;
+  name?: string;
+  userIds: string[];
+  totalShares?: number;
+}): Promise<MergedGroupItem> => {
+  const response = await api.post(`/groups/${data.groupId}/merged-groups`, {
+    name: data.name,
+    userIds: data.userIds,
+    totalShares: data.totalShares,
+  });
+  return response.data as MergedGroupItem;
+};
+
+export const addMergedGroupMember = async (mergedGroupId: string, userId: string): Promise<MergedGroupItem> => {
+  const response = await api.post(`/groups/merged-groups/${mergedGroupId}/members`, { userId });
+  return response.data as MergedGroupItem;
+};
+
+export const removeMergedGroupMember = async (mergedGroupId: string, userId: string): Promise<MergedGroupItem> => {
+  const response = await api.delete(`/groups/merged-groups/${mergedGroupId}/members/${userId}`);
+  return response.data as MergedGroupItem;
+};
+
+export const dissolveMergedGroup = async (mergedGroupId: string): Promise<MergedGroupItem> => {
+  const response = await api.post(`/groups/merged-groups/${mergedGroupId}/dissolve`);
+  return response.data as MergedGroupItem;
+};
+
+export const updateMergedGroupPercentages = async (
+  mergedGroupId: string,
+  percentages: Array<{ userId: string; sharePercentage: number }>,
+): Promise<MergedGroupItem> => {
+  const response = await api.patch(`/groups/merged-groups/${mergedGroupId}/percentages`, { percentages });
+  return response.data as MergedGroupItem;
+};
+
+// ─── Merged Group Deposit Tracking ────────────────────────────────────────────
+
+export interface MergedMemberDepositStatusItem {
+  userId: string;
+  userName: string;
+  expectedContribution: number;
+  expectedAdminFee: number;
+  expectedTotal: number;
+  paidAmount: number;
+  status: 'PAID' | 'PARTIAL' | 'UNPAID' | 'LATE';
+}
+
+export interface ComplianceResult {
+  penaltiesCreated: Array<{ userId: string; userName: string; amount: number }>;
+  alreadyCompliant: string[];
+}
+
+export const getMergedGroupDepositStatus = async (mergedGroupId: string): Promise<MergedMemberDepositStatusItem[]> => {
+  const response = await api.get(`/groups/merged-groups/${mergedGroupId}/deposit-status`);
+  return response.data as MergedMemberDepositStatusItem[];
+};
+
+export const enforceMergedMemberCompliance = async (mergedGroupId: string): Promise<ComplianceResult> => {
+  const response = await api.post(`/groups/merged-groups/${mergedGroupId}/enforce-compliance`);
+  return response.data as ComplianceResult;
+};
+
+// ─── Merged Group Deposit History ─────────────────────────────────────────────
+
+export interface MemberCycleDepositItem {
+  userId: string;
+  userName: string;
+  expectedContribution: number;
+  expectedAdminFee: number;
+  expectedTotal: number;
+  paidAmount: number;
+  status: 'PAID' | 'PARTIAL' | 'UNPAID' | 'LATE';
+}
+
+export interface CycleDepositRecordItem {
+  cycleId: string;
+  cycleNumber: number;
+  startDate: string;
+  endDate: string;
+  cycleStatus: string;
+  members: MemberCycleDepositItem[];
+  totalExpected: number;
+  totalPaid: number;
+}
+
+export interface MergedGroupDepositHistoryItem {
+  mergedGroupId: string;
+  mergedGroupName: string;
+  groupName: string;
+  currency: string;
+  totalShares: number;
+  cycles: CycleDepositRecordItem[];
+}
+
+export const getMergedGroupDepositHistory = async (mergedGroupId: string): Promise<MergedGroupDepositHistoryItem> => {
+  const response = await api.get(`/groups/merged-groups/${mergedGroupId}/deposit-history`);
+  return response.data as MergedGroupDepositHistoryItem;
+};
+
+// ─── Admin Fee Waivers ────────────────────────────────────────────────────────
+
+export interface FeeWaiverItem {
+  id: string;
+  groupId: string;
+  userId: string;
+  reason: string;
+  durationCycles: number;
+  cyclesUsed: number;
+  status: 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  missedAfterExpiry: number;
+  grantedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: { id: string; name: string; phone: string };
+}
+
+export const getGroupFeeWaivers = async (groupId: string): Promise<FeeWaiverItem[]> => {
+  const response = await api.get(`/groups/${groupId}/fee-waivers`);
+  return response.data as FeeWaiverItem[];
+};
+
+export const grantFeeWaiver = async (data: {
+  groupId: string;
+  userId: string;
+  reason: string;
+  durationCycles: number;
+}): Promise<FeeWaiverItem> => {
+  const response = await api.post(`/groups/${data.groupId}/fee-waivers`, {
+    userId: data.userId,
+    reason: data.reason,
+    durationCycles: data.durationCycles,
+  });
+  return response.data as FeeWaiverItem;
+};
+
+export const cancelFeeWaiver = async (waiverId: string): Promise<FeeWaiverItem> => {
+  const response = await api.patch(`/groups/fee-waivers/${waiverId}/cancel`);
+  return response.data as FeeWaiverItem;
+};
+
 // ─── Guarantors (Wase / ዋስ) ──────────────────────────────────────────────────
 
 export interface GuarantorItem {
