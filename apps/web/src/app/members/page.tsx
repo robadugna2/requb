@@ -535,7 +535,7 @@ export default function MembersPage() {
                         ETB {selectedGroup.contributionAmount.toLocaleString()} / full share
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 mb-2">
                       {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
                         <button
                           key={preset}
@@ -551,6 +551,19 @@ export default function MembersPage() {
                         </button>
                       ))}
                     </div>
+                    <input
+                      type="number"
+                      value={assignShares || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setAssignShares(isNaN(val) ? 0.25 : Math.max(0.25, Math.min(10, val)));
+                      }}
+                      className="input-field"
+                      min={0.25}
+                      max={10}
+                      step={0.01}
+                      placeholder="Custom shares count (0.25 - 10)"
+                    />
                     <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5">
                       <span>{t('members.expected_contribution')}:</span>
                       <span className="font-bold">

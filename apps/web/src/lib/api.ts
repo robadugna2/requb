@@ -691,10 +691,6 @@ export const addMemberToGroup = async (groupId: string, userId: string, shares?:
   return response.data;
 };
 
-export const updateMemberShares = async (groupId: string, userId: string, shares: number) => {
-  const response = await api.patch(`/groups/${groupId}/members/${userId}/shares`, { shares });
-  return response.data;
-};
 
 export const removeMemberFromGroup = async (groupId: string, userId: string) => {
   const response = await api.delete(`/groups/${groupId}/members/${userId}`);

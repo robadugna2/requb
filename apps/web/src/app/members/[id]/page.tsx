@@ -867,7 +867,7 @@ export default function MemberDetailPage() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {t('members.label_shares')}
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
               {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
                 <button
                   key={preset}
@@ -883,6 +883,19 @@ export default function MemberDetailPage() {
                 </button>
               ))}
             </div>
+            <input
+              type="number"
+              value={shareValue || ''}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setShareValue(isNaN(val) ? 0.25 : Math.max(0.25, Math.min(10, val)));
+              }}
+              className="input-field"
+              min={0.25}
+              max={10}
+              step={0.01}
+              placeholder="Custom shares count (0.25 - 10)"
+            />
           </div>
 
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">

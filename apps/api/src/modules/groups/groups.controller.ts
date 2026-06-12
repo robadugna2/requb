@@ -10,6 +10,7 @@ import {
   UseGuards,
   Request,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GroupsService } from './groups.service';
@@ -216,6 +217,9 @@ export class GroupsController {
     @Param('userId') userId: string,
     @Body('shares') shares: number,
   ) {
+    if (shares < 0.25 || shares > 10) {
+      throw new BadRequestException('Shares must be between 0.25 and 10');
+    }
     return this.prisma.groupMembership.update({
       where: { groupId_userId: { groupId: id, userId } },
       data: { shares },

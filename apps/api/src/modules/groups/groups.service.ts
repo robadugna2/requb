@@ -113,6 +113,11 @@ export class GroupsService {
   }
 
   async addMember(groupId: string, userId: string, shares: number = 1) {
+    // Validate shares range
+    if (shares < 0.25 || shares > 10) {
+      throw new BadRequestException('Shares must be between 0.25 and 10');
+    }
+
     const group = await this.findOne(groupId);
 
     // Enforce group rules on member addition
