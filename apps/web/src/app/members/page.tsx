@@ -7,8 +7,8 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
-import { getMembers, createMember } from '@/lib/api';
-import type { MemberListItem } from '@/lib/api';
+import { getMembers, createMember, getGroups, addMemberToGroup } from '@/lib/api';
+import type { MemberListItem, GroupListItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
 const EMPLOYMENT_TYPES = [
@@ -34,9 +34,12 @@ export default function MembersPage() {
   const { t } = useLanguage();
   const router = useRouter();
   const [members, setMembers] = useState<MemberListItem[]>([]);
+  const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [assignGroupId, setAssignGroupId] = useState<string>('');
+  const [assignShares, setAssignShares] = useState<number>(1);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -56,14 +59,18 @@ export default function MembersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const fetchMembers = async () => {
+  const fetchMembersAndGroups = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getMembers();
-      setMembers(data);
+      const [membersData, groupsData] = await Promise.all([
+        getMembers(),
+        getGroups()
+      ]);
+      setMembers(membersData);
+      setGroups(groupsData);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load members. Please try again.';
+      const message = err instanceof Error ? err.message : 'Failed to load data. Please try again.';
       setError(message);
     } finally {
       setLoading(false);
@@ -71,7 +78,7 @@ export default function MembersPage() {
   };
 
   useEffect(() => {
-    fetchMembers();
+    fetchMembersAndGroups();
   }, []);
 
   const openCreateModal = () => {
@@ -91,6 +98,8 @@ export default function MembersPage() {
       woreda: '',
       houseNumber: '',
     });
+    setAssignGroupId('');
+    setAssignShares(1);
     setShowCreateModal(true);
   };
 
@@ -99,7 +108,7 @@ export default function MembersPage() {
     setCreating(true);
     setError(null);
     try {
-      await createMember({
+      const newMember = await createMember({
         name: formData.name,
         phone: formData.phone,
         telegramId: formData.telegramId || undefined,
@@ -114,10 +123,15 @@ export default function MembersPage() {
         woreda: formData.woreda || undefined,
         houseNumber: formData.houseNumber || undefined,
       });
+      
+      if (assignGroupId) {
+        await addMemberToGroup(assignGroupId, newMember.id, assignShares);
+      }
+      
       setShowCreateModal(false);
       setSuccess(t('members.success_create'));
       setTimeout(() => setSuccess(null), 4000);
-      await fetchMembers();
+      await fetchMembersAndGroups();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(
@@ -485,6 +499,67 @@ export default function MembersPage() {
                   placeholder="House number"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Group Assignment */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2">{t('members.group_assignment')}</h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t('members.label_select_group')}
+                </label>
+                <select
+                  value={assignGroupId}
+                  onChange={(e) => setAssignGroupId(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">None</option>
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} (ETB {g.contributionAmount.toLocaleString()} / full share)</option>
+                  ))}
+                </select>
+              </div>
+
+              {assignGroupId && (() => {
+                const selectedGroup = groups.find(g => g.id === assignGroupId);
+                if (!selectedGroup) return null;
+                return (
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">
+                        {t('members.label_shares')}
+                      </p>
+                      <span className="text-sm font-bold text-indigo-900">
+                        ETB {selectedGroup.contributionAmount.toLocaleString()} / full share
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setAssignShares(preset)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            assignShares === preset
+                              ? 'bg-primary-600 text-white shadow-sm'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          {preset === 0.25 ? t('members.share_quarter') : preset === 0.5 ? t('members.share_half') : preset === 0.75 ? t('members.share_three_quarter') : preset === 1 ? t('members.share_full') : preset}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5">
+                      <span>{t('members.expected_contribution')}:</span>
+                      <span className="font-bold">
+                        {t('members.share_preview').replace('{amount}', (selectedGroup.contributionAmount * assignShares).toLocaleString())}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

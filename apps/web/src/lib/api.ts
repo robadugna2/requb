@@ -125,6 +125,8 @@ export interface UserGroupMembership {
   groupName: string;
   status: string;
   joinedAt: string;
+  shares: number;
+  contributionAmount: number;
 }
 
 export interface UserDetail {
@@ -451,6 +453,8 @@ function mapUserDetail(raw: Record<string, unknown>): UserDetail {
       groupName: (group?.name as string) || 'Unknown',
       status: (m.status as string) || 'ACTIVE',
       joinedAt: m.joinedAt ? new Date(m.joinedAt as string).toLocaleDateString() : 'N/A',
+      shares: (m.shares as number) || 1,
+      contributionAmount: (group?.contributionAmount as number) || 0,
     };
   });
 
@@ -682,8 +686,13 @@ export const updateGroup = async (id: string, data: Record<string, unknown>) => 
   return response.data;
 };
 
-export const addMemberToGroup = async (groupId: string, userId: string) => {
-  const response = await api.post(`/groups/${groupId}/members`, { userId });
+export const addMemberToGroup = async (groupId: string, userId: string, shares?: number) => {
+  const response = await api.post(`/groups/${groupId}/members`, { userId, shares });
+  return response.data;
+};
+
+export const updateMemberShares = async (groupId: string, userId: string, shares: number) => {
+  const response = await api.patch(`/groups/${groupId}/members/${userId}/shares`, { shares });
   return response.data;
 };
 

@@ -276,7 +276,7 @@ export default function GroupsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                {t('groups.label_amount')}
+                {t('groups.label_amount_per_share')}
               </label>
               <input
                 type="number"
@@ -291,6 +291,9 @@ export default function GroupsPage() {
                 placeholder="5000"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {t('groups.amount_per_share_hint')}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">

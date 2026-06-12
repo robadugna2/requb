@@ -74,8 +74,12 @@ export class GroupsController {
   }
 
   @Post(':id/members')
-  addMember(@Param('id') id: string, @Body('userId') userId: string) {
-    return this.groupsService.addMember(id, userId);
+  addMember(
+    @Param('id') id: string,
+    @Body('userId') userId: string,
+    @Body('shares') shares?: number,
+  ) {
+    return this.groupsService.addMember(id, userId, shares ?? 1);
   }
 
   @Delete(':id/members/:userId')

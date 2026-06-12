@@ -112,7 +112,7 @@ export class GroupsService {
     });
   }
 
-  async addMember(groupId: string, userId: string) {
+  async addMember(groupId: string, userId: string, shares: number = 1) {
     const group = await this.findOne(groupId);
 
     // Enforce group rules on member addition
@@ -145,7 +145,7 @@ export class GroupsService {
       // Reactivate membership
       return this.prisma.groupMembership.update({
         where: { id: existingMembership.id },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', shares },
         include: { user: true, group: true },
       });
     }
@@ -154,6 +154,7 @@ export class GroupsService {
       data: {
         groupId,
         userId,
+        shares,
       },
       include: { user: true, group: true },
     });

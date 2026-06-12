@@ -156,7 +156,7 @@ model GroupMembership {
   groupId        String           @map("group_id")
   userId         String           @map("user_id")
   status         MembershipStatus @default(ACTIVE)
-  shares         Int              @default(1) // number of lots/shares held by this member
+  shares         Float            @default(1) // number of lots/shares held by this member (0.25 = quarter, 0.5 = half, 1 = full)
   mergedGroupId  String?          @map("merged_group_id") // if part of a merged member group
   joinedAt       DateTime         @default(now()) @map("joined_at")
 

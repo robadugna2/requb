@@ -158,6 +158,7 @@ export default function GroupDetailPage() {
   const [memberSearch, setMemberSearch] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
   const [addingMemberId, setAddingMemberId] = useState<string | null>(null);
+  const [addMemberShares, setAddMemberShares] = useState<number>(1);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creatingMember, setCreatingMember] = useState(false);
@@ -267,8 +268,9 @@ export default function GroupDetailPage() {
     setAddingMemberId(userId);
     setError(null);
     try {
-      await addMemberToGroup(groupId, userId);
+      await addMemberToGroup(groupId, userId, addMemberShares);
       setShowAddMemberModal(false);
+      setAddMemberShares(1);
       setSuccess('Member added to group successfully!');
       setTimeout(() => setSuccess(null), 4000);
       await fetchData();
@@ -349,10 +351,11 @@ export default function GroupDetailPage() {
         woreda: newMemberForm.woreda || undefined,
         houseNumber: newMemberForm.houseNumber || undefined,
       });
-      await addMemberToGroup(groupId, result.id);
+      await addMemberToGroup(groupId, result.id, addMemberShares);
       setShowAddMemberModal(false);
       setShowCreateForm(false);
       resetNewMemberForm();
+      setAddMemberShares(1);
       setSuccess('New member created and added to group!');
       setTimeout(() => setSuccess(null), 4000);
       await fetchData();
@@ -2401,13 +2404,30 @@ export default function GroupDetailPage() {
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_shares_count')}</label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {[0.25, 0.5, 0.75, 1, 1.5, 2, 3].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setEditingShares(preset)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    editingShares === preset
+                      ? 'bg-primary-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {preset === 0.25 ? '¼' : preset === 0.5 ? '½' : preset === 0.75 ? '¾' : preset === 1.5 ? '1½' : preset}
+                </button>
+              ))}
+            </div>
             <input
               type="number"
               value={editingShares}
-              onChange={(e) => setEditingShares(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => setEditingShares(Math.max(0.25, Number(e.target.value)))}
               className="input-field"
-              min={1}
+              min={0.25}
               max={10}
+              step={0.25}
             />
             {group && (
               <p className="text-xs text-gray-400 mt-1.5">
@@ -2727,6 +2747,7 @@ export default function GroupDetailPage() {
           setShowAddMemberModal(false);
           setShowCreateForm(false);
           resetNewMemberForm();
+          setAddMemberShares(1);
         }}
         title="{t('group.add_member')} to Group"
         size="lg"
@@ -2743,6 +2764,42 @@ export default function GroupDetailPage() {
               className="input-field pl-10"
             />
           </div>
+
+          {/* Shares Selector */}
+          {group && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">
+                  Contribution per full share
+                </p>
+                <span className="text-sm font-bold text-indigo-900">
+                  ETB {group.contributionAmount.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAddMemberShares(preset)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      addMemberShares === preset
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    {preset === 0.25 ? '¼' : preset === 0.5 ? '½' : preset === 0.75 ? '¾' : preset === 1.5 ? '1½' : preset}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5">
+                <span>Expected per cycle:</span>
+                <span className="font-bold">
+                  ETB {(group.contributionAmount * addMemberShares).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Members List */}
           <div className="max-h-[400px] overflow-y-auto border border-gray-100 rounded-lg">
@@ -3049,6 +3106,42 @@ export default function GroupDetailPage() {
                     />
                   </div>
                 </div>
+
+                {/* Shares Selector for New Member */}
+                {group && (
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">
+                        Member Shares
+                      </p>
+                      <span className="text-sm font-bold text-indigo-900">
+                        ETB {group.contributionAmount.toLocaleString()} / full share
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setAddMemberShares(preset)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            addMemberShares === preset
+                              ? 'bg-primary-600 text-white shadow-sm'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          {preset === 0.25 ? '¼' : preset === 0.5 ? '½' : preset === 0.75 ? '¾' : preset === 1.5 ? '1½' : preset}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5">
+                      <span>Expected per cycle:</span>
+                      <span className="font-bold">
+                        ETB {(group.contributionAmount * addMemberShares).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-2">
                   <Button

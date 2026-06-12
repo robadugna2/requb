@@ -22,7 +22,7 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getMember, deleteUserWithPassword, updateMember, getMediaUrl } from '@/lib/api';
+import { getMember, deleteUserWithPassword, updateMember, getMediaUrl, updateMemberShares } from '@/lib/api';
 import type { UserDetail } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
@@ -58,6 +58,10 @@ export default function MemberDetailPage() {
   });
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showEditSharesModal, setShowEditSharesModal] = useState(false);
+  const [editingShareGroup, setEditingShareGroup] = useState<{groupId: string, groupName: string, shares: number} | null>(null);
+  const [shareValue, setShareValue] = useState<number>(1);
+  const [savingShares, setSavingShares] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -157,6 +161,26 @@ export default function MemberDetailPage() {
       );
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleEditShares = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShareGroup) return;
+    setSavingShares(true);
+    setError(null);
+    try {
+      await updateMemberShares(editingShareGroup.groupId, memberId, shareValue);
+      setShowEditSharesModal(false);
+      setSuccess(t('member.shares_updated'));
+      setTimeout(() => setSuccess(null), 4000);
+      const data = await getMember(memberId);
+      setUser(data);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to update shares.');
+    } finally {
+      setSavingShares(false);
     }
   };
 
@@ -502,6 +526,8 @@ export default function MemberDetailPage() {
                     <th className="table-header">{t('member.col_group_name')}</th>
                     <th className="table-header">{t('group.col_status')}</th>
                     <th className="table-header">Joined</th>
+                    <th className="table-header">{t('member.col_shares')}</th>
+                    <th className="table-header">{t('member.col_expected')}</th>
                     <th className="table-header text-right">Actions</th>
                   </tr>
                 </thead>
@@ -515,14 +541,35 @@ export default function MemberDetailPage() {
                         <Badge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
                       </td>
                       <td className="table-cell text-gray-500">{group.joinedAt}</td>
+                      <td className="table-cell">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                          {group.shares} {t('member.col_shares')}
+                        </span>
+                      </td>
+                      <td className="table-cell font-semibold text-gray-900">
+                        ETB {(group.contributionAmount * group.shares).toLocaleString()}
+                      </td>
                       <td className="table-cell text-right">
-                        <button
-                          onClick={() => router.push(`/groups/${group.groupId}`)}
-                          className="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="View group"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares });
+                              setShareValue(group.shares);
+                              setShowEditSharesModal(true);
+                            }}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title={t('member.edit_shares')}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => router.push(`/groups/${group.groupId}`)}
+                            className="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            title="View group"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -799,6 +846,55 @@ export default function MemberDetailPage() {
             </Button>
             <Button type="submit" loading={saving}>
               {t('member.save_changes')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Shares Modal */}
+      <Modal
+        isOpen={showEditSharesModal}
+        onClose={() => setShowEditSharesModal(false)}
+        title={t('member.edit_shares')}
+      >
+        <form onSubmit={handleEditShares} className="space-y-4">
+          <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-indigo-900 mb-1">{editingShareGroup?.groupName}</h4>
+            <p className="text-xs text-indigo-700">{t('groups.amount_per_share_hint')}</p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {t('members.label_shares')}
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setShareValue(preset)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    shareValue === preset
+                      ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-600 ring-offset-1'
+                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                  }`}
+                >
+                  {preset === 0.25 ? t('members.share_quarter') : preset === 0.5 ? t('members.share_half') : preset === 0.75 ? t('members.share_three_quarter') : preset === 1 ? t('members.share_full') : preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowEditSharesModal(false)}
+            >
+              {t('members.btn_cancel')}
+            </Button>
+            <Button type="submit" loading={savingShares}>
+              {t('member.btn_save')}
             </Button>
           </div>
         </form>
