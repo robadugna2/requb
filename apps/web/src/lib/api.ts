@@ -622,13 +622,56 @@ export const login = async (email: string, password: string) => {
   return response.data;
 };
 
-export const register = async (email: string, password: string, name: string) => {
-  const response = await api.post('/auth/register', { email, password, name });
-  return response.data;
-};
+
 
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   const response = await api.post('/auth/change-password', { currentPassword, newPassword });
+  return response.data;
+};
+
+// Admins
+export const getAdmins = async () => {
+  const response = await api.get('/admins');
+  return response.data;
+};
+
+export const getAdminById = async (id: string) => {
+  const response = await api.get(`/admins/${id}`);
+  return response.data;
+};
+
+export const createAdmin = async (data: any) => {
+  const response = await api.post('/admins', data);
+  return response.data;
+};
+
+export const updateAdmin = async (id: string, data: any) => {
+  const response = await api.patch(`/admins/${id}`, data);
+  return response.data;
+};
+
+export const suspendAdmin = async (id: string) => {
+  const response = await api.post(`/admins/${id}/suspend`);
+  return response.data;
+};
+
+export const reactivateAdmin = async (id: string) => {
+  const response = await api.post(`/admins/${id}/reactivate`);
+  return response.data;
+};
+
+export const deleteAdmin = async (id: string) => {
+  const response = await api.delete(`/admins/${id}`);
+  return response.data;
+};
+
+export const assignAdminToGroup = async (id: string, data: any) => {
+  const response = await api.post(`/admins/${id}/groups`, data);
+  return response.data;
+};
+
+export const removeAdminFromGroup = async (id: string, groupId: string) => {
+  const response = await api.delete(`/admins/${id}/groups/${groupId}`);
   return response.data;
 };
 

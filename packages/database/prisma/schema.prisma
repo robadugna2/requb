@@ -8,9 +8,15 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   SUB_ADMIN
   MEMBER
+}
+
+enum AdminStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum GroupStatus {
@@ -51,16 +57,21 @@ enum PayoutStatus {
 }
 
 model Admin {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String      @map("password_hash")
   name         String
-  role         Role     @default(ADMIN)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  phone        String?
+  role         Role        @default(ADMIN)
+  status       AdminStatus @default(ACTIVE)
+  createdById  String?     @map("created_by_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
 
-  groups         EqubGroup[]
-  ruleTemplates  RuleTemplate[]
+  createdBy       Admin?        @relation("AdminHierarchy", fields: [createdById], references: [id])
+  createdAdmins   Admin[]       @relation("AdminHierarchy")
+  groups          EqubGroup[]
+  ruleTemplates   RuleTemplate[]
   groupLeadership GroupLeader[]
 
   @@map("admins")

@@ -14,7 +14,16 @@ async function main() {
   });
 
   if (existingAdmin) {
-    console.log(`Admin with email ${email} already exists.`);
+    console.log(`Admin with email ${email} already exists. Checking role...`);
+    if (existingAdmin.role !== 'SUPER_ADMIN') {
+        await prisma.admin.update({
+            where: { email },
+            data: { role: 'SUPER_ADMIN' }
+        });
+        console.log(`Upgraded admin ${email} to SUPER_ADMIN.`);
+    } else {
+        console.log(`Admin ${email} is already SUPER_ADMIN.`);
+    }
     return;
   }
 
@@ -26,7 +35,7 @@ async function main() {
       email,
       name,
       passwordHash,
-      role: 'ADMIN',
+      role: 'SUPER_ADMIN',
     },
   });
 

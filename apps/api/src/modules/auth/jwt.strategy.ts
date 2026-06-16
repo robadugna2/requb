@@ -32,11 +32,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid token');
     }
 
+    if (admin.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is suspended');
+    }
+
     return {
       id: admin.id,
       email: admin.email,
       name: admin.name,
       role: admin.role,
+      status: admin.status,
+      createdById: admin.createdById,
     };
   }
 }

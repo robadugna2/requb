@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { AdminsModule } from './modules/admins/admins.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { DepositsModule } from './modules/deposits/deposits.module';
 import { LotteryModule } from './modules/lottery/lottery.module';
@@ -20,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
       envFilePath: '.env',
     }),
     PrismaModule,
+    AdminsModule,
     AuthModule,
     UsersModule,
     GroupsModule,

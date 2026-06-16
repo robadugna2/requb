@@ -101,6 +101,8 @@ export class GroupsService {
           adminId,
         },
       };
+    } else if (role === 'ADMIN' && adminId) {
+      whereClause.createdById = adminId;
     }
 
     return this.prisma.equbGroup.findMany({
@@ -168,6 +170,10 @@ export class GroupsService {
         },
       });
       if (!isLeader) {
+        throw new ForbiddenException('You do not have access to this group');
+      }
+    } else if (role === 'ADMIN' && adminId) {
+      if (group.createdById !== adminId) {
         throw new ForbiddenException('You do not have access to this group');
       }
     }
@@ -410,6 +416,8 @@ export class GroupsService {
           adminId,
         },
       };
+    } else if (role === 'ADMIN' && adminId) {
+      whereClause.createdById = adminId;
     }
 
     return this.prisma.equbGroup.findMany({

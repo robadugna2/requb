@@ -24,8 +24,8 @@ export class GroupPermissionsGuard implements CanActivate {
       return false;
     }
 
-    // Main Admins (Role = ADMIN) bypass checks
-    if (user.role === 'ADMIN') {
+    // Super Admins bypass checks
+    if (user.role === 'SUPER_ADMIN') {
       return true;
     }
 

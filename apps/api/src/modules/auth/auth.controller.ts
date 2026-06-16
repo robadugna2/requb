@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
@@ -24,10 +23,6 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
-  }
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
@@ -39,9 +34,5 @@ export class AuthController {
     return this.authService.changePassword(req.user.id, dto);
   }
 
-  @Get('admins')
-  @UseGuards(JwtAuthGuard)
-  async getAdmins() {
-    return this.authService.getAdmins();
-  }
+
 }

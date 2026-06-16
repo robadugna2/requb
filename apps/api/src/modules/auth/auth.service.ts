@@ -7,7 +7,6 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
@@ -26,6 +25,10 @@ export class AuthService {
 
     if (!admin) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (admin.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Account is suspended');
     }
 
     const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
@@ -51,44 +54,6 @@ export class AuthService {
     };
   }
 
-  async register(registerDto: RegisterDto) {
-    const { email, password, name } = registerDto;
-
-    const existingAdmin = await this.prisma.admin.findUnique({
-      where: { email },
-    });
-
-    if (existingAdmin) {
-      throw new ConflictException('Email already registered');
-    }
-
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
-
-    const admin = await this.prisma.admin.create({
-      data: {
-        email,
-        passwordHash,
-        name,
-      },
-    });
-
-    const payload = {
-      sub: admin.id,
-      email: admin.email,
-      role: admin.role,
-    };
-
-    return {
-      accessToken: this.jwtService.sign(payload),
-      admin: {
-        id: admin.id,
-        email: admin.email,
-        name: admin.name,
-        role: admin.role,
-      },
-    };
-  }
 
   async changePassword(adminId: string, dto: ChangePasswordDto) {
     const admin = await this.prisma.admin.findUnique({
@@ -119,15 +84,5 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
-  async getAdmins() {
-    return this.prisma.admin.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
-      orderBy: { name: 'asc' },
-    });
-  }
+
 }

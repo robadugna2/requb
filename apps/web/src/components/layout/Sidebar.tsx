@@ -15,18 +15,20 @@ import {
   CircleDollarSign,
   Settings,
   Globe,
+  Shield,
 } from 'lucide-react';
 import { getUnreadNotificationCount } from '@/lib/api';
 import { useLanguage, Language } from './LanguageContext';
 
 const navigation = [
-  { name: 'Dashboard', key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Groups', key: 'nav.groups', href: '/groups', icon: Users },
-  { name: 'Members', key: 'nav.members', href: '/members', icon: Users },
-  { name: 'Receipts', key: 'nav.receipts', href: '/receipts', icon: Receipt },
-  { name: 'Lottery', key: 'nav.lottery', href: '/lottery', icon: Ticket },
-  { name: 'Rule Templates', key: 'nav.rules', href: '/rule-templates', icon: BookTemplate },
-  { name: 'Notifications', key: 'nav.notifications', href: '/notifications', icon: Bell },
+  { name: 'Dashboard', key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
+  { name: 'Groups', key: 'nav.groups', href: '/groups', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
+  { name: 'Members', key: 'nav.members', href: '/members', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { name: 'Receipts', key: 'nav.receipts', href: '/receipts', icon: Receipt, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
+  { name: 'Lottery', key: 'nav.lottery', href: '/lottery', icon: Ticket, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
+  { name: 'Rule Templates', key: 'nav.rules', href: '/rule-templates', icon: BookTemplate, roles: ['SUPER_ADMIN', 'ADMIN'] },
+  { name: 'Notifications', key: 'nav.notifications', href: '/notifications', icon: Bell, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
+  { name: 'Admins', key: 'nav.admins', href: '/admins', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'] },
 ];
 
 export default function Sidebar() {
@@ -34,6 +36,28 @@ export default function Sidebar() {
   const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
   const { language, setLanguage, t } = useLanguage();
+  const [userContext, setUserContext] = useState<{name: string, email: string, role: string} | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('equb_token');
+    if (token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const payload = JSON.parse(jsonPayload);
+        setUserContext({
+           name: payload.name || 'Admin',
+           email: payload.email || '',
+           role: payload.role || 'ADMIN'
+        });
+      } catch (e) {
+        console.error("Failed to parse JWT");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const fetchCount = () => {
@@ -66,7 +90,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navigation.map((item) => {
+        {navigation.filter(item => !userContext || item.roles.includes(userContext.role)).map((item) => {
           const isActive =
             pathname === item.href || pathname?.startsWith(item.href + '/');
           const displayName = t(item.key);
@@ -97,11 +121,13 @@ export default function Sidebar() {
       <div className="px-3 py-4 border-t border-gray-800">
         <div className="flex items-center gap-3 px-3 py-2 mb-2">
           <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
-            <span className="text-xs font-bold text-white">AD</span>
+            <span className="text-xs font-bold text-white">
+              {userContext?.name ? userContext.name.substring(0, 2).toUpperCase() : 'AD'}
+            </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Admin</p>
-            <p className="text-xs text-gray-400 truncate">admin@equb.et</p>
+            <p className="text-sm font-medium text-white truncate">{userContext?.name || 'Admin'}</p>
+            <p className="text-xs text-gray-400 truncate">{userContext?.email || 'admin@equb.et'}</p>
           </div>
         </div>
         
