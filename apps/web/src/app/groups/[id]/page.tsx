@@ -827,12 +827,23 @@ export default function GroupDetailPage() {
     setUpdatingGroup(true);
     setError(null);
     try {
+      let cycleType: string | undefined;
+      if (editGroupForm.cycleDuration) {
+        switch (editGroupForm.cycleDuration.toLowerCase()) {
+          case 'weekly': cycleType = 'weekly'; break;
+          case 'bi-weekly':
+          case 'biweekly': cycleType = 'biweekly'; break;
+          case 'monthly': cycleType = 'monthly'; break;
+          default: cycleType = 'monthly';
+        }
+      }
+
       await updateGroup(groupId, {
         name: editGroupForm.name,
         description: editGroupForm.description || undefined,
         contributionAmount: Number(editGroupForm.contributionAmount),
         maxMembers: Number(editGroupForm.maxMembers),
-        cycleDuration: editGroupForm.cycleDuration,
+        cycleType,
         photoUrl: editGroupForm.photoUrl || undefined,
         endDate: editGroupForm.endDate || undefined,
         physicalAddress: editGroupForm.physicalAddress || undefined,
