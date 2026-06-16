@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Users, Calendar, CircleDollarSign, Search, AlertCircle } from 'lucide-react';
+import { Plus, Users, Calendar, CircleDollarSign, Search, AlertCircle, MapPin } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
+import PhotoUpload from '@/components/ui/PhotoUpload';
+import LocationPicker from '@/components/ui/LocationPicker';
 import { getGroups, createGroup, getRuleTemplates, getTrashGroups, restoreGroup, softDeleteGroup, permanentDeleteGroup } from '@/lib/api';
 import type { GroupListItem, RuleTemplate } from '@/lib/api';
 
@@ -19,6 +21,7 @@ export default function GroupsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTrashModal, setShowTrashModal] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     name: '',
@@ -400,17 +403,14 @@ export default function GroupsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Photo URL
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Group Profile Image
             </label>
-            <input
-              type="text"
+            <PhotoUpload
               value={formData.photoUrl}
-              onChange={(e) =>
-                setFormData({ ...formData, photoUrl: e.target.value })
-              }
-              className="input-field"
-              placeholder="https://example.com/image.jpg"
+              onChange={(url) => setFormData({ ...formData, photoUrl: url })}
+              name={formData.name || 'New Group'}
+              size="md"
             />
           </div>
 
@@ -449,49 +449,32 @@ export default function GroupsPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Physical Address
+              Physical Location
             </label>
-            <input
-              type="text"
-              value={formData.physicalAddress}
-              onChange={(e) =>
-                setFormData({ ...formData, physicalAddress: e.target.value })
-              }
-              className="input-field"
-              placeholder="Bole, Addis Ababa"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Latitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={formData.latitude}
-                onChange={(e) =>
-                  setFormData({ ...formData, latitude: e.target.value })
-                }
-                className="input-field"
-                placeholder="8.9806"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Longitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={formData.longitude}
-                onChange={(e) =>
-                  setFormData({ ...formData, longitude: e.target.value })
-                }
-                className="input-field"
-                placeholder="38.7578"
-              />
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between">
+              <div className="flex-1 min-w-0 pr-4">
+                {formData.physicalAddress ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {formData.physicalAddress}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      GPS: {Number(formData.latitude).toFixed(6)}, {Number(formData.longitude).toFixed(6)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No physical location assigned</p>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowLocationPicker(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs py-1.5 px-3"
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Select on Map
+              </Button>
             </div>
           </div>
 
@@ -524,6 +507,22 @@ export default function GroupsPage() {
           </div>
         </form>
       </Modal>
+
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        initialLatitude={formData.latitude ? Number(formData.latitude) : undefined}
+        initialLongitude={formData.longitude ? Number(formData.longitude) : undefined}
+        initialAddress={formData.physicalAddress}
+        onConfirm={(loc) => {
+          setFormData({
+            ...formData,
+            physicalAddress: loc.address,
+            latitude: String(loc.latitude),
+            longitude: String(loc.longitude),
+          });
+        }}
+      />
       {/* Trash Modal */}
       <Modal
         isOpen={showTrashModal}

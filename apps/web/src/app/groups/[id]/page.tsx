@@ -36,9 +36,10 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers, updateGroup } from '@/lib/api';
 import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem, GroupLeaderItem, AdminUserItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
+import LocationPicker from '@/components/ui/LocationPicker';
 
 const PENALTY_TYPES = [
   { value: 'NONE', label: 'No Penalty' },
@@ -166,6 +167,21 @@ export default function GroupDetailPage() {
   const [showRequestSwapModal, setShowRequestSwapModal] = useState(false);
   const [swapForm, setSwapForm] = useState({ targetId: '', reason: '' });
   const [requestingSwap, setRequestingSwap] = useState(false);
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [editGroupForm, setEditGroupForm] = useState({
+    name: '',
+    description: '',
+    contributionAmount: '',
+    maxMembers: '',
+    cycleDuration: 'Weekly',
+    photoUrl: '',
+    endDate: '',
+    physicalAddress: '',
+    latitude: '',
+    longitude: '',
+  });
+  const [updatingGroup, setUpdatingGroup] = useState(false);
+  const [showEditLocationPicker, setShowEditLocationPicker] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -806,6 +822,35 @@ export default function GroupDetailPage() {
     }
   };
 
+  const handleUpdateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdatingGroup(true);
+    setError(null);
+    try {
+      await updateGroup(groupId, {
+        name: editGroupForm.name,
+        description: editGroupForm.description || undefined,
+        contributionAmount: Number(editGroupForm.contributionAmount),
+        maxMembers: Number(editGroupForm.maxMembers),
+        cycleDuration: editGroupForm.cycleDuration,
+        photoUrl: editGroupForm.photoUrl || undefined,
+        endDate: editGroupForm.endDate || undefined,
+        physicalAddress: editGroupForm.physicalAddress || undefined,
+        latitude: editGroupForm.latitude ? Number(editGroupForm.latitude) : undefined,
+        longitude: editGroupForm.longitude ? Number(editGroupForm.longitude) : undefined,
+      });
+      setShowEditGroupModal(false);
+      setSuccess('Group information updated successfully.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchData();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to update group information.');
+    } finally {
+      setUpdatingGroup(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -909,6 +954,27 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setEditGroupForm({
+                  name: group.name,
+                  description: group.description || '',
+                  contributionAmount: String(group.contributionAmount),
+                  maxMembers: String(group.maxMembers),
+                  cycleDuration: group.cycleDuration || 'Weekly',
+                  photoUrl: group.photoUrl || '',
+                  endDate: group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '',
+                  physicalAddress: group.physicalAddress || '',
+                  latitude: group.latitude ? String(group.latitude) : '',
+                  longitude: group.longitude ? String(group.longitude) : '',
+                });
+                setShowEditGroupModal(true);
+              }}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Edit Info
+            </Button>
             <Button
               variant="danger"
               onClick={async () => {
@@ -3742,6 +3808,170 @@ export default function GroupDetailPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Edit Group Info Modal */}
+      <Modal
+        isOpen={showEditGroupModal}
+        onClose={() => setShowEditGroupModal(false)}
+        title="Edit Equb Group Details"
+        size="md"
+      >
+        <form onSubmit={handleUpdateGroup} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Group Profile Image
+            </label>
+            <PhotoUpload
+              value={editGroupForm.photoUrl}
+              onChange={(url) => setEditGroupForm({ ...editGroupForm, photoUrl: url })}
+              name={editGroupForm.name || 'Group'}
+              size="md"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Group Name
+            </label>
+            <input
+              type="text"
+              value={editGroupForm.name}
+              onChange={(e) => setEditGroupForm({ ...editGroupForm, name: e.target.value })}
+              className="input-field"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Contribution Per Share (ETB)
+              </label>
+              <input
+                type="number"
+                value={editGroupForm.contributionAmount}
+                onChange={(e) => setEditGroupForm({ ...editGroupForm, contributionAmount: e.target.value })}
+                className="input-field"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Max Members
+              </label>
+              <input
+                type="number"
+                value={editGroupForm.maxMembers}
+                onChange={(e) => setEditGroupForm({ ...editGroupForm, maxMembers: e.target.value })}
+                className="input-field"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Cycle Duration
+            </label>
+            <select
+              value={editGroupForm.cycleDuration}
+              onChange={(e) => setEditGroupForm({ ...editGroupForm, cycleDuration: e.target.value })}
+              className="input-field"
+            >
+              <option value="Weekly">{t('groups.frequency_weekly')}</option>
+              <option value="Bi-Weekly">Bi-Weekly</option>
+              <option value="Monthly">{t('groups.frequency_monthly')}</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={editGroupForm.endDate}
+                onChange={(e) => setEditGroupForm({ ...editGroupForm, endDate: e.target.value })}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Physical Location
+            </label>
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between">
+              <div className="flex-1 min-w-0 pr-4">
+                {editGroupForm.physicalAddress ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {editGroupForm.physicalAddress}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      GPS: {Number(editGroupForm.latitude).toFixed(6)}, {Number(editGroupForm.longitude).toFixed(6)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No physical location assigned</p>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowEditLocationPicker(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs py-1.5 px-3"
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Select on Map
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Description (Optional)
+            </label>
+            <textarea
+              value={editGroupForm.description}
+              onChange={(e) => setEditGroupForm({ ...editGroupForm, description: e.target.value })}
+              className="input-field"
+              rows={3}
+              placeholder="Brief description of the group..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowEditGroupModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" loading={updatingGroup}>
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <LocationPicker
+        isOpen={showEditLocationPicker}
+        onClose={() => setShowEditLocationPicker(false)}
+        initialLatitude={editGroupForm.latitude ? Number(editGroupForm.latitude) : undefined}
+        initialLongitude={editGroupForm.longitude ? Number(editGroupForm.longitude) : undefined}
+        initialAddress={editGroupForm.physicalAddress}
+        onConfirm={(loc) => {
+          setEditGroupForm({
+            ...editGroupForm,
+            physicalAddress: loc.address,
+            latitude: String(loc.latitude),
+            longitude: String(loc.longitude),
+          });
+        }}
+      />
     </DashboardLayout>
   );
 }
