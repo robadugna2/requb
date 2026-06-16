@@ -35,9 +35,7 @@ export class AdminsService {
       throw new ConflictException('Email already registered');
     }
 
-    if (newAdminRole === Role.SUB_ADMIN && (!dto.assignedGroups || dto.assignedGroups.length === 0)) {
-        throw new BadRequestException('SUB_ADMINs must be assigned to at least one group upon creation');
-    }
+
 
     // Validate group assignments if provided (especially for SUB_ADMIN)
     if (dto.assignedGroups && dto.assignedGroups.length > 0) {
