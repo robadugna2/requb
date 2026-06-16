@@ -13,6 +13,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { GroupPermissionsGuard } from '../../common/guards/group-permissions.guard';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { GroupsService } from './groups.service';
 import { DepositsService } from '../deposits/deposits.service';
 import { LotteryService } from '../lottery/lottery.service';
@@ -29,7 +31,7 @@ import { UpdateGroupRulesDto } from './dto/group-rules.dto';
 import { DisputeType, GuarantorStatus } from '@prisma/client';
 
 @Controller('groups')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, GroupPermissionsGuard)
 export class GroupsController {
   constructor(
     private readonly groupsService: GroupsService,
@@ -50,13 +52,18 @@ export class GroupsController {
   }
 
   @Get()
-  findAll() {
-    return this.groupsService.findAll();
+  findAll(@Request() req: { user: { id: string; role: string } }) {
+    return this.groupsService.findAll(req.user.id, req.user.role);
+  }
+
+  @Get('trash')
+  getTrash(@Request() req: { user: { id: string; role: string } }) {
+    return this.groupsService.getTrash(req.user.id, req.user.role);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.groupsService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req: { user: { id: string; role: string } }) {
+    return this.groupsService.findOne(id, req.user.id, req.user.role);
   }
 
   @Patch(':id')
@@ -70,11 +77,13 @@ export class GroupsController {
   }
 
   @Put(':id/rules')
+  @RequirePermission('canManageRules')
   updateGroupRules(@Param('id') id: string, @Body() dto: UpdateGroupRulesDto) {
     return this.groupsService.updateGroupRules(id, dto);
   }
 
   @Post(':id/members')
+  @RequirePermission('canManageMembers')
   addMember(
     @Param('id') id: string,
     @Body('userId') userId: string,
@@ -84,11 +93,13 @@ export class GroupsController {
   }
 
   @Delete(':id/members/:userId')
+  @RequirePermission('canManageMembers')
   removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.groupsService.removeMember(id, userId);
   }
 
   @Post(':id/cycles')
+  @RequirePermission('canTriggerLottery') // Wait, creating a cycle starts it. Let's gate this or allow it.
   createCycle(@Param('id') id: string) {
     return this.groupsService.createCycle(id);
   }
@@ -99,6 +110,7 @@ export class GroupsController {
   }
 
   @Post(':id/lottery')
+  @RequirePermission('canTriggerLottery')
   async triggerLottery(@Param('id') id: string, @Request() req: { user: { id: string } }) {
     const activeCycle = await this.prisma.cycle.findFirst({
       where: {
@@ -324,5 +336,51 @@ export class GroupsController {
     @Request() req: { user: { id: string } },
   ) {
     return this.feeWaiversService.cancelWaiver(waiverId, req.user.id);
+  }
+
+  // ─── Recycle Bin Endpoints ──────────────────────────────────────────
+
+  @Delete(':id')
+  softDelete(@Param('id') id: string) {
+    return this.groupsService.softDelete(id);
+  }
+
+  @Post(':id/restore')
+  restore(@Param('id') id: string) {
+    return this.groupsService.restore(id);
+  }
+
+  @Delete(':id/permanent')
+  permanentDelete(@Param('id') id: string) {
+    return this.groupsService.permanentDelete(id);
+  }
+
+  // ─── Group Leaders Endpoints ───────────────────────────────────────
+
+  @Get(':id/leaders')
+  getLeaders(@Param('id') id: string) {
+    return this.groupsService.getLeaders(id);
+  }
+
+  @Post(':id/leaders')
+  assignLeader(
+    @Param('id') id: string,
+    @Body() body: { adminId: string; canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean },
+  ) {
+    return this.groupsService.assignLeader(id, body);
+  }
+
+  @Patch(':id/leaders/:leaderId')
+  updateLeader(
+    @Param('id') id: string,
+    @Param('leaderId') leaderId: string,
+    @Body() body: { canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean },
+  ) {
+    return this.groupsService.updateLeader(id, leaderId, body);
+  }
+
+  @Delete(':id/leaders/:leaderId')
+  removeLeader(@Param('id') id: string, @Param('leaderId') leaderId: string) {
+    return this.groupsService.removeLeader(id, leaderId);
   }
 }

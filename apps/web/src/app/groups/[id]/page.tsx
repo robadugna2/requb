@@ -36,8 +36,8 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory } from '@/lib/api';
-import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers } from '@/lib/api';
+import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem, GroupLeaderItem, AdminUserItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
 const PENALTY_TYPES = [
@@ -105,7 +105,7 @@ export default function GroupDetailPage() {
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawLoading, setDrawLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares'>('deposits');
+  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares' | 'leaders'>('deposits');
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
@@ -116,6 +116,21 @@ export default function GroupDetailPage() {
   const [guarantorsLoading, setGuarantorsLoading] = useState(false);
   const [memberDues, setMemberDues] = useState<MemberDueCalculation[]>([]);
   const [mergedGroups, setMergedGroups] = useState<MergedGroupItem[]>([]);
+  
+  // Leaders State
+  const [leaders, setLeaders] = useState<GroupLeaderItem[]>([]);
+  const [leadersLoading, setLeadersLoading] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
+  const [showAssignLeaderModal, setShowAssignLeaderModal] = useState(false);
+  const [leaderForm, setLeaderForm] = useState({
+    adminId: '',
+    canManageMembers: false,
+    canManageDeposits: false,
+    canTriggerLottery: false,
+    canManageRules: false,
+  });
+  const [assigningLeader, setAssigningLeader] = useState(false);
+  const [updatingLeaderId, setUpdatingLeaderId] = useState<string | null>(null);
   const [feeWaivers, setFeeWaivers] = useState<FeeWaiverItem[]>([]);
   const [sharesLoading, setSharesLoading] = useState(false);
   const [showEditSharesModal, setShowEditSharesModal] = useState<{ userId: string; userName: string; currentShares: number } | null>(null);
@@ -369,6 +384,27 @@ export default function GroupDetailPage() {
     }
   };
 
+  const fetchLeaders = async () => {
+    setLeadersLoading(true);
+    try {
+      const data = await getGroupLeaders(groupId);
+      setLeaders(data);
+    } catch (err: unknown) {
+      console.error('Failed to load leaders:', err);
+    } finally {
+      setLeadersLoading(false);
+    }
+  };
+
+  const fetchAdminUsers = async () => {
+    try {
+      const data = await getAdminUsers();
+      setAdminUsers(data);
+    } catch (err) {
+      console.error('Failed to load admin users:', err);
+    }
+  };
+
   const fetchRules = async () => {
     if (rulesLoaded) return;
     setRulesLoading(true);
@@ -522,7 +558,7 @@ export default function GroupDetailPage() {
     } catch { setError('Failed to send swap request.'); } finally { setRequestingSwap(false); }
   };
 
-  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares') => {
+  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares' | 'leaders') => {
     setActiveTab(tab);
     if (tab === 'rules') { fetchRules(); fetchTemplates(); }
     if (tab === 'penalties') fetchPenalties();
@@ -530,6 +566,7 @@ export default function GroupDetailPage() {
     if (tab === 'swaps') fetchSwaps();
     if (tab === 'guarantors') fetchGuarantors();
     if (tab === 'shares') fetchSharesData();
+    if (tab === 'leaders') { fetchLeaders(); fetchAdminUsers(); }
   };
 
   const handleUpdateShares = async () => {
@@ -571,6 +608,48 @@ export default function GroupDetailPage() {
       setTimeout(() => setSuccess(null), 3000);
       await fetchSharesData();
     } catch { setError('Failed to cancel waiver.'); } finally { setCancellingWaiverId(null); }
+  };
+
+  const handleAssignLeader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssigningLeader(true);
+    try {
+      await assignGroupLeader(groupId, leaderForm);
+      setShowAssignLeaderModal(false);
+      setLeaderForm({ adminId: '', canManageMembers: false, canManageDeposits: false, canTriggerLottery: false, canManageRules: false });
+      setSuccess('Leader assigned successfully.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchLeaders();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to assign leader.');
+    } finally { setAssigningLeader(false); }
+  };
+
+  const handleUpdateLeader = async (leaderId: string, updates: { canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean }) => {
+    setUpdatingLeaderId(leaderId);
+    try {
+      await updateGroupLeader(groupId, leaderId, updates);
+      setSuccess('Leader permissions updated.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchLeaders();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to update leader.');
+    } finally { setUpdatingLeaderId(null); }
+  };
+
+  const handleRemoveLeader = async (leaderId: string) => {
+    if (!confirm('Are you sure you want to remove this leader?')) return;
+    try {
+      await removeGroupLeader(groupId, leaderId);
+      setSuccess('Leader removed.');
+      setTimeout(() => setSuccess(null), 3000);
+      await fetchLeaders();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to remove leader.');
+    }
   };
 
   const handleCreateMergedGroup = async (e: React.FormEvent) => {
@@ -786,24 +865,78 @@ export default function GroupDetailPage() {
 
       {/* Group Header */}
       <div className="card mb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
-              <Badge status={group.status} />
-            </div>
-            {group.description && (
-              <p className="mt-2 text-sm text-gray-500">{group.description}</p>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            {group.photoUrl ? (
+              <img src={getMediaUrl(group.photoUrl)} alt={group.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100 flex-shrink-0" />
+            ) : (
+              <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <Users className="h-8 w-8 text-gray-400" />
+              </div>
             )}
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
+                <Badge status={group.status} />
+              </div>
+              {group.description && (
+                <p className="mt-2 text-sm text-gray-500">{group.description}</p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                {group.physicalAddress && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {group.physicalAddress}
+                    {group.latitude && group.longitude && (
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${group.latitude},${group.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline ml-1"
+                      >
+                        (Map)
+                      </a>
+                    )}
+                  </span>
+                )}
+                {group.endDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Ends: {new Date(group.endDate).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <Button
-            onClick={handleLotteryDraw}
-            loading={drawLoading}
-            className="flex-shrink-0"
-          >
-            <Ticket className="h-4 w-4 mr-2" />
-            {t('group.draw_lottery')}
-          </Button>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button
+              variant="danger"
+              onClick={async () => {
+                const groupName = prompt(`To delete this group, please type its name: "${group.name}"`);
+                if (groupName !== group.name) {
+                  if (groupName !== null) alert('Group name did not match. Deletion cancelled.');
+                  return;
+                }
+                try {
+                  await import('@/lib/api').then(m => m.softDeleteGroup(groupId));
+                  router.push('/groups');
+                } catch (err: unknown) {
+                  const axiosErr = err as { response?: { data?: { message?: string } } };
+                  setError(axiosErr.response?.data?.message || 'Failed to delete group.');
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Group
+            </Button>
+            <Button
+              onClick={handleLotteryDraw}
+              loading={drawLoading}
+            >
+              <Ticket className="h-4 w-4 mr-2" />
+              {t('group.draw_lottery')}
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -919,6 +1052,12 @@ export default function GroupDetailPage() {
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'shares' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <span className="flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" />{t('group.tab_shares')}</span>
+        </button>
+        <button
+          onClick={() => handleTabChange('leaders')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'leaders' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />Leaders</span>
         </button>
       </div>
 
@@ -2391,6 +2530,148 @@ export default function GroupDetailPage() {
         </div>
       )}
 
+      {activeTab === 'leaders' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-medium text-gray-900">Group Leaders</h3>
+            <Button onClick={() => setShowAssignLeaderModal(true)}>
+              <Shield className="h-4 w-4 mr-2" />
+              Assign Leader
+            </Button>
+          </div>
+          {leadersLoading ? (
+            <div className="py-8 flex justify-center text-gray-500">Loading leaders...</div>
+          ) : leaders.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {leaders.map(leader => (
+                <div key={leader.id} className="p-4 border rounded-lg bg-white shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{leader.admin.name}</h4>
+                    <p className="text-sm text-gray-500">{leader.admin.email}</p>
+                    <div className="mt-3 space-y-1">
+                      <label className="flex items-center text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={leader.canManageMembers}
+                          onChange={(e) => handleUpdateLeader(leader.id, { canManageMembers: e.target.checked })}
+                          className="mr-2"
+                        />
+                        Can Manage Members
+                      </label>
+                      <label className="flex items-center text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={leader.canManageDeposits}
+                          onChange={(e) => handleUpdateLeader(leader.id, { canManageDeposits: e.target.checked })}
+                          className="mr-2"
+                        />
+                        Can Manage Deposits
+                      </label>
+                      <label className="flex items-center text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={leader.canTriggerLottery}
+                          onChange={(e) => handleUpdateLeader(leader.id, { canTriggerLottery: e.target.checked })}
+                          className="mr-2"
+                        />
+                        Can Trigger Lottery
+                      </label>
+                      <label className="flex items-center text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={leader.canManageRules}
+                          onChange={(e) => handleUpdateLeader(leader.id, { canManageRules: e.target.checked })}
+                          className="mr-2"
+                        />
+                        Can Manage Rules
+                      </label>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex justify-end">
+                    <Button size="sm" variant="danger" onClick={() => handleRemoveLeader(leader.id)}>
+                      Remove Leader
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 border border-dashed rounded-lg bg-gray-50">
+              <Shield className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+              <p>No sub-admins assigned to this group.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assign Leader Modal */}
+      <Modal
+        isOpen={showAssignLeaderModal}
+        onClose={() => setShowAssignLeaderModal(false)}
+        title="Assign Group Leader"
+        size="md"
+      >
+        <form onSubmit={handleAssignLeader} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Admin</label>
+            <select
+              value={leaderForm.adminId}
+              onChange={(e) => setLeaderForm({ ...leaderForm, adminId: e.target.value })}
+              className="input-field"
+              required
+            >
+              <option value="">Select an admin...</option>
+              {adminUsers.map(admin => (
+                <option key={admin.id} value={admin.id}>{admin.name} ({admin.email})</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2 mt-4">
+            <h4 className="text-sm font-medium text-gray-700">Permissions</h4>
+            <label className="flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={leaderForm.canManageMembers}
+                onChange={(e) => setLeaderForm({ ...leaderForm, canManageMembers: e.target.checked })}
+                className="mr-2"
+              />
+              Can Manage Members
+            </label>
+            <label className="flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={leaderForm.canManageDeposits}
+                onChange={(e) => setLeaderForm({ ...leaderForm, canManageDeposits: e.target.checked })}
+                className="mr-2"
+              />
+              Can Manage Deposits
+            </label>
+            <label className="flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={leaderForm.canTriggerLottery}
+                onChange={(e) => setLeaderForm({ ...leaderForm, canTriggerLottery: e.target.checked })}
+                className="mr-2"
+              />
+              Can Trigger Lottery
+            </label>
+            <label className="flex items-center text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={leaderForm.canManageRules}
+                onChange={(e) => setLeaderForm({ ...leaderForm, canManageRules: e.target.checked })}
+                className="mr-2"
+              />
+              Can Manage Rules
+            </label>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="secondary" onClick={() => setShowAssignLeaderModal(false)}>Cancel</Button>
+            <Button type="submit" loading={assigningLeader}>Assign</Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Edit Shares Modal */}
       <Modal
         isOpen={!!showEditSharesModal}
@@ -2405,7 +2686,7 @@ export default function GroupDetailPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('group.label_shares_count')}</label>
             <div className="flex flex-wrap gap-1.5 mb-2">
-              {[0.25, 0.5, 0.75, 1, 1.5, 2, 3].map((preset) => (
+              {[0.25, 0.5, 0.75, 1, 1.5, 2].map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -2413,7 +2694,7 @@ export default function GroupDetailPage() {
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     editingShares === preset
                       ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
                   {preset === 0.25 ? '¼' : preset === 0.5 ? '½' : preset === 0.75 ? '¾' : preset === 1.5 ? '1½' : preset}
@@ -2431,11 +2712,13 @@ export default function GroupDetailPage() {
               min={0.25}
               max={10}
               step={0.01}
+              placeholder="Custom shares count (0.25 - 10)"
             />
             {group && (
-              <p className="text-xs text-gray-400 mt-1.5">
-                Contribution: ETB {(group.contributionAmount * editingShares).toLocaleString()} / cycle
-              </p>
+              <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5 mt-2">
+                <span>Expected per cycle:</span>
+                <span className="font-bold">ETB {(group.contributionAmount * editingShares).toLocaleString()}</span>
+              </div>
             )}
           </div>
           <div className="flex justify-end gap-3 pt-2">

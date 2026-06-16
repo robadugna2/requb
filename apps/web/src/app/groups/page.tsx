@@ -8,14 +8,17 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
-import { getGroups, createGroup } from '@/lib/api';
-import type { GroupListItem } from '@/lib/api';
+import { getGroups, createGroup, getRuleTemplates, getTrashGroups, restoreGroup, softDeleteGroup, permanentDeleteGroup } from '@/lib/api';
+import type { GroupListItem, RuleTemplate } from '@/lib/api';
 
 export default function GroupsPage() {
   const { t } = useLanguage();
   const [groups, setGroups] = useState<GroupListItem[]>([]);
+  const [trashGroups, setTrashGroups] = useState<GroupListItem[]>([]);
+  const [templates, setTemplates] = useState<RuleTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showTrashModal, setShowTrashModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     name: '',
@@ -23,17 +26,27 @@ export default function GroupsPage() {
     cycleDuration: 'Weekly',
     maxMembers: '',
     description: '',
+    photoUrl: '',
+    endDate: '',
+    physicalAddress: '',
+    latitude: '',
+    longitude: '',
+    templateId: '',
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const fetchGroups = async () => {
+  const fetchGroupsAndTemplates = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getGroups();
-      setGroups(data);
+      const [groupsData, templatesData] = await Promise.all([
+        getGroups(),
+        getRuleTemplates().catch(() => [])
+      ]);
+      setGroups(groupsData);
+      setTemplates(templatesData);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load groups. Please try again.';
       setError(message);
@@ -42,8 +55,48 @@ export default function GroupsPage() {
     }
   };
 
+  const fetchTrash = async () => {
+    try {
+      const trashData = await getTrashGroups();
+      setTrashGroups(trashData);
+    } catch (err) {
+      console.error('Failed to load trash:', err);
+    }
+  };
+
+  const openTrashModal = () => {
+    fetchTrash();
+    setShowTrashModal(true);
+  };
+
+  const handleRestoreGroup = async (id: string) => {
+    try {
+      await restoreGroup(id);
+      await fetchTrash();
+      await fetchGroupsAndTemplates();
+      setSuccess('Group restored successfully.');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to restore group.');
+    }
+  };
+
+  const handlePermanentDeleteGroup = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this group? This action cannot be undone.')) return;
+    try {
+      await permanentDeleteGroup(id);
+      await fetchTrash();
+      setSuccess('Group permanently deleted.');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to permanently delete group.');
+    }
+  };
+
   useEffect(() => {
-    fetchGroups();
+    fetchGroupsAndTemplates();
   }, []);
 
   const openCreateModal = () => {
@@ -62,6 +115,12 @@ export default function GroupsPage() {
         cycleDuration: formData.cycleDuration,
         maxMembers: Number(formData.maxMembers),
         description: formData.description,
+        photoUrl: formData.photoUrl || undefined,
+        endDate: formData.endDate || undefined,
+        physicalAddress: formData.physicalAddress || undefined,
+        latitude: formData.latitude ? Number(formData.latitude) : undefined,
+        longitude: formData.longitude ? Number(formData.longitude) : undefined,
+        templateId: formData.templateId || undefined,
       });
       setShowCreateModal(false);
       setFormData({
@@ -70,10 +129,16 @@ export default function GroupsPage() {
         cycleDuration: 'Weekly',
         maxMembers: '',
         description: '',
+        photoUrl: '',
+        endDate: '',
+        physicalAddress: '',
+        latitude: '',
+        longitude: '',
+        templateId: '',
       });
       setSuccess(t('groups.success_create'));
       setTimeout(() => setSuccess(null), 4000);
-      await fetchGroups();
+      await fetchGroupsAndTemplates();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(
@@ -111,10 +176,15 @@ export default function GroupsPage() {
             {t('groups.subtitle')}
           </p>
         </div>
-        <Button onClick={openCreateModal}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t('groups.create_btn')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={openTrashModal}>
+            Recycle Bin
+          </Button>
+          <Button onClick={openCreateModal}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t('groups.create_btn')}
+          </Button>
+        </div>
       </div>
 
       {success && (
@@ -331,6 +401,102 @@ export default function GroupsPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Photo URL
+            </label>
+            <input
+              type="text"
+              value={formData.photoUrl}
+              onChange={(e) =>
+                setFormData({ ...formData, photoUrl: e.target.value })
+              }
+              className="input-field"
+              placeholder="https://example.com/image.jpg"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={formData.endDate}
+                onChange={(e) =>
+                  setFormData({ ...formData, endDate: e.target.value })
+                }
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Rule Template
+              </label>
+              <select
+                value={formData.templateId}
+                onChange={(e) =>
+                  setFormData({ ...formData, templateId: e.target.value })
+                }
+                className="input-field"
+              >
+                <option value="">None (Create Empty Rules)</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Physical Address
+            </label>
+            <input
+              type="text"
+              value={formData.physicalAddress}
+              onChange={(e) =>
+                setFormData({ ...formData, physicalAddress: e.target.value })
+              }
+              className="input-field"
+              placeholder="Bole, Addis Ababa"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Latitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={formData.latitude}
+                onChange={(e) =>
+                  setFormData({ ...formData, latitude: e.target.value })
+                }
+                className="input-field"
+                placeholder="8.9806"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Longitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                value={formData.longitude}
+                onChange={(e) =>
+                  setFormData({ ...formData, longitude: e.target.value })
+                }
+                className="input-field"
+                placeholder="38.7578"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               {t('groups.label_description')}
             </label>
             <textarea
@@ -357,6 +523,43 @@ export default function GroupsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+      {/* Trash Modal */}
+      <Modal
+        isOpen={showTrashModal}
+        onClose={() => setShowTrashModal(false)}
+        title="Recycle Bin"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {trashGroups.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4">
+              {trashGroups.map((group) => (
+                <div key={group.id} className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{group.name}</h4>
+                    <p className="text-sm text-gray-500">Deleted: {new Date(group.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => handleRestoreGroup(group.id)}>
+                      Restore
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => handlePermanentDeleteGroup(group.id)}>
+                      Delete Permanently
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No groups in the recycle bin.
+            </div>
+          )}
+          <div className="flex justify-end pt-4 border-t border-gray-100">
+            <Button variant="secondary" onClick={() => setShowTrashModal(false)}>Close</Button>
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );

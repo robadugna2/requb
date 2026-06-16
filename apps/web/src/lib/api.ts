@@ -66,6 +66,11 @@ export interface GroupDetail {
   id: string;
   name: string;
   description?: string;
+  photoUrl?: string;
+  endDate?: string;
+  physicalAddress?: string;
+  latitude?: number;
+  longitude?: number;
   membersCount: number;
   maxMembers: number;
   contributionAmount: number;
@@ -428,6 +433,11 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
     id: raw.id as string,
     name: raw.name as string,
     description: raw.description as string | undefined,
+    photoUrl: raw.photoUrl as string | undefined,
+    endDate: raw.endDate as string | undefined,
+    physicalAddress: raw.physicalAddress as string | undefined,
+    latitude: raw.latitude as number | undefined,
+    longitude: raw.longitude as number | undefined,
     membersCount: members.length,
     maxMembers: raw.maxMembers as number,
     contributionAmount: raw.contributionAmount as number,
@@ -658,6 +668,12 @@ export const createGroup = async (data: {
   lotteryMethod?: string;
   bankAccount?: string;
   bankName?: string;
+  photoUrl?: string;
+  endDate?: string;
+  physicalAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  templateId?: string;
 }) => {
   // Map frontend form values to backend DTO
   let cycleType: string;
@@ -677,6 +693,12 @@ export const createGroup = async (data: {
     description: data.description || undefined,
     bankAccount: data.bankAccount || undefined,
     bankName: data.bankName || undefined,
+    photoUrl: data.photoUrl || undefined,
+    endDate: data.endDate || undefined,
+    physicalAddress: data.physicalAddress || undefined,
+    latitude: data.latitude,
+    longitude: data.longitude,
+    templateId: data.templateId || undefined,
   });
   return response.data;
 };
@@ -1205,5 +1227,96 @@ export const deleteGuarantor = async (guarantorId: string): Promise<{ success: b
   return response.data as { success: boolean };
 };
 
-export default api;
+// ─── Trash / Recycle Bin ─────────────────────────────────────────────────────
 
+export const getTrashGroups = async (): Promise<GroupListItem[]> => {
+  const response = await api.get('/groups/trash');
+  return (response.data as Array<Record<string, unknown>>).map(mapGroupListItem);
+};
+
+export const softDeleteGroup = async (id: string): Promise<{ success: boolean }> => {
+  const response = await api.delete(`/groups/${id}`);
+  return response.data;
+};
+
+export const restoreGroup = async (id: string): Promise<{ success: boolean }> => {
+  const response = await api.post(`/groups/${id}/restore`);
+  return response.data;
+};
+
+export const permanentDeleteGroup = async (id: string): Promise<{ success: boolean }> => {
+  const response = await api.delete(`/groups/${id}/permanent`);
+  return response.data;
+};
+
+// ─── Group Leaders ───────────────────────────────────────────────────────────
+
+export interface GroupLeaderItem {
+  id: string;
+  groupId: string;
+  adminId: string;
+  canManageMembers: boolean;
+  canManageDeposits: boolean;
+  canTriggerLottery: boolean;
+  canManageRules: boolean;
+  admin: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
+export const getGroupLeaders = async (groupId: string): Promise<GroupLeaderItem[]> => {
+  const response = await api.get(`/groups/${groupId}/leaders`);
+  return response.data as GroupLeaderItem[];
+};
+
+export const assignGroupLeader = async (
+  groupId: string,
+  data: {
+    adminId: string;
+    canManageMembers?: boolean;
+    canManageDeposits?: boolean;
+    canTriggerLottery?: boolean;
+    canManageRules?: boolean;
+  }
+): Promise<GroupLeaderItem> => {
+  const response = await api.post(`/groups/${groupId}/leaders`, data);
+  return response.data as GroupLeaderItem;
+};
+
+export const updateGroupLeader = async (
+  groupId: string,
+  leaderId: string,
+  data: {
+    canManageMembers?: boolean;
+    canManageDeposits?: boolean;
+    canTriggerLottery?: boolean;
+    canManageRules?: boolean;
+  }
+): Promise<GroupLeaderItem> => {
+  const response = await api.patch(`/groups/${groupId}/leaders/${leaderId}`, data);
+  return response.data as GroupLeaderItem;
+};
+
+export const removeGroupLeader = async (groupId: string, leaderId: string): Promise<{ success: boolean }> => {
+  const response = await api.delete(`/groups/${groupId}/leaders/${leaderId}`);
+  return response.data as { success: boolean };
+};
+
+// ─── Admin Users ─────────────────────────────────────────────────────────────
+
+export interface AdminUserItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+export const getAdminUsers = async (): Promise<AdminUserItem[]> => {
+  const response = await api.get('/auth/admins');
+  return response.data as AdminUserItem[];
+};
+
+export default api;

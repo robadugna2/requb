@@ -59,7 +59,7 @@ export default function MemberDetailPage() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [showEditSharesModal, setShowEditSharesModal] = useState(false);
-  const [editingShareGroup, setEditingShareGroup] = useState<{groupId: string, groupName: string, shares: number} | null>(null);
+  const [editingShareGroup, setEditingShareGroup] = useState<{groupId: string, groupName: string, shares: number, contributionAmount: number} | null>(null);
   const [shareValue, setShareValue] = useState<number>(1);
   const [savingShares, setSavingShares] = useState(false);
 
@@ -553,7 +553,7 @@ export default function MemberDetailPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => {
-                              setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares });
+                              setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares, contributionAmount: group.contributionAmount });
                               setShareValue(group.shares);
                               setShowEditSharesModal(true);
                             }}
@@ -896,6 +896,12 @@ export default function MemberDetailPage() {
               step={0.01}
               placeholder="Custom shares count (0.25 - 10)"
             />
+            {editingShareGroup && (
+              <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5 mt-2">
+                <span>Expected per cycle:</span>
+                <span className="font-bold">ETB {(editingShareGroup.contributionAmount * shareValue).toLocaleString()}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">

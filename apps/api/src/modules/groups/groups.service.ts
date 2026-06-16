@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,9 +26,14 @@ export class GroupsService {
   ) {}
 
   async create(createGroupDto: CreateGroupDto, adminId: string) {
-    return this.prisma.equbGroup.create({
+    const { templateId, ...groupData } = createGroupDto;
+
+    const parsedEndDate = groupData.endDate ? new Date(groupData.endDate) : undefined;
+
+    const group = await this.prisma.equbGroup.create({
       data: {
-        ...createGroupDto,
+        ...groupData,
+        endDate: parsedEndDate,
         createdById: adminId,
       },
       include: {
@@ -39,10 +45,66 @@ export class GroupsService {
         },
       },
     });
+
+    // Make creator a leader with all privileges
+    await this.prisma.groupLeader.create({
+      data: {
+        groupId: group.id,
+        adminId,
+        canManageMembers: true,
+        canManageDeposits: true,
+        canTriggerLottery: true,
+        canManageRules: true,
+      },
+    });
+
+    if (templateId) {
+      const template = await this.prisma.ruleTemplate.findUnique({
+        where: { id: templateId },
+      });
+      if (template) {
+        const {
+          id: _,
+          name: _n,
+          description: _d,
+          createdById: _c,
+          createdAt: _cr,
+          updatedAt: _u,
+          ...rules
+        } = template;
+        await this.prisma.groupRules.upsert({
+          where: { groupId: group.id },
+          create: {
+            groupId: group.id,
+            ...rules,
+          },
+          update: rules,
+        });
+      }
+    } else {
+      await this.prisma.groupRules.create({
+        data: { groupId: group.id },
+      });
+    }
+
+    return group;
   }
 
-  async findAll() {
+  async findAll(adminId?: string, role?: string) {
+    const whereClause: any = {
+      deletedAt: null,
+    };
+
+    if (role === 'SUB_ADMIN' && adminId) {
+      whereClause.leaders = {
+        some: {
+          adminId,
+        },
+      };
+    }
+
     return this.prisma.equbGroup.findMany({
+      where: whereClause,
       include: {
         createdBy: {
           select: { id: true, name: true, email: true },
@@ -66,7 +128,7 @@ export class GroupsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, adminId?: string, role?: string) {
     const group = await this.prisma.equbGroup.findUnique({
       where: { id },
       include: {
@@ -92,15 +154,38 @@ export class GroupsService {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
 
+    if (group.deletedAt) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+
+    if (role === 'SUB_ADMIN' && adminId) {
+      const isLeader = await this.prisma.groupLeader.findUnique({
+        where: {
+          groupId_adminId: {
+            groupId: id,
+            adminId,
+          },
+        },
+      });
+      if (!isLeader) {
+        throw new ForbiddenException('You do not have access to this group');
+      }
+    }
+
     return group;
   }
 
   async update(id: string, updateGroupDto: UpdateGroupDto) {
     await this.findOne(id);
 
+    const data: any = { ...updateGroupDto };
+    if (data.endDate) {
+      data.endDate = new Date(data.endDate);
+    }
+
     return this.prisma.equbGroup.update({
       where: { id },
-      data: updateGroupDto,
+      data,
       include: {
         createdBy: {
           select: { id: true, name: true, email: true },
@@ -312,5 +397,124 @@ export class GroupsService {
     })();
 
     return newCycle;
+  }
+
+  async getTrash(adminId?: string, role?: string) {
+    const whereClause: any = {
+      deletedAt: { not: null },
+    };
+
+    if (role === 'SUB_ADMIN' && adminId) {
+      whereClause.leaders = {
+        some: {
+          adminId,
+        },
+      };
+    }
+
+    return this.prisma.equbGroup.findMany({
+      where: whereClause,
+      include: {
+        createdBy: {
+          select: { id: true, name: true, email: true },
+        },
+        _count: {
+          select: {
+            memberships: { where: { status: 'ACTIVE' } },
+            cycles: true,
+          },
+        },
+      },
+      orderBy: { deletedAt: 'desc' },
+    });
+  }
+
+  async softDelete(id: string) {
+    const group = await this.prisma.equbGroup.findUnique({ where: { id } });
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return this.prisma.equbGroup.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async restore(id: string) {
+    const group = await this.prisma.equbGroup.findUnique({ where: { id } });
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return this.prisma.equbGroup.update({
+      where: { id },
+      data: { deletedAt: null },
+    });
+  }
+
+  async permanentDelete(id: string) {
+    const group = await this.prisma.equbGroup.findUnique({ where: { id } });
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return this.prisma.equbGroup.delete({
+      where: { id },
+    });
+  }
+
+  async getLeaders(groupId: string) {
+    return this.prisma.groupLeader.findMany({
+      where: { groupId },
+      include: {
+        admin: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+  }
+
+  async assignLeader(groupId: string, data: { adminId: string; canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean }) {
+    return this.prisma.groupLeader.create({
+      data: {
+        groupId,
+        adminId: data.adminId,
+        canManageMembers: data.canManageMembers ?? false,
+        canManageDeposits: data.canManageDeposits ?? false,
+        canTriggerLottery: data.canTriggerLottery ?? false,
+        canManageRules: data.canManageRules ?? false,
+      },
+      include: {
+        admin: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+  }
+
+  async updateLeader(groupId: string, leaderId: string, data: { canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean }) {
+    return this.prisma.groupLeader.update({
+      where: {
+        groupId_adminId: {
+          groupId,
+          adminId: leaderId,
+        },
+      },
+      data,
+      include: {
+        admin: {
+          select: { id: true, name: true, email: true, role: true },
+        },
+      },
+    });
+  }
+
+  async removeLeader(groupId: string, leaderId: string) {
+    return this.prisma.groupLeader.delete({
+      where: {
+        groupId_adminId: {
+          groupId,
+          adminId: leaderId,
+        },
+      },
+    });
   }
 }

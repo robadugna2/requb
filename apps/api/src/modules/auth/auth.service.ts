@@ -118,4 +118,16 @@ export class AuthService {
 
     return { message: 'Password changed successfully' };
   }
+
+  async getAdmins() {
+    return this.prisma.admin.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
 }

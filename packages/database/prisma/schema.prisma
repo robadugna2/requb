@@ -9,6 +9,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  SUB_ADMIN
   MEMBER
 }
 
@@ -60,6 +61,7 @@ model Admin {
 
   groups         EqubGroup[]
   ruleTemplates  RuleTemplate[]
+  groupLeadership GroupLeader[]
 
   @@map("admins")
 }
@@ -132,6 +134,12 @@ model EqubGroup {
   status             GroupStatus   @default(ACTIVE)
   bankAccount        String?       @map("bank_account") // shared deposit account number
   bankName           String?       @map("bank_name")
+  photoUrl           String?       @map("photo_url")
+  endDate            DateTime?     @map("end_date")
+  physicalAddress    String?       @map("physical_address")
+  latitude           Float?
+  longitude          Float?
+  deletedAt          DateTime?     @map("deleted_at")
   createdById        String        @map("created_by_id")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
@@ -147,6 +155,7 @@ model EqubGroup {
   disputes         Dispute[]
   mergedGroups     MergedMemberGroup[]
   adminFeeWaivers  AdminFeeWaiver[]
+  leaders          GroupLeader[]
 
   @@map("equb_groups")
 }
@@ -672,4 +681,22 @@ model Notification {
   @@index([read])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model GroupLeader {
+  id                String   @id @default(cuid())
+  groupId           String   @map("group_id")
+  adminId           String   @map("admin_id")
+  canManageMembers  Boolean  @default(false) @map("can_manage_members")
+  canManageDeposits Boolean  @default(false) @map("can_manage_deposits")
+  canTriggerLottery Boolean  @default(false) @map("can_trigger_lottery")
+  canManageRules    Boolean  @default(false) @map("can_manage_rules")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  group   EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  admin   Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, adminId])
+  @@map("group_leaders")
 }

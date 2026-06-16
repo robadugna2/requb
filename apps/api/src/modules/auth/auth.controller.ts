@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   HttpCode,
   HttpStatus,
@@ -36,5 +37,11 @@ export class AuthController {
     @Request() req: { user: { id: string } },
   ) {
     return this.authService.changePassword(req.user.id, dto);
+  }
+
+  @Get('admins')
+  @UseGuards(JwtAuthGuard)
+  async getAdmins() {
+    return this.authService.getAdmins();
   }
 }
