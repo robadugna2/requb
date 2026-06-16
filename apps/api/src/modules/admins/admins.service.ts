@@ -225,8 +225,8 @@ export class AdminsService {
   }
 
   async assignSubAdminToGroup(subAdminId: string, requesterId: string, requesterRole: Role, dto: AssignGroupDto) {
-      if (requesterRole !== Role.ADMIN) {
-          throw new ForbiddenException('Only standard ADMINs can assign SUB_ADMINs to groups');
+      if (requesterRole !== Role.ADMIN && requesterRole !== Role.SUPER_ADMIN) {
+          throw new ForbiddenException('Only ADMINs or SUPER_ADMINs can assign SUB_ADMINs to groups');
       }
 
       const subAdmin = await this.getAdminById(subAdminId, requesterId, requesterRole);
@@ -235,13 +235,23 @@ export class AdminsService {
           throw new BadRequestException('Can only assign SUB_ADMINs to groups through this endpoint');
       }
 
-      // Check if requester is leader of this group
-      const isLeader = await this.prisma.groupLeader.findUnique({
-          where: { groupId_adminId: { groupId: dto.groupId, adminId: requesterId } }
+      // Verify the group exists
+      const group = await this.prisma.equbGroup.findUnique({
+          where: { id: dto.groupId },
       });
+      if (!group) {
+          throw new NotFoundException(`Group with ID ${dto.groupId} not found`);
+      }
 
-      if (!isLeader) {
-          throw new ForbiddenException('You can only assign sub-admins to groups you manage');
+      // For standard ADMINs: verify they own or lead this group
+      if (requesterRole === Role.ADMIN) {
+          const isOwner = group.createdById === requesterId;
+          const isLeader = await this.prisma.groupLeader.findUnique({
+              where: { groupId_adminId: { groupId: dto.groupId, adminId: requesterId } }
+          });
+          if (!isOwner && !isLeader) {
+              throw new ForbiddenException('You can only assign sub-admins to groups you created or manage');
+          }
       }
 
       return this.prisma.groupLeader.upsert({
@@ -264,19 +274,22 @@ export class AdminsService {
   }
 
   async removeSubAdminFromGroup(subAdminId: string, groupId: string, requesterId: string, requesterRole: Role) {
-      if (requesterRole !== Role.ADMIN) {
-          throw new ForbiddenException('Only standard ADMINs can remove SUB_ADMINs from groups');
+      if (requesterRole !== Role.ADMIN && requesterRole !== Role.SUPER_ADMIN) {
+          throw new ForbiddenException('Only ADMINs or SUPER_ADMINs can remove SUB_ADMINs from groups');
       }
 
       await this.getAdminById(subAdminId, requesterId, requesterRole); // Ownership check
 
-      // Ensure requester is leader of the group they are trying to remove the subadmin from
-      const isLeader = await this.prisma.groupLeader.findUnique({
-        where: { groupId_adminId: { groupId, adminId: requesterId } }
-      });
-      
-      if (!isLeader) {
-        throw new ForbiddenException('You do not have access to this group');
+      // For standard ADMINs: verify they own or lead this group
+      if (requesterRole === Role.ADMIN) {
+          const group = await this.prisma.equbGroup.findUnique({ where: { id: groupId } });
+          const isOwner = group?.createdById === requesterId;
+          const isLeader = await this.prisma.groupLeader.findUnique({
+            where: { groupId_adminId: { groupId, adminId: requesterId } }
+          });
+          if (!isOwner && !isLeader) {
+            throw new ForbiddenException('You do not have access to this group');
+          }
       }
 
       // Check if the subadmin is actually assigned to this group

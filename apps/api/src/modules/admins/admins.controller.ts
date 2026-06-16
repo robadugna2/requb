@@ -66,13 +66,13 @@ export class AdminsController {
   }
 
   @Post(':id/groups')
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   assignGroup(@Request() req: any, @Param('id') id: string, @Body() dto: AssignGroupDto) {
     return this.adminsService.assignSubAdminToGroup(id, req.user.id, req.user.role, dto);
   }
 
   @Delete(':id/groups/:groupId')
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   removeGroup(@Request() req: any, @Param('id') id: string, @Param('groupId') groupId: string) {
     return this.adminsService.removeSubAdminFromGroup(id, groupId, req.user.id, req.user.role);
   }
