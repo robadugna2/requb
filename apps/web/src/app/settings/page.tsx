@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -9,6 +9,14 @@ import { changePassword } from '@/lib/api';
 import { useLanguage, Language } from '@/components/layout/LanguageContext';
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<DashboardLayout><div className="flex items-center justify-center h-64"><p className="text-gray-500">Loading settings...</p></div></DashboardLayout>}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
   const { language, setLanguage, t } = useLanguage();
   const searchParams = useSearchParams();
   const router = useRouter();
