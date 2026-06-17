@@ -57,22 +57,25 @@ enum PayoutStatus {
 }
 
 model Admin {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String      @map("password_hash")
-  name         String
-  phone        String?
-  role         Role        @default(ADMIN)
-  status       AdminStatus @default(ACTIVE)
-  createdById  String?     @map("created_by_id")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  id             String      @id @default(cuid())
+  email          String      @unique
+  passwordHash   String      @map("password_hash")
+  name           String
+  phone          String?
+  role           Role        @default(ADMIN)
+  status         AdminStatus @default(ACTIVE)
+  mustChangePass Boolean     @default(false) @map("must_change_pass")
+  createdById    String?     @map("created_by_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
-  createdBy       Admin?        @relation("AdminHierarchy", fields: [createdById], references: [id])
-  createdAdmins   Admin[]       @relation("AdminHierarchy")
-  groups          EqubGroup[]
-  ruleTemplates   RuleTemplate[]
-  groupLeadership GroupLeader[]
+  createdBy              Admin?                 @relation("AdminHierarchy", fields: [createdById], references: [id])
+  createdAdmins          Admin[]                @relation("AdminHierarchy")
+  groups                 EqubGroup[]
+  ruleTemplates          RuleTemplate[]
+  groupLeadership        GroupLeader[]
+  passwordResetRequests  PasswordResetRequest[] @relation("ResetRequester")
+  passwordResetInbox     PasswordResetRequest[] @relation("ResetRecipient")
 
   @@map("admins")
 }
@@ -710,4 +713,30 @@ model GroupLeader {
 
   @@unique([groupId, adminId])
   @@map("group_leaders")
+}
+
+// ─── Password Reset Requests ─────────────────────────────────────────────────
+
+enum PasswordResetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PasswordResetRequest {
+  id            String              @id @default(cuid())
+  requesterId   String              @map("requester_id")
+  recipientId   String              @map("recipient_id")
+  status        PasswordResetStatus @default(PENDING)
+  tempPassword  String?             @map("temp_password")  // plain-text temp pass stored briefly, cleared after first login
+  rejectionNote String?             @map("rejection_note")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  requester Admin @relation("ResetRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  recipient Admin @relation("ResetRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, status])
+  @@index([requesterId])
+  @@map("password_reset_requests")
 }

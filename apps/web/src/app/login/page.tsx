@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff } from 'lucide-react';
-import { login } from '@/lib/api';
+import { Eye, EyeOff, X, Mail, CheckCircle, AlertCircle } from 'lucide-react';
+import { login, forgotPasswordRequest } from '@/lib/api';
 import Button from '@/components/ui/Button';
 import { useLanguage } from '@/components/layout/LanguageContext';
 
@@ -93,6 +93,38 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotLoading(true);
+    try {
+      await forgotPasswordRequest(forgotEmail);
+      setForgotSuccess(true);
+    } catch {
+      setForgotError('Something went wrong. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const openForgotModal = () => {
+    setForgotEmail('');
+    setForgotError('');
+    setForgotSuccess(false);
+    setShowForgotModal(true);
+  };
+
+  const closeForgotModal = () => {
+    setShowForgotModal(false);
+  };
+
   // Animation state
   const [coins, setCoins] = useState<Coin[]>([]);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -113,7 +145,11 @@ export default function LoginPage() {
     try {
       const data = await login(email, password);
       localStorage.setItem('equb_token', data.accessToken);
-      router.push('/dashboard');
+      if (data.admin?.mustChangePassword) {
+        router.push('/settings?mustChange=1');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
     } finally {
@@ -487,9 +523,13 @@ export default function LoginPage() {
                   />
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{t('login.remember')}</span>
                 </label>
-                <a href="#" style={{ fontSize: 13, fontWeight: 600, color: '#ffd700', textDecoration: 'none' }}>
-                  Forgot password?
-                </a>
+                <button
+                    type="button"
+                    onClick={openForgotModal}
+                    style={{ fontSize: 13, fontWeight: 600, color: '#ffd700', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Forgot password?
+                  </button>
               </div>
 
               {/* Submit */}
@@ -534,8 +574,173 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {/* ── Forgot Password Modal ── */}
+      {showForgotModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeForgotModal(); }}
+        >
+          <div style={{
+            width: '100%', maxWidth: 420,
+            background: 'rgba(20,28,70,0.96)',
+            backdropFilter: 'blur(32px)',
+            border: '1.5px solid rgba(255,215,0,0.22)',
+            borderRadius: 20,
+            padding: '36px 32px',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)',
+            animation: 'slideUp 0.25s ease',
+            position: 'relative',
+          }}>
+            {/* Close button */}
+            <button
+              onClick={closeForgotModal}
+              style={{
+                position: 'absolute', top: 16, right: 16,
+                background: 'rgba(255,255,255,0.08)', border: 'none',
+                borderRadius: 8, width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: 'rgba(255,255,255,0.6)',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <X size={16} />
+            </button>
+
+            {forgotSuccess ? (
+              /* ── Success state ── */
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  background: 'rgba(34,197,94,0.15)', border: '2px solid rgba(34,197,94,0.4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 20px',
+                }}>
+                  <CheckCircle size={32} color="#4ade80" />
+                </div>
+                <h3 style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginBottom: 12 }}>
+                  Request Sent!
+                </h3>
+                <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7, marginBottom: 24 }}>
+                  Your password reset request has been sent to your administrator.
+                  They will set a temporary password and inform you directly.
+                </p>
+                <button
+                  onClick={closeForgotModal}
+                  style={{
+                    padding: '10px 28px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                    background: 'linear-gradient(135deg,#ffd700,#ff8c00)',
+                    color: '#1a0a00', border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  Back to Login
+                </button>
+              </div>
+            ) : (
+              /* ── Form state ── */
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                  <div style={{
+                    width: 42, height: 42, borderRadius: 12,
+                    background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <Mail size={20} color="#ffd700" />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 2 }}>
+                      Forgot Password?
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+                      Enter your email — we&apos;ll route the request to your admin
+                    </p>
+                  </div>
+                </div>
+
+                {forgotError && (
+                  <div style={{
+                    marginBottom: 16, padding: '10px 14px',
+                    background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <AlertCircle size={14} color="#fca5a5" />
+                    <p style={{ fontSize: 13, color: '#fca5a5', margin: 0 }}>{forgotError}</p>
+                  </div>
+                )}
+
+                <form onSubmit={handleForgotSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.75)', marginBottom: 8 }}>
+                      Email address
+                    </label>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      required
+                      autoFocus
+                      style={{
+                        display: 'block', width: '100%', boxSizing: 'border-box',
+                        padding: '11px 14px', borderRadius: 10, fontSize: 14,
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: '#fff', outline: 'none',
+                        transition: 'border-color 0.2s, box-shadow 0.2s',
+                      }}
+                      onFocus={e => {
+                        e.target.style.borderColor = 'rgba(255,215,0,0.6)';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(255,215,0,0.15)';
+                      }}
+                      onBlur={e => {
+                        e.target.style.borderColor = 'rgba(255,255,255,0.15)';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                      background: forgotLoading ? 'rgba(255,180,0,0.4)' : 'linear-gradient(135deg,#ffd700,#ff8c00)',
+                      color: forgotLoading ? 'rgba(255,255,255,0.6)' : '#1a0a00',
+                      border: 'none', cursor: forgotLoading ? 'not-allowed' : 'pointer',
+                      boxShadow: forgotLoading ? 'none' : '0 6px 20px rgba(255,140,0,0.4)',
+                      transition: 'all 0.25s',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    }}
+                  >
+                    {forgotLoading ? (
+                      <>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}>
+                          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                        </svg>
+                        Sending...
+                      </>
+                    ) : 'Send Reset Request'}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         input::placeholder { color: rgba(255,255,255,0.3); }
       `}</style>
     </div>

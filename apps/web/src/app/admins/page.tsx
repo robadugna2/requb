@@ -13,7 +13,11 @@ import {
   getGroups,
   assignAdminToGroup,
   removeAdminFromGroup,
-  getAdminById
+  getAdminById,
+  getPasswordResetRequests,
+  approvePasswordReset,
+  rejectPasswordReset,
+  type PasswordResetRequest,
 } from '@/lib/api';
 import {
   Plus,
@@ -26,7 +30,10 @@ import {
   Trash2,
   ArrowLeft,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  KeyRound,
+  Clock,
+  XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -43,6 +50,16 @@ export default function AdminsPage() {
   // Custom Alert / Confirm popup state
   const [alertPopup, setAlertPopup] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [confirmPopup, setConfirmPopup] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null);
+
+  // Password Reset Requests state
+  const [resetRequests, setResetRequests] = useState<PasswordResetRequest[]>([]);
+  const [resetRequestsLoading, setResetRequestsLoading] = useState(false);
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [selectedResetRequest, setSelectedResetRequest] = useState<PasswordResetRequest | null>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const [rejectionNote, setRejectionNote] = useState('');
+  const [resetActionLoading, setResetActionLoading] = useState(false);
 
   // Modals state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -101,10 +118,57 @@ export default function AdminsPage() {
     }
   };
 
+  const fetchResetRequests = async () => {
+    try {
+      setResetRequestsLoading(true);
+      const data = await getPasswordResetRequests();
+      setResetRequests(data);
+    } catch {
+      // silently fail — user might not have permission if not ADMIN/SUPER_ADMIN
+    } finally {
+      setResetRequestsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAdmins();
     fetchGroups();
+    fetchResetRequests();
   }, []);
+
+  const handleApproveReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedResetRequest) return;
+    setResetActionLoading(true);
+    try {
+      await approvePasswordReset(selectedResetRequest.id, tempPassword);
+      toast.success(`Password reset approved for ${selectedResetRequest.requester.name}. Inform them of the temporary password.`);
+      setIsApproveModalOpen(false);
+      setTempPassword('');
+      fetchResetRequests();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to approve reset');
+    } finally {
+      setResetActionLoading(false);
+    }
+  };
+
+  const handleRejectReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedResetRequest) return;
+    setResetActionLoading(true);
+    try {
+      await rejectPasswordReset(selectedResetRequest.id, rejectionNote || undefined);
+      toast.success(`Reset request from ${selectedResetRequest.requester.name} rejected.`);
+      setIsRejectModalOpen(false);
+      setRejectionNote('');
+      fetchResetRequests();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to reject reset');
+    } finally {
+      setResetActionLoading(false);
+    }
+  };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,6 +303,74 @@ export default function AdminsPage() {
             Add Admin
           </Button>
         </div>
+
+        {/* Password Reset Requests Inbox */}
+        {(resetRequests.length > 0 || resetRequestsLoading) && (
+          <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 bg-amber-50 border-b border-amber-100">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5 text-amber-600" />
+                <h2 className="font-semibold text-amber-900">Password Reset Requests</h2>
+                {resetRequests.filter(r => r.status === 'PENDING').length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-amber-500 text-white rounded-full">
+                    {resetRequests.filter(r => r.status === 'PENDING').length}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={fetchResetRequests}
+                className="text-xs text-amber-700 hover:text-amber-900 font-medium"
+              >Refresh</button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {resetRequestsLoading ? (
+                <div className="p-6 text-center text-gray-400 text-sm">Loading requests...</div>
+              ) : resetRequests.length === 0 ? (
+                <div className="p-6 text-center text-gray-400 text-sm">No reset requests</div>
+              ) : (
+                resetRequests.map((req) => (
+                  <div key={req.id} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-sm flex-shrink-0">
+                        {req.requester.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{req.requester.name}</p>
+                        <p className="text-xs text-gray-500">{req.requester.email} · {req.requester.role.replace('_', ' ')}</p>
+                        <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'PENDING' ? (
+                        <>
+                          <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
+                            <Clock className="h-3 w-3" /> Pending
+                          </span>
+                          <button
+                            onClick={() => { setSelectedResetRequest(req); setTempPassword(''); setIsApproveModalOpen(true); }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                          >Approve</button>
+                          <button
+                            onClick={() => { setSelectedResetRequest(req); setRejectionNote(''); setIsRejectModalOpen(true); }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition-colors"
+                          >Reject</button>
+                        </>
+                      ) : req.status === 'APPROVED' ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+                          <CheckCircle2 className="h-3 w-3" /> Approved
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 px-2 py-1 rounded-full">
+                          <XCircle className="h-3 w-3" /> Rejected
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
@@ -554,6 +686,68 @@ export default function AdminsPage() {
                 </div>
               </div>
             </div>
+          )}
+        </Modal>
+
+        {/* Approve Reset Modal */}
+        <Modal isOpen={isApproveModalOpen} onClose={() => setIsApproveModalOpen(false)} title="Set Temporary Password" size="sm">
+          {selectedResetRequest && (
+            <form onSubmit={handleApproveReset} className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Set a temporary password for <strong>{selectedResetRequest.requester.name}</strong>.
+                They will be required to change it on their next login.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                <input
+                  type="text"
+                  required
+                  minLength={6}
+                  value={tempPassword}
+                  onChange={e => setTempPassword(e.target.value)}
+                  className="input-field font-mono"
+                  placeholder="e.g. Temp@1234"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-1">Minimum 6 characters. Share this with the admin verbally or via phone.</p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="secondary" onClick={() => setIsApproveModalOpen(false)} className="flex-1">Cancel</Button>
+                <Button type="submit" className="flex-1" disabled={resetActionLoading}>
+                  {resetActionLoading ? 'Approving...' : 'Approve & Set Password'}
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
+        {/* Reject Reset Modal */}
+        <Modal isOpen={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Reset Request" size="sm">
+          {selectedResetRequest && (
+            <form onSubmit={handleRejectReset} className="space-y-4">
+              <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
+                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700">
+                  Rejecting the request from <strong>{selectedResetRequest.requester.name}</strong>.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rejection Note (Optional)</label>
+                <textarea
+                  value={rejectionNote}
+                  onChange={e => setRejectionNote(e.target.value)}
+                  className="input-field resize-none"
+                  rows={3}
+                  placeholder="Reason for rejection..."
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button type="button" variant="secondary" onClick={() => setIsRejectModalOpen(false)} className="flex-1">Cancel</Button>
+                <Button type="submit" variant="danger" className="flex-1" disabled={resetActionLoading}>
+                  {resetActionLoading ? 'Rejecting...' : 'Reject Request'}
+                </Button>
+              </div>
+            </form>
           )}
         </Modal>
 

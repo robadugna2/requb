@@ -9,6 +9,8 @@ import {
   Body,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { GroupPermissionsGuard } from '../../common/guards/group-permissions.guard';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { LotteryService } from './lottery.service';
 import { TurnSwapService } from './turn-swap.service';
 
@@ -21,6 +23,8 @@ export class LotteryController {
   ) {}
 
   @Post('draw/:cycleId')
+  @UseGuards(GroupPermissionsGuard)
+  @RequirePermission('canTriggerLottery')
   draw(@Param('cycleId') cycleId: string, @Request() req: { user: { id: string } }) {
     return this.lotteryService.drawWinner(cycleId, req.user.id);
   }

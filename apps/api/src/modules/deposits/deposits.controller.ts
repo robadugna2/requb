@@ -20,6 +20,7 @@ export class DepositsController {
 
   @Get()
   findAll(
+    @Request() req: any,
     @Query('cycleId') cycleId?: string,
     @Query('userId') userId?: string,
     @Query('groupId') groupId?: string,
@@ -30,7 +31,7 @@ export class DepositsController {
       userId,
       groupId,
       verificationStatus,
-    });
+    }, req.user.id, req.user.role);
   }
 
   @Get(':id')

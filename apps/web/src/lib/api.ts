@@ -629,6 +629,42 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   return response.data;
 };
 
+export const forgotPasswordRequest = async (email: string) => {
+  const response = await api.post('/auth/forgot-password-request', { email });
+  return response.data as { message: string };
+};
+
+export interface PasswordResetRequest {
+  id: string;
+  requesterId: string;
+  recipientId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionNote?: string;
+  createdAt: string;
+  updatedAt: string;
+  requester: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
+export const getPasswordResetRequests = async (): Promise<PasswordResetRequest[]> => {
+  const response = await api.get('/auth/reset-password-requests');
+  return response.data as PasswordResetRequest[];
+};
+
+export const approvePasswordReset = async (id: string, tempPassword: string): Promise<PasswordResetRequest> => {
+  const response = await api.patch(`/auth/reset-password-requests/${id}/approve`, { tempPassword });
+  return response.data as PasswordResetRequest;
+};
+
+export const rejectPasswordReset = async (id: string, rejectionNote?: string): Promise<PasswordResetRequest> => {
+  const response = await api.patch(`/auth/reset-password-requests/${id}/reject`, { rejectionNote });
+  return response.data as PasswordResetRequest;
+};
+
 // Admins
 export const getAdmins = async () => {
   const response = await api.get('/admins');

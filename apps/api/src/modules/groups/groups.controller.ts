@@ -15,6 +15,10 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GroupPermissionsGuard } from '../../common/guards/group-permissions.guard';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { RequireGroupOwner } from '../../common/decorators/require-group-owner.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { GroupsService } from './groups.service';
 import { DepositsService } from '../deposits/deposits.service';
 import { LotteryService } from '../lottery/lottery.service';
@@ -47,6 +51,8 @@ export class GroupsController {
   ) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   create(@Body() createGroupDto: CreateGroupDto, @Request() req: { user: { id: string } }) {
     return this.groupsService.create(createGroupDto, req.user.id);
   }
@@ -57,6 +63,8 @@ export class GroupsController {
   }
 
   @Get('trash')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   getTrash(@Request() req: { user: { id: string; role: string } }) {
     return this.groupsService.getTrash(req.user.id, req.user.role);
   }
@@ -67,6 +75,7 @@ export class GroupsController {
   }
 
   @Patch(':id')
+  @RequireGroupOwner()
   update(@Param('id') id: string, @Body() updateGroupDto: UpdateGroupDto) {
     return this.groupsService.update(id, updateGroupDto);
   }
@@ -99,7 +108,7 @@ export class GroupsController {
   }
 
   @Post(':id/cycles')
-  @RequirePermission('canTriggerLottery') // Wait, creating a cycle starts it. Let's gate this or allow it.
+  @RequirePermission('canTriggerLottery')
   createCycle(@Param('id') id: string) {
     return this.groupsService.createCycle(id);
   }
@@ -134,11 +143,13 @@ export class GroupsController {
   }
 
   @Patch('penalties/:penaltyId/pay')
+  @RequirePermission('canManageDeposits')
   payPenalty(@Param('penaltyId') penaltyId: string) {
     return this.penaltiesService.payPenalty(penaltyId);
   }
 
   @Patch('penalties/:penaltyId/waive')
+  @RequirePermission('canManageDeposits')
   waivePenalty(
     @Param('penaltyId') penaltyId: string,
     @Request() req: { user: { id: string } },
@@ -170,6 +181,7 @@ export class GroupsController {
   }
 
   @Patch('disputes/:disputeId/resolve')
+  @RequirePermission('canManageMembers')
   resolveDispute(
     @Param('disputeId') disputeId: string,
     @Request() req: { user: { id: string } },
@@ -186,6 +198,7 @@ export class GroupsController {
   }
 
   @Post(':id/guarantors')
+  @RequirePermission('canManageMembers')
   addGuarantor(
     @Param('id') id: string,
     @Body() body: { guarantorUserId: string; guaranteedUserId: string; notes?: string },
@@ -199,6 +212,7 @@ export class GroupsController {
   }
 
   @Patch('guarantors/:guarantorId/status')
+  @RequirePermission('canManageMembers')
   updateGuarantorStatus(
     @Param('guarantorId') guarantorId: string,
     @Body() body: { status: GuarantorStatus; notes?: string },
@@ -207,6 +221,7 @@ export class GroupsController {
   }
 
   @Delete('guarantors/:guarantorId')
+  @RequirePermission('canManageMembers')
   deleteGuarantor(@Param('guarantorId') guarantorId: string) {
     return this.guarantorsService.deleteGuarantor(guarantorId);
   }
@@ -224,6 +239,7 @@ export class GroupsController {
   }
 
   @Patch(':id/members/:userId/shares')
+  @RequirePermission('canManageMembers')
   async updateMemberShares(
     @Param('id') id: string,
     @Param('userId') userId: string,
@@ -247,6 +263,7 @@ export class GroupsController {
   }
 
   @Post(':id/merged-groups')
+  @RequirePermission('canManageMembers')
   createMergedGroup(
     @Param('id') id: string,
     @Body() body: { name?: string; userIds: string[]; totalShares?: number },
@@ -265,6 +282,7 @@ export class GroupsController {
   }
 
   @Post('merged-groups/:mergedGroupId/members')
+  @RequirePermission('canManageMembers')
   addMergedGroupMember(
     @Param('mergedGroupId') mergedGroupId: string,
     @Body('userId') userId: string,
@@ -273,6 +291,7 @@ export class GroupsController {
   }
 
   @Delete('merged-groups/:mergedGroupId/members/:userId')
+  @RequirePermission('canManageMembers')
   removeMergedGroupMember(
     @Param('mergedGroupId') mergedGroupId: string,
     @Param('userId') userId: string,
@@ -281,11 +300,13 @@ export class GroupsController {
   }
 
   @Post('merged-groups/:mergedGroupId/dissolve')
+  @RequirePermission('canManageMembers')
   dissolveMergedGroup(@Param('mergedGroupId') mergedGroupId: string) {
     return this.mergedMembersService.dissolveMergedGroup(mergedGroupId);
   }
 
   @Patch('merged-groups/:mergedGroupId/percentages')
+  @RequirePermission('canManageMembers')
   updateMergedGroupPercentages(
     @Param('mergedGroupId') mergedGroupId: string,
     @Body('percentages') percentages: Array<{ userId: string; sharePercentage: number }>,
@@ -304,6 +325,7 @@ export class GroupsController {
   }
 
   @Post('merged-groups/:mergedGroupId/enforce-compliance')
+  @RequirePermission('canManageMembers')
   enforceMergedMemberCompliance(@Param('mergedGroupId') mergedGroupId: string) {
     return this.mergedMembersService.enforceMergedMemberCompliance(mergedGroupId);
   }
@@ -316,6 +338,7 @@ export class GroupsController {
   }
 
   @Post(':id/fee-waivers')
+  @RequirePermission('canManageDeposits')
   grantFeeWaiver(
     @Param('id') id: string,
     @Request() req: { user: { id: string } },
@@ -331,6 +354,7 @@ export class GroupsController {
   }
 
   @Patch('fee-waivers/:waiverId/cancel')
+  @RequirePermission('canManageDeposits')
   cancelFeeWaiver(
     @Param('waiverId') waiverId: string,
     @Request() req: { user: { id: string } },
@@ -341,16 +365,19 @@ export class GroupsController {
   // ─── Recycle Bin Endpoints ──────────────────────────────────────────
 
   @Delete(':id')
+  @RequireGroupOwner()
   softDelete(@Param('id') id: string) {
     return this.groupsService.softDelete(id);
   }
 
   @Post(':id/restore')
+  @RequireGroupOwner()
   restore(@Param('id') id: string) {
     return this.groupsService.restore(id);
   }
 
   @Delete(':id/permanent')
+  @RequireGroupOwner()
   permanentDelete(@Param('id') id: string) {
     return this.groupsService.permanentDelete(id);
   }
@@ -363,6 +390,7 @@ export class GroupsController {
   }
 
   @Post(':id/leaders')
+  @RequireGroupOwner()
   assignLeader(
     @Param('id') id: string,
     @Body() body: { adminId: string; canManageMembers?: boolean; canManageDeposits?: boolean; canTriggerLottery?: boolean; canManageRules?: boolean },
@@ -371,6 +399,7 @@ export class GroupsController {
   }
 
   @Patch(':id/leaders/:leaderId')
+  @RequireGroupOwner()
   updateLeader(
     @Param('id') id: string,
     @Param('leaderId') leaderId: string,
@@ -380,6 +409,7 @@ export class GroupsController {
   }
 
   @Delete(':id/leaders/:leaderId')
+  @RequireGroupOwner()
   removeLeader(@Param('id') id: string, @Param('leaderId') leaderId: string) {
     return this.groupsService.removeLeader(id, leaderId);
   }

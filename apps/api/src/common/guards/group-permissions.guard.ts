@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSION_KEY } from '../decorators/require-permission.decorator';
+import { OWNER_ONLY_KEY } from '../decorators/require-group-owner.decorator';
 
 @Injectable()
 export class GroupPermissionsGuard implements CanActivate {
@@ -24,7 +25,7 @@ export class GroupPermissionsGuard implements CanActivate {
       return false;
     }
 
-    // Super Admins bypass checks
+    // Super Admins bypass all checks
     if (user.role === 'SUPER_ADMIN') {
       return true;
     }
@@ -50,7 +51,13 @@ export class GroupPermissionsGuard implements CanActivate {
 
     // Extract groupId based on other parameters if not directly present
     if (!groupId) {
-      if (params.penaltyId) {
+      if (params.cycleId) {
+        const cycle = await this.prisma.cycle.findUnique({
+          where: { id: params.cycleId },
+          select: { groupId: true },
+        });
+        groupId = cycle?.groupId;
+      } else if (params.penaltyId) {
         const penalty = await this.prisma.penaltyRecord.findUnique({
           where: { id: params.penaltyId },
           select: { groupId: true },
@@ -84,7 +91,7 @@ export class GroupPermissionsGuard implements CanActivate {
     }
 
     if (!groupId) {
-      // If no groupId can be determined, allow access (e.g. for global listings without group filter, but wait, those should be scoped inside services)
+      // If no groupId can be determined, allow access (scoped inside services)
       return true;
     }
 
@@ -95,6 +102,23 @@ export class GroupPermissionsGuard implements CanActivate {
 
     if (!group || group.deletedAt) {
       throw new NotFoundException('Group not found');
+    }
+
+    // Standard admins bypass checks if they own the group
+    if (user.role === 'ADMIN' && group.createdById === user.id) {
+      return true;
+    }
+
+    // Check if the handler requires group owner (or Super Admin) privileges
+    const isOwnerOnly = this.reflector.getAllAndOverride<boolean>(OWNER_ONLY_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isOwnerOnly) {
+      // Since standard ADMIN ownership was handled above, and SUPER_ADMIN was handled at the top,
+      // any remaining role (e.g. SUB_ADMIN, or ADMIN who doesn't own this group) is forbidden.
+      throw new ForbiddenException('Only the group owner or super admin can perform this action');
     }
 
     // Check if user is assigned as a leader to this group

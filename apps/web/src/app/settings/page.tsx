@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Lock, Eye, EyeOff, Shield, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Button from '@/components/ui/Button';
 import { changePassword } from '@/lib/api';
@@ -9,6 +10,10 @@ import { useLanguage, Language } from '@/components/layout/LanguageContext';
 
 export default function SettingsPage() {
   const { language, setLanguage, t } = useLanguage();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const mustChange = searchParams.get('mustChange') === '1';
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,10 +40,17 @@ export default function SettingsPage() {
     try {
       await changePassword(currentPassword, newPassword);
       setSuccess('Password changed successfully!');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setTimeout(() => setSuccess(null), 4000);
+      
+      if (mustChange) {
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+      } else {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setSuccess(null), 4000);
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(
@@ -58,6 +70,19 @@ export default function SettingsPage() {
           {t('settings.subtitle')}
         </p>
       </div>
+
+      {mustChange && (
+        <div className="mb-6 p-4 rounded-xl bg-orange-50 border border-orange-200 flex gap-3 items-start shadow-sm max-w-xl">
+          <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold text-orange-900">Action Required: Temporary Password Detected</h3>
+            <p className="text-sm text-orange-700 mt-1 leading-relaxed">
+              You are currently logged in using a temporary password set by your administrator.
+              For security reasons, you must change your password before continuing.
+            </p>
+          </div>
+        </div>
+      )}
 
       {success && (
         <div className="mb-6 p-4 rounded-lg bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">

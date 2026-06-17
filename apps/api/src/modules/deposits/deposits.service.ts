@@ -32,12 +32,16 @@ export class DepositsService {
     private readonly penaltiesService: PenaltiesService,
   ) {}
 
-  async findAll(filters?: {
-    cycleId?: string;
-    userId?: string;
-    groupId?: string;
-    verificationStatus?: string;
-  }) {
+  async findAll(
+    filters?: {
+      cycleId?: string;
+      userId?: string;
+      groupId?: string;
+      verificationStatus?: string;
+    },
+    requesterId?: string,
+    requesterRole?: string,
+  ) {
     const where: Prisma.DepositWhereInput = {};
 
     if (filters?.cycleId) {
@@ -51,6 +55,26 @@ export class DepositsService {
     if (filters?.groupId) {
       where.cycle = {
         groupId: filters.groupId,
+      };
+    }
+
+    if (requesterRole === 'ADMIN' && requesterId) {
+      where.cycle = {
+        ...where.cycle,
+        group: {
+          createdById: requesterId,
+        },
+      };
+    } else if (requesterRole === 'SUB_ADMIN' && requesterId) {
+      where.cycle = {
+        ...where.cycle,
+        group: {
+          leaders: {
+            some: {
+              adminId: requesterId,
+            },
+          },
+        },
       };
     }
 
