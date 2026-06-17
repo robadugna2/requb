@@ -1,28 +1,49 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { JwtPayload } from '../auth/jwt.strategy';
 
 @Injectable()
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getStats() {
-    const [totalGroups, activeMembers, pendingReceipts, totalCollectedRaw] =
+  private getGroupWhereClause(user: JwtPayload) {
+    const whereClause: any = { deletedAt: null };
+
+    if (user.role === 'SUB_ADMIN') {
+      whereClause.leaders = {
+        some: { adminId: user.id },
+      };
+    } else if (user.role === 'ADMIN') {
+      whereClause.createdById = user.id;
+    }
+
+    return whereClause;
+  }
+
+  async getStats(user: JwtPayload) {
+    const groupWhere = this.getGroupWhereClause(user);
+
+    const [totalGroups, activeMembers, pendingReceipts, totalCollectedRaw, adminRecord] =
       await Promise.all([
         this.prisma.equbGroup.count({
-          where: { status: 'ACTIVE' },
+          where: { ...groupWhere, status: 'ACTIVE' },
         }),
         this.prisma.groupMembership.findMany({
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE', group: groupWhere },
           select: { userId: true },
           distinct: ['userId'],
         }),
         this.prisma.deposit.count({
-          where: { verificationStatus: 'PENDING' },
+          where: { verificationStatus: 'PENDING', cycle: { group: groupWhere } },
         }),
         this.prisma.deposit.aggregate({
-          where: { verificationStatus: 'VERIFIED' },
+          where: { verificationStatus: 'VERIFIED', cycle: { group: groupWhere } },
           _sum: { amount: true },
         }),
+        this.prisma.admin.findUnique({
+          where: { id: user.id },
+          include: { createdBy: { select: { name: true } } }
+        })
       ]);
 
     const sum = totalCollectedRaw._sum.amount || 0;
@@ -33,14 +54,21 @@ export class DashboardService {
       activeMembers: activeMembers.length,
       pendingReceipts,
       totalCollected,
+      user: {
+        name: adminRecord?.name || user.name,
+        role: adminRecord?.role || user.role,
+        creator: adminRecord?.createdBy?.name
+      }
     };
   }
 
-  async getActivity() {
+  async getActivity(user: JwtPayload) {
+    const groupWhere = this.getGroupWhereClause(user);
+
     const [recentDeposits, recentVerifications, recentLotteries] =
       await Promise.all([
         this.prisma.deposit.findMany({
-          where: { verificationStatus: 'PENDING' },
+          where: { verificationStatus: 'PENDING', cycle: { group: groupWhere } },
           orderBy: { createdAt: 'desc' },
           take: 15,
           include: {
@@ -51,6 +79,7 @@ export class DashboardService {
         this.prisma.deposit.findMany({
           where: {
             verificationStatus: { in: ['VERIFIED', 'REJECTED'] },
+            cycle: { group: groupWhere }
           },
           orderBy: { createdAt: 'desc' },
           take: 15,
@@ -60,6 +89,7 @@ export class DashboardService {
           },
         }),
         this.prisma.lotteryResult.findMany({
+          where: { cycle: { group: groupWhere } },
           orderBy: { drawnAt: 'desc' },
           take: 15,
           include: {
@@ -115,7 +145,8 @@ export class DashboardService {
     return activities.slice(0, 15).map(({ timestamp, ...rest }) => rest);
   }
 
-  async getDepositsChart() {
+  async getDepositsChart(user: JwtPayload) {
+    const groupWhere = this.getGroupWhereClause(user);
     const months: { date: string; deposits: number; verified: number }[] = [];
     const now = new Date();
 
@@ -129,6 +160,7 @@ export class DashboardService {
         this.prisma.deposit.aggregate({
           where: {
             createdAt: { gte: start, lt: end },
+            cycle: { group: groupWhere }
           },
           _sum: { amount: true },
         }),
@@ -136,6 +168,7 @@ export class DashboardService {
           where: {
             createdAt: { gte: start, lt: end },
             verificationStatus: 'VERIFIED',
+            cycle: { group: groupWhere }
           },
           _sum: { amount: true },
         }),

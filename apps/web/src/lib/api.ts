@@ -319,6 +319,11 @@ export interface DashboardStats {
   activeMembers: number;
   pendingReceipts: number;
   totalCollected: string;
+  user?: {
+    name: string;
+    role: string;
+    creator?: string;
+  };
 }
 
 export interface ActivityItem {

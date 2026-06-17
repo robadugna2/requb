@@ -200,8 +200,30 @@ export default function DashboardPage() {
       {/* ── Header ── */}
       <div className="mb-7 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{greeting()}, Admin 👋</h1>
-          <p className="mt-1 text-sm text-gray-400">{todayLabel()} (Ge'ez: {getEthiopianDateString()}) · {t('db.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{greeting()}, {stats.user?.name || 'Admin'} 👋</h1>
+          <div className="mt-1 flex items-center gap-2 flex-wrap text-sm">
+            <span className="text-gray-400">{todayLabel()} (Ge'ez: {getEthiopianDateString()})</span>
+            {stats.user?.role && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tracking-wide uppercase ${
+                  stats.user.role === 'SUPER_ADMIN' ? 'bg-primary-50 text-primary-600 border border-primary-100' :
+                  stats.user.role === 'ADMIN' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                  'bg-amber-50 text-amber-600 border border-amber-100'
+                }`}>
+                  {stats.user.role.replace('_', ' ')}
+                </span>
+              </>
+            )}
+            {stats.user?.creator && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="text-gray-500 flex items-center gap-1">
+                  Managed by <span className="font-semibold text-gray-700">{stats.user.creator}</span>
+                </span>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button

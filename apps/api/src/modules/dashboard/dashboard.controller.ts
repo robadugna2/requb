@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
 
@@ -8,17 +8,17 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('stats')
-  getStats() {
-    return this.dashboardService.getStats();
+  getStats(@Request() req: any) {
+    return this.dashboardService.getStats(req.user);
   }
 
   @Get('activity')
-  getActivity() {
-    return this.dashboardService.getActivity();
+  getActivity(@Request() req: any) {
+    return this.dashboardService.getActivity(req.user);
   }
 
   @Get('deposits-chart')
-  getDepositsChart() {
-    return this.dashboardService.getDepositsChart();
+  getDepositsChart(@Request() req: any) {
+    return this.dashboardService.getDepositsChart(req.user);
   }
 }
