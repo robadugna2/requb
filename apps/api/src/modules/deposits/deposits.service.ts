@@ -60,18 +60,22 @@ export class DepositsService {
 
     if (requesterRole === 'ADMIN' && requesterId) {
       where.cycle = {
-        ...where.cycle,
+        ...(where.cycle as Prisma.CycleWhereInput),
         group: {
-          createdById: requesterId,
+          is: {
+            createdById: requesterId,
+          },
         },
       };
     } else if (requesterRole === 'SUB_ADMIN' && requesterId) {
       where.cycle = {
-        ...where.cycle,
+        ...(where.cycle as Prisma.CycleWhereInput),
         group: {
-          leaders: {
-            some: {
-              adminId: requesterId,
+          is: {
+            leaders: {
+              some: {
+                adminId: requesterId,
+              },
             },
           },
         },
