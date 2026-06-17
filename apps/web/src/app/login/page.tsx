@@ -523,10 +523,14 @@ export default function LoginPage() {
                   />
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{t('login.remember')}</span>
                 </label>
-                <button
+                  <button
                     type="button"
-                    onClick={openForgotModal}
-                    style={{ fontSize: 13, fontWeight: 600, color: '#ffd700', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openForgotModal();
+                    }}
+                    style={{ fontSize: 13, fontWeight: 600, color: '#ffd700', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', position: 'relative', zIndex: 50 }}
                   >
                     Forgot password?
                   </button>
@@ -578,9 +582,10 @@ export default function LoginPage() {
       {showForgotModal && (
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(0,0,0,0.65)',
+            position: 'fixed', inset: 0, zIndex: 99999,
+            background: 'rgba(0,0,0,0.75)',
             backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 24,
             animation: 'fadeIn 0.2s ease',
@@ -589,12 +594,13 @@ export default function LoginPage() {
         >
           <div style={{
             width: '100%', maxWidth: 420,
-            background: 'rgba(20,28,70,0.96)',
+            background: 'rgba(20,28,70,0.98)',
             backdropFilter: 'blur(32px)',
-            border: '1.5px solid rgba(255,215,0,0.22)',
+            WebkitBackdropFilter: 'blur(32px)',
+            border: '1.5px solid rgba(255,215,0,0.3)',
             borderRadius: 20,
             padding: '36px 32px',
-            boxShadow: '0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1)',
             animation: 'slideUp 0.25s ease',
             position: 'relative',
           }}>
