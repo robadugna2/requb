@@ -24,8 +24,8 @@ export class UsersController {
   }
 
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@Request() req: any) {
+    return this.usersService.findAll(req.user.id, req.user.role);
   }
 
   @Get(':id')

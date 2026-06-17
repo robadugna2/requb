@@ -46,8 +46,13 @@ export class RuleTemplatesService {
     });
   }
 
-  async findAll() {
+  async findAll(adminId?: string, role?: string) {
+    const where: any = role && role !== 'SUPER_ADMIN' && adminId
+      ? { createdById: adminId }
+      : {};
+
     return this.prisma.ruleTemplate.findMany({
+      where,
       include: {
         createdBy: {
           select: { id: true, name: true, email: true },

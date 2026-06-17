@@ -30,8 +30,8 @@ export class LotteryController {
   }
 
   @Get('results')
-  getResults(@Query('groupId') groupId?: string) {
-    return this.lotteryService.getResults(groupId);
+  getResults(@Query('groupId') groupId?: string, @Request() req?: any) {
+    return this.lotteryService.getResults(groupId, req?.user?.id, req?.user?.role);
   }
 
   // ─── Turn Swap Endpoints ────────────────────────────────────────

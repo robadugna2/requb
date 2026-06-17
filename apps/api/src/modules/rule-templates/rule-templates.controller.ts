@@ -30,8 +30,8 @@ export class RuleTemplatesController {
   }
 
   @Get()
-  findAll() {
-    return this.ruleTemplatesService.findAll();
+  findAll(@Request() req: any) {
+    return this.ruleTemplatesService.findAll(req.user.id, req.user.role);
   }
 
   @Get(':id')

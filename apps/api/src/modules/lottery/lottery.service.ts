@@ -223,24 +223,27 @@ export class LotteryService {
     return lotteryResult;
   }
 
-  async getResults(groupId?: string) {
+  async getResults(groupId?: string, adminId?: string, role?: string) {
+    let groupWhere: any = { deletedAt: null };
+
+    if (role === 'ADMIN' && adminId) {
+      groupWhere.createdById = adminId;
+    } else if (role === 'SUB_ADMIN' && adminId) {
+      groupWhere.leaders = { some: { adminId } };
+    }
+
     if (groupId) {
-      // Verify group exists
       const group = await this.prisma.equbGroup.findUnique({
         where: { id: groupId },
       });
-
       if (!group) {
         throw new NotFoundException(`Group with ID ${groupId} not found`);
       }
+      groupWhere.id = groupId;
     }
 
-    const where = groupId
-      ? { cycle: { groupId } }
-      : {};
-
     return this.prisma.lotteryResult.findMany({
-      where,
+      where: { cycle: { group: groupWhere } },
       include: {
         winner: true,
         cycle: {

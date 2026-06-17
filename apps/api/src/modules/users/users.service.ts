@@ -41,8 +41,30 @@ export class UsersService {
     });
   }
 
-  async findAll() {
+  async findAll(adminId?: string, role?: string) {
+    let membershipFilter: any = undefined;
+
+    if (role === 'ADMIN' && adminId) {
+      membershipFilter = {
+        some: {
+          group: { createdById: adminId, deletedAt: null },
+          status: 'ACTIVE',
+        },
+      };
+    } else if (role === 'SUB_ADMIN' && adminId) {
+      membershipFilter = {
+        some: {
+          group: {
+            deletedAt: null,
+            leaders: { some: { adminId } },
+          },
+          status: 'ACTIVE',
+        },
+      };
+    }
+
     return this.prisma.user.findMany({
+      where: membershipFilter ? { memberships: membershipFilter } : undefined,
       include: {
         memberships: {
           include: { group: true },
