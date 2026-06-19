@@ -112,6 +112,7 @@ model User {
   subCity          String?         @map("sub_city")
   woreda           String?
   houseNumber      String?         @map("house_number")
+  bankAccountName  String?         @map("bank_account_name")
   language         String          @default("en")
   reliabilityScore Float           @default(100) @map("reliability_score") // 0-100 scale
   createdAt        DateTime        @default(now()) @map("created_at")
