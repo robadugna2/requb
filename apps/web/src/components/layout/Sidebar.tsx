@@ -36,28 +36,26 @@ export default function Sidebar() {
   const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
   const { language, setLanguage, t } = useLanguage();
-  const [userContext, setUserContext] = useState<{name: string, email: string, role: string} | null>(null);
-
-  useEffect(() => {
+  const [userContext] = useState<{name: string, email: string, role: string} | null>(() => {
+    if (typeof window === 'undefined') return null;
     const token = localStorage.getItem('equb_token');
-    if (token) {
-      try {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        const payload = JSON.parse(jsonPayload);
-        setUserContext({
-           name: payload.name || 'Admin',
-           email: payload.email || '',
-           role: payload.role || 'ADMIN'
-        });
-      } catch (e) {
-        console.error("Failed to parse JWT");
-      }
+    if (!token) return null;
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      const payload = JSON.parse(jsonPayload);
+      return {
+        name: payload.name || 'Admin',
+        email: payload.email || '',
+        role: payload.role || 'ADMIN'
+      };
+    } catch {
+      return null;
     }
-  }, []);
+  });
 
   useEffect(() => {
     const fetchCount = () => {

@@ -42,27 +42,19 @@ function parseJwt(): { role: string; id: string } | null {
 }
 
 export function useAdminPermissions(): AdminPermissions {
-  const [role, setRole] = useState<string>('');
-  const [userId, setUserId] = useState<string>('');
-  const [isFullAccess, setIsFullAccess] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  // Parse JWT synchronously on first render to avoid flickering
+  const [parsed] = useState<{ role: string; id: string } | null>(() => parseJwt());
+  const initialRole = parsed?.role || '';
+  const initialUserId = parsed?.id || '';
+  const initialIsFullAccess = initialRole === 'SUPER_ADMIN' || initialRole === 'ADMIN';
+  // Only SUB_ADMINs need async loading for per-group permissions
+  const initialLoading = !!parsed && !initialIsFullAccess;
+
+  const [loading, setLoading] = useState<boolean>(initialLoading);
   const [permissionsByGroup, setPermissionsByGroup] = useState<Record<string, GroupPermissions>>({});
 
   useEffect(() => {
-    const parsed = parseJwt();
-    if (!parsed) {
-      setLoading(false);
-      return;
-    }
-
-    setRole(parsed.role);
-    setUserId(parsed.id);
-
-    if (parsed.role === 'SUPER_ADMIN' || parsed.role === 'ADMIN') {
-      setIsFullAccess(true);
-      setLoading(false);
-      return;
-    }
+    if (!parsed || initialIsFullAccess) return;
 
     // SUB_ADMIN: fetch groups and then leaders for each group
     const fetchPermissions = async () => {
@@ -100,7 +92,7 @@ export function useAdminPermissions(): AdminPermissions {
     fetchPermissions();
   }, []);
 
-  return { role, userId, isFullAccess, loading, permissionsByGroup };
+  return { role: initialRole, userId: initialUserId, isFullAccess: initialIsFullAccess, loading, permissionsByGroup };
 }
 
 /** Check if user has a specific permission for a given group */
