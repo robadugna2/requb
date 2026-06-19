@@ -12,6 +12,7 @@ import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { getGroups, createGroup, getRuleTemplates, getTrashGroups, restoreGroup, softDeleteGroup, permanentDeleteGroup } from '@/lib/api';
 import type { GroupListItem, RuleTemplate } from '@/lib/api';
+import { useAdminPermissions } from '@/lib/useAdminPermissions';
 
 export default function GroupsPage() {
   const { t } = useLanguage();
@@ -102,6 +103,9 @@ export default function GroupsPage() {
     fetchGroupsAndTemplates();
   }, []);
 
+  const permissions = useAdminPermissions();
+  const canCreateGroup = permissions.isFullAccess;
+
   const openCreateModal = () => {
     setError(null);
     setShowCreateModal(true);
@@ -180,13 +184,17 @@ export default function GroupsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" onClick={openTrashModal}>
-            Recycle Bin
-          </Button>
-          <Button onClick={openCreateModal}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('groups.create_btn')}
-          </Button>
+          {canCreateGroup && (
+            <Button variant="secondary" onClick={openTrashModal}>
+              Recycle Bin
+            </Button>
+          )}
+          {canCreateGroup && (
+            <Button onClick={openCreateModal}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('groups.create_btn')}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -308,7 +316,7 @@ export default function GroupsPage() {
               ? t('groups.no_groups_match')
               : t('groups.no_groups_desc')}
           </p>
-          {!searchQuery && (
+          {!searchQuery && canCreateGroup && (
             <Button onClick={openCreateModal} className="mt-4">
               <Plus className="h-4 w-4 mr-2" />
               {t('groups.create_btn')}

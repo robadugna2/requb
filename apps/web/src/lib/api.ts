@@ -80,6 +80,7 @@ export interface GroupDetail {
   totalCycles: number;
   members: GroupMember[];
   nextDrawDate?: string;
+  createdById?: string;
 }
 
 export interface GroupMember {
@@ -237,6 +238,7 @@ export interface ReceiptItem {
   id: string;
   memberName: string;
   groupName: string;
+  groupId: string;
   amount: number;
   status: 'verified' | 'pending' | 'rejected';
   date: string;
@@ -434,6 +436,8 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
     nextDrawDate = (latestCycle.endDate as string)?.split('T')[0];
   }
 
+  const createdBy = raw.createdBy as Record<string, unknown> | undefined;
+
   return {
     id: raw.id as string,
     name: raw.name as string,
@@ -452,6 +456,7 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
     totalCycles: raw.maxMembers as number,
     members,
     nextDrawDate,
+    createdById: (raw.createdById as string) || (createdBy?.id as string) || undefined,
   };
 }
 
@@ -582,6 +587,7 @@ function mapReceiptItem(raw: Record<string, unknown>): ReceiptItem {
     id: raw.id as string,
     memberName: (user?.name as string) || 'Unknown',
     groupName: (group?.name as string) || 'Unknown',
+    groupId: (group?.id as string) || '',
     amount: (raw.amount as number) || (group?.contributionAmount as number) || 0,
     status: mapVerificationStatus(raw.verificationStatus as string),
     date: raw.createdAt ? new Date(raw.createdAt as string).toLocaleDateString('en-CA') : 'N/A',

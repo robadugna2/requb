@@ -10,6 +10,7 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import Button from '@/components/ui/Button';
 import { getLotteryResults, triggerLottery, getGroups, getGroup, getGroupRules } from '@/lib/api';
 import type { LotteryResultItem, GroupListItem, GroupDetail, GroupRules } from '@/lib/api';
+import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
 // ── Segment Colors ───────────────────────────────────────────────────────────
 const PALETTE = [
@@ -93,6 +94,7 @@ const sounds = new SoundController();
 
 export default function LotteryPage() {
   const { t } = useLanguage();
+  const permissions = useAdminPermissions();
   const [results, setResults] = useState<LotteryResultItem[]>([]);
   const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -580,7 +582,7 @@ export default function LotteryPage() {
                     >
                       <option value="">Choose an active group</option>
                       {groups
-                        .filter((g) => g.status === 'active')
+                        .filter((g) => g.status === 'active' && hasPermission(permissions, g.id, 'canTriggerLottery'))
                         .map((group) => (
                           <option key={group.id} value={group.id}>
                             {group.name} (Cycle {group.currentCycle})
@@ -591,7 +593,7 @@ export default function LotteryPage() {
                   <Button
                     onClick={handleDraw}
                     loading={isDrawing}
-                    disabled={!selectedGroupId || detailsLoading || eligibleRef.current.length === 0}
+                    disabled={!selectedGroupId || detailsLoading || eligibleRef.current.length === 0 || !hasPermission(permissions, selectedGroupId, 'canTriggerLottery')}
                     size="lg"
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30"
                   >

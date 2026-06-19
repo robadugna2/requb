@@ -16,9 +16,11 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import { getDeposits, verifyDeposit, rejectDeposit, getMediaUrl } from '@/lib/api';
 import type { ReceiptItem } from '@/lib/api';
+import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
 export default function ReceiptsPage() {
   const { t } = useLanguage();
+  const permissions = useAdminPermissions();
   const [receipts, setReceipts] = useState<ReceiptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -360,7 +362,7 @@ export default function ReceiptsPage() {
                 <Badge status={selectedReceipt.status} />
               </div>
 
-              {selectedReceipt.status === 'pending' && (
+              {selectedReceipt.status === 'pending' && hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits') && (
                 <div className="flex gap-3">
                   <Button
                     variant="danger"

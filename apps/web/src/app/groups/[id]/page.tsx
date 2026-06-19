@@ -40,6 +40,7 @@ import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLotter
 import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem, GroupLeaderItem, AdminUserItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
+import { useAdminPermissions } from '@/lib/useAdminPermissions';
 
 const PENALTY_TYPES = [
   { value: 'NONE', label: 'No Penalty' },
@@ -96,6 +97,8 @@ function formatEmployment(type?: string) {
   return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+type TabKey = 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares' | 'leaders';
+
 export default function GroupDetailPage() {
   const { t } = useLanguage();
   const params = useParams();
@@ -106,7 +109,7 @@ export default function GroupDetailPage() {
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawLoading, setDrawLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares' | 'leaders'>('deposits');
+  const [activeTab, setActiveTab] = useState<TabKey>('deposits');
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
@@ -219,6 +222,41 @@ export default function GroupDetailPage() {
     woreda: '',
     houseNumber: '',
   });
+
+  const permissions = useAdminPermissions();
+  const groupPerms = permissions.permissionsByGroup[groupId];
+
+  // Determine if user is owner or super admin
+  const isOwnerOrSuper = permissions.role === 'SUPER_ADMIN' ||
+    (permissions.role === 'ADMIN' && group?.createdById === permissions.userId);
+
+  // Compute visible tabs based on permissions
+  const visibleTabs: TabKey[] = (() => {
+    if (permissions.loading || !group) return []; // Still loading
+    if (isOwnerOrSuper) return ['deposits', 'members', 'rules', 'penalties', 'disputes', 'swaps', 'guarantors', 'shares', 'leaders'];
+    if (permissions.isFullAccess) return ['deposits', 'members', 'rules', 'penalties', 'disputes', 'swaps', 'guarantors', 'shares'];
+
+    const tabs: TabKey[] = [];
+    if (groupPerms?.canManageDeposits) {
+      tabs.push('deposits', 'penalties');
+    }
+    if (groupPerms?.canManageMembers) {
+      tabs.push('members', 'disputes', 'swaps', 'guarantors', 'shares');
+    }
+    if (groupPerms?.canManageRules) {
+      tabs.push('rules');
+    }
+    return tabs;
+  })();
+
+  // Reset activeTab if current tab is not visible
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0]);
+    }
+  }, [visibleTabs.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canTriggerLottery = permissions.isFullAccess || (groupPerms?.canTriggerLottery ?? false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -574,7 +612,7 @@ export default function GroupDetailPage() {
     } catch { setError('Failed to send swap request.'); } finally { setRequestingSwap(false); }
   };
 
-  const handleTabChange = (tab: 'deposits' | 'members' | 'rules' | 'penalties' | 'disputes' | 'swaps' | 'guarantors' | 'shares' | 'leaders') => {
+  const handleTabChange = (tab: TabKey) => {
     setActiveTab(tab);
     if (tab === 'rules') { fetchRules(); fetchTemplates(); }
     if (tab === 'penalties') fetchPenalties();
@@ -965,54 +1003,60 @@ export default function GroupDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setEditGroupForm({
-                  name: group.name,
-                  description: group.description || '',
-                  contributionAmount: String(group.contributionAmount),
-                  maxMembers: String(group.maxMembers),
-                  cycleDuration: group.cycleDuration || 'Weekly',
-                  photoUrl: group.photoUrl || '',
-                  endDate: group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '',
-                  physicalAddress: group.physicalAddress || '',
-                  latitude: group.latitude ? String(group.latitude) : '',
-                  longitude: group.longitude ? String(group.longitude) : '',
-                });
-                setShowEditGroupModal(true);
-              }}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Edit Info
-            </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                const groupName = prompt(`To delete this group, please type its name: "${group.name}"`);
-                if (groupName !== group.name) {
-                  if (groupName !== null) alert('Group name did not match. Deletion cancelled.');
-                  return;
-                }
-                try {
-                  await import('@/lib/api').then(m => m.softDeleteGroup(groupId));
-                  router.push('/groups');
-                } catch (err: unknown) {
-                  const axiosErr = err as { response?: { data?: { message?: string } } };
-                  setError(axiosErr.response?.data?.message || 'Failed to delete group.');
-                }
-              }}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Group
-            </Button>
-            <Button
-              onClick={handleLotteryDraw}
-              loading={drawLoading}
-            >
-              <Ticket className="h-4 w-4 mr-2" />
-              {t('group.draw_lottery')}
-            </Button>
+            {isOwnerOrSuper && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditGroupForm({
+                    name: group.name,
+                    description: group.description || '',
+                    contributionAmount: String(group.contributionAmount),
+                    maxMembers: String(group.maxMembers),
+                    cycleDuration: group.cycleDuration || 'Weekly',
+                    photoUrl: group.photoUrl || '',
+                    endDate: group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '',
+                    physicalAddress: group.physicalAddress || '',
+                    latitude: group.latitude ? String(group.latitude) : '',
+                    longitude: group.longitude ? String(group.longitude) : '',
+                  });
+                  setShowEditGroupModal(true);
+                }}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Edit Info
+              </Button>
+            )}
+            {isOwnerOrSuper && (
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  const groupName = prompt(`To delete this group, please type its name: "${group.name}"`);
+                  if (groupName !== group.name) {
+                    if (groupName !== null) alert('Group name did not match. Deletion cancelled.');
+                    return;
+                  }
+                  try {
+                    await import('@/lib/api').then(m => m.softDeleteGroup(groupId));
+                    router.push('/groups');
+                  } catch (err: unknown) {
+                    const axiosErr = err as { response?: { data?: { message?: string } } };
+                    setError(axiosErr.response?.data?.message || 'Failed to delete group.');
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Group
+              </Button>
+            )}
+            {canTriggerLottery && (
+              <Button
+                onClick={handleLotteryDraw}
+                loading={drawLoading}
+              >
+                <Ticket className="h-4 w-4 mr-2" />
+                {t('group.draw_lottery')}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1066,77 +1110,97 @@ export default function GroupDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => handleTabChange('deposits')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'deposits'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          {t('group.tab_deposits')}
-        </button>
-        <button
-          onClick={() => handleTabChange('members')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'members'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          {t('group.tab_members')}
-        </button>
-        <button
-          onClick={() => handleTabChange('rules')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'rules'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <span className="flex items-center gap-1.5">
-            <Settings className="h-3.5 w-3.5" />
-            {t('group.tab_rules')}
-          </span>
-        </button>
-        <button
-          onClick={() => handleTabChange('penalties')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'penalties' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" />{t('group.tab_penalties')}</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('disputes')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'disputes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><Gavel className="h-3.5 w-3.5" />{t('group.tab_disputes')}</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('swaps')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'swaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" />{t('group.tab_swaps')}</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('guarantors')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'guarantors' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />{t('group.tab_guarantors')}</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('shares')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'shares' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" />{t('group.tab_shares')}</span>
-        </button>
-        <button
-          onClick={() => handleTabChange('leaders')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'leaders' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />Leaders</span>
-        </button>
-      </div>
+      {visibleTabs.length > 0 && (
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
+          {visibleTabs.includes('deposits') && (
+            <button
+              onClick={() => handleTabChange('deposits')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTab === 'deposits'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t('group.tab_deposits')}
+            </button>
+          )}
+          {visibleTabs.includes('members') && (
+            <button
+              onClick={() => handleTabChange('members')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTab === 'members'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t('group.tab_members')}
+            </button>
+          )}
+          {visibleTabs.includes('rules') && (
+            <button
+              onClick={() => handleTabChange('rules')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                activeTab === 'rules'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Settings className="h-3.5 w-3.5" />
+                {t('group.tab_rules')}
+              </span>
+            </button>
+          )}
+          {visibleTabs.includes('penalties') && (
+            <button
+              onClick={() => handleTabChange('penalties')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'penalties' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><Ban className="h-3.5 w-3.5" />{t('group.tab_penalties')}</span>
+            </button>
+          )}
+          {visibleTabs.includes('disputes') && (
+            <button
+              onClick={() => handleTabChange('disputes')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'disputes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><Gavel className="h-3.5 w-3.5" />{t('group.tab_disputes')}</span>
+            </button>
+          )}
+          {visibleTabs.includes('swaps') && (
+            <button
+              onClick={() => handleTabChange('swaps')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'swaps' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><ArrowLeftRight className="h-3.5 w-3.5" />{t('group.tab_swaps')}</span>
+            </button>
+          )}
+          {visibleTabs.includes('guarantors') && (
+            <button
+              onClick={() => handleTabChange('guarantors')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'guarantors' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />{t('group.tab_guarantors')}</span>
+            </button>
+          )}
+          {visibleTabs.includes('shares') && (
+            <button
+              onClick={() => handleTabChange('shares')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'shares' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" />{t('group.tab_shares')}</span>
+            </button>
+          )}
+          {visibleTabs.includes('leaders') && (
+            <button
+              onClick={() => handleTabChange('leaders')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'leaders' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" />Leaders</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Deposits Table */}
       {activeTab === 'deposits' && (

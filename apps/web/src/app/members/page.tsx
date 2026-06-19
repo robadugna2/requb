@@ -10,6 +10,7 @@ import Modal from '@/components/ui/Modal';
 import { getMembers, createMember, getGroups, addMemberToGroup } from '@/lib/api';
 import type { MemberListItem, GroupListItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
+import { useAdminPermissions, hasPermission, hasAnyGroupPermission } from '@/lib/useAdminPermissions';
 
 const EMPLOYMENT_TYPES = [
   { value: '', label: 'Select...' },
@@ -33,6 +34,7 @@ const MARITAL_STATUSES = [
 export default function MembersPage() {
   const { t } = useLanguage();
   const router = useRouter();
+  const permissions = useAdminPermissions();
   const [members, setMembers] = useState<MemberListItem[]>([]);
   const [groups, setGroups] = useState<GroupListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,10 +174,12 @@ export default function MembersPage() {
             {t('members.subtitle')} ({members.length})
           </p>
         </div>
-        <Button onClick={openCreateModal}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t('members.add_btn')}
-        </Button>
+        {hasAnyGroupPermission(permissions, 'canManageMembers') && (
+          <Button onClick={openCreateModal}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t('members.add_btn')}
+          </Button>
+        )}
       </div>
 
       {success && (
@@ -516,7 +520,7 @@ export default function MembersPage() {
                   className="input-field"
                 >
                   <option value="">None</option>
-                  {groups.map(g => (
+                  {groups.filter(g => hasPermission(permissions, g.id, 'canManageMembers')).map(g => (
                     <option key={g.id} value={g.id}>{g.name} (ETB {g.contributionAmount.toLocaleString()} / full share)</option>
                   ))}
                 </select>
