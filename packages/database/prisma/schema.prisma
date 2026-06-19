@@ -226,6 +226,7 @@ model Deposit {
   senderAccount      String?            @map("sender_account")
   receiverAccount    String?            @map("receiver_account")
   branch             String?
+  narrative          String?            // Transfer method/description (e.g. "done via Mobile")
   verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
   verifiedById       String?            @map("verified_by_id")
   rejectionReason    String?            @map("rejection_reason")
