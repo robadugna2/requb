@@ -43,6 +43,12 @@ api.interceptors.response.use(
         }
       }
     }
+    if (error.response?.status === 403) {
+      if (typeof window !== 'undefined') {
+        const message = error.response?.data?.message || 'You do not have permission to perform this action.';
+        window.dispatchEvent(new CustomEvent('equb-permission-denied', { detail: { message } }));
+      }
+    }
     return Promise.reject(error);
   }
 );

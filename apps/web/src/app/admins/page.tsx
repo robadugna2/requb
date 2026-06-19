@@ -39,10 +39,13 @@ import { format } from 'date-fns';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import { useAdminPermissions } from '@/lib/useAdminPermissions';
 
 export default function AdminsPage() {
   const { t } = useLanguage();
   const router = useRouter();
+  const permissions = useAdminPermissions();
+  const canManageAdmins = permissions.isFullAccess;
   const [admins, setAdmins] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -295,17 +298,19 @@ export default function AdminsPage() {
               <p className="text-sm text-gray-500">Manage platform administrators and sub-admins</p>
             </div>
           </div>
-          <Button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Add Admin
-          </Button>
+          {canManageAdmins && (
+            <Button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Admin
+            </Button>
+          )}
         </div>
 
         {/* Password Reset Requests Inbox */}
-        {(resetRequests.length > 0 || resetRequestsLoading) && (
+        {canManageAdmins && (resetRequests.length > 0 || resetRequestsLoading) && (
           <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 bg-amber-50 border-b border-amber-100">
               <div className="flex items-center gap-2">
@@ -397,17 +402,17 @@ export default function AdminsPage() {
                   <th className="p-4">Status</th>
                   <th className="p-4">Created By</th>
                   <th className="p-4">Groups</th>
-                  <th className="p-4 text-right">Actions</th>
+                  {canManageAdmins && <th className="p-4 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-400">Loading admins...</td>
+                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400">Loading admins...</td>
                   </tr>
                 ) : filteredAdmins.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-400">No admins found</td>
+                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400">No admins found</td>
                   </tr>
                 ) : (
                   filteredAdmins.map((admin) => (
@@ -447,47 +452,53 @@ export default function AdminsPage() {
                       </td>
                       <td className="p-4 text-sm text-gray-700">
                         {admin.role === 'SUB_ADMIN' ? (
-                           <button 
+                          canManageAdmins ? (
+                            <button 
                               onClick={() => openAssignModal(admin)}
                               className="text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
-                           >
+                            >
                               {admin._count?.groupLeadership || 0} assigned
-                           </button>
+                            </button>
+                          ) : (
+                            <span className="text-gray-600">{admin._count?.groupLeadership || 0} assigned</span>
+                          )
                         ) : (
                           <span className="text-gray-400">All (Owned)</span>
                         )}
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center justify-end gap-2">
-                          {admin.role === 'SUB_ADMIN' && (
+                      {canManageAdmins && (
+                        <td className="p-4">
+                          <div className="flex items-center justify-end gap-2">
+                            {admin.role === 'SUB_ADMIN' && (
+                              <button
+                                onClick={() => openAssignModal(admin)}
+                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+                                title="Manage Groups"
+                              >
+                                <Shield className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
-                              onClick={() => openAssignModal(admin)}
-                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
-                              title="Manage Groups"
+                              onClick={() => handleToggleStatus(admin)}
+                              className={`p-2 rounded-lg border transition-colors ${
+                                admin.status === 'ACTIVE' 
+                                  ? 'text-orange-600 hover:text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100' 
+                                  : 'text-green-600 hover:text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                              }`}
+                              title={admin.status === 'ACTIVE' ? 'Suspend Admin' : 'Reactivate Admin'}
                             >
-                              <Shield className="h-4 w-4" />
+                              {admin.status === 'ACTIVE' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                             </button>
-                          )}
-                          <button
-                            onClick={() => handleToggleStatus(admin)}
-                            className={`p-2 rounded-lg border transition-colors ${
-                              admin.status === 'ACTIVE' 
-                                ? 'text-orange-600 hover:text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100' 
-                                : 'text-green-600 hover:text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
-                            }`}
-                            title={admin.status === 'ACTIVE' ? 'Suspend Admin' : 'Reactivate Admin'}
-                          >
-                            {admin.status === 'ACTIVE' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(admin.id)}
-                            className="p-2 text-red-600 hover:text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg transition-colors"
-                            title="Delete Admin"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              onClick={() => handleDelete(admin.id)}
+                              className="p-2 text-red-600 hover:text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg transition-colors"
+                              title="Delete Admin"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
