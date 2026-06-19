@@ -97,6 +97,7 @@ export interface GroupMember {
   telegramId?: string;
   hasWon: boolean;
   cycleWon?: number;
+  bankAccountName?: string;
 }
 
 export interface MemberListItem {
@@ -147,6 +148,7 @@ export interface UserDetail {
   phone: string;
   telegramId?: string;
   governmentId?: string;
+  bankAccountName?: string;
   photoUrl?: string;
   employmentType?: string;
   employerName?: string;
@@ -433,6 +435,7 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
         telegramId: user.telegramId as string | undefined,
         hasWon,
         cycleWon: hasWon ? winnerMap.get(userId) : undefined,
+        bankAccountName: user.bankAccountName as string | undefined,
       };
     });
 
@@ -518,6 +521,7 @@ function mapUserDetail(raw: Record<string, unknown>): UserDetail {
     phone: raw.phone as string,
     telegramId: raw.telegramId as string | undefined,
     governmentId: raw.governmentId as string | undefined,
+    bankAccountName: raw.bankAccountName as string | undefined,
     photoUrl: raw.photoUrl as string | undefined,
     employmentType: raw.employmentType as string | undefined,
     employerName: raw.employerName as string | undefined,

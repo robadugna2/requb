@@ -1286,6 +1286,7 @@ export default function GroupDetailPage() {
                       <th className="table-header">#</th>
                       <th className="table-header">{t('group.col_member')}</th>
                       <th className="table-header">Phone</th>
+                      <th className="table-header">Bank Name</th>
                       <th className="table-header">{t('group.col_won')}</th>
                       <th className="table-header">{t('group.col_cycle_won')}</th>
                       <th className="table-header text-right">{t('group.col_actions')}</th>
@@ -1314,6 +1315,9 @@ export default function GroupDetailPage() {
                           </div>
                         </td>
                         <td className="table-cell text-gray-500">{member.phone}</td>
+                        <td className="table-cell text-gray-500 text-sm max-w-[180px] truncate" title={member.bankAccountName || ''}>
+                          {member.bankAccountName || '-'}
+                        </td>
                         <td className="table-cell">
                           {member.hasWon ? (
                             <Badge status="verified">{t('group.col_won')}</Badge>

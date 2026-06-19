@@ -22,6 +22,10 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
+  bankAccountName?: string;
+
+  @IsOptional()
+  @IsString()
   photoUrl?: string;
 
   @IsOptional()

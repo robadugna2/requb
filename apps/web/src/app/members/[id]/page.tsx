@@ -46,6 +46,7 @@ export default function MemberDetailPage() {
     phone: '',
     telegramId: '',
     governmentId: '',
+    bankAccountName: '',
     photoUrl: '',
     employmentType: '',
     employerName: '',
@@ -106,6 +107,7 @@ export default function MemberDetailPage() {
       phone: user.phone || '',
       telegramId: user.telegramId || '',
       governmentId: user.governmentId || '',
+      bankAccountName: user.bankAccountName || '',
       photoUrl: user.photoUrl || '',
       employmentType: user.employmentType || '',
       employerName: user.employerName || '',
@@ -372,6 +374,12 @@ export default function MemberDetailPage() {
               <span className="text-sm text-gray-500">{t('members.label_gov_id')}</span>
               <span className="text-sm font-medium text-gray-900">
                 {user.governmentId || 'Not provided'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-50">
+              <span className="text-sm text-gray-500">Bank Account Name</span>
+              <span className="text-sm font-medium text-gray-900">
+                {user.bankAccountName || 'Not provided'}
               </span>
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-50">
@@ -734,6 +742,16 @@ export default function MemberDetailPage() {
                   value={editData.governmentId}
                   onChange={(e) => setEditData({ ...editData, governmentId: e.target.value })}
                   className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Bank Account Name</label>
+                <input
+                  type="text"
+                  value={editData.bankAccountName}
+                  onChange={(e) => setEditData({ ...editData, bankAccountName: e.target.value })}
+                  className="input-field"
+                  placeholder="Name as it appears on bank statements"
                 />
               </div>
               <div>
