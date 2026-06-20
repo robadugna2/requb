@@ -1212,46 +1212,92 @@ export default function GroupDetailPage() {
                   <tr>
                     <th className="table-header">{t('group.col_member')}</th>
                     <th className="table-header">{t('group.col_amount')}</th>
-                    <th className="table-header">{t('group.col_date')}</th>
+                    <th className="table-header">FT Ref</th>
+                    <th className="table-header">Transfer Method</th>
+                    <th className="table-header">Transfer Date</th>
                     <th className="table-header">{t('group.col_status')}</th>
                     <th className="table-header text-right">{t('group.col_actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {deposits.map((deposit) => (
-                    <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="table-cell font-medium text-gray-900">
-                        {deposit.memberName}
-                      </td>
-                      <td className="table-cell text-gray-700">
-                        ETB {deposit.amount.toLocaleString()}
-                      </td>
-                      <td className="table-cell text-gray-500">{deposit.date}</td>
-                      <td className="table-cell">
-                        <Badge status={deposit.status} />
-                      </td>
-                      <td className="table-cell text-right">
-                        {deposit.status === 'pending' && (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleVerify(deposit.id)}
-                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                              title="Verify"
-                            >
-                              <CheckCircle className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleReject(deposit.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Reject"
-                            >
-                              <XCircle className="h-5 w-5" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {(() => {
+                    const grouped = deposits.reduce<Record<number, typeof deposits>>((acc, d) => {
+                      const key = d.cycleNumber || 0;
+                      if (!acc[key]) acc[key] = [];
+                      acc[key].push(d);
+                      return acc;
+                    }, {});
+                    return Object.entries(grouped)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([cycleNum, cycleDeposits]) => (
+                        <React.Fragment key={`cycle-${cycleNum}`}>
+                          <tr className="bg-indigo-50/70">
+                            <td colSpan={7} className="px-4 py-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                                  Cycle {cycleNum}
+                                </span>
+                                <span className="text-xs text-indigo-500">
+                                  {cycleDeposits.length} deposit{cycleDeposits.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                          {cycleDeposits.map((deposit) => (
+                            <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="table-cell font-medium text-gray-900">
+                                {deposit.memberName}
+                              </td>
+                              <td className="table-cell text-gray-700">
+                                ETB {deposit.amount.toLocaleString()}
+                              </td>
+                              <td className="table-cell">
+                                {deposit.ftNumber ? (
+                                  <span className="font-mono text-xs text-gray-600 max-w-[120px] truncate block" title={deposit.ftNumber}>
+                                    {deposit.ftNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="table-cell">
+                                {deposit.narrative ? (
+                                  <span className="text-xs text-gray-500 max-w-[150px] truncate block" title={deposit.narrative}>
+                                    {deposit.narrative}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">—</span>
+                                )}
+                              </td>
+                              <td className="table-cell text-gray-500 text-sm">{deposit.transferDate}</td>
+                              <td className="table-cell">
+                                <Badge status={deposit.status} />
+                              </td>
+                              <td className="table-cell text-right">
+                                {deposit.status === 'pending' && (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => handleVerify(deposit.id)}
+                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                      title="Verify"
+                                    >
+                                      <CheckCircle className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleReject(deposit.id)}
+                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Reject"
+                                    >
+                                      <XCircle className="h-5 w-5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ));
+                  })()}
                 </tbody>
               </table>
             </div>

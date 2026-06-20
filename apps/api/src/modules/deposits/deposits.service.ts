@@ -100,7 +100,11 @@ export class DepositsService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { cycle: { cycleNumber: 'asc' } },
+        { depositDate: 'asc' },
+        { createdAt: 'asc' },
+      ],
     });
   }
 

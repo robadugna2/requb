@@ -85,7 +85,7 @@ export class UsersService {
           include: { group: true },
         },
         deposits: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { cycle: { cycleNumber: 'asc' } },
           include: {
             cycle: {
               include: { group: true },

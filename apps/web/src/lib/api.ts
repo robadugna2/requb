@@ -121,6 +121,10 @@ export interface UserDepositRecord {
   amount: number;
   status: 'verified' | 'pending' | 'rejected';
   date: string;
+  transferDate: string;
+  ftNumber?: string;
+  narrative?: string;
+  senderName?: string;
   imageUrl?: string;
 }
 
@@ -265,7 +269,11 @@ export interface DepositItem {
   amount: number;
   status: 'verified' | 'pending' | 'rejected';
   date: string;
+  transferDate: string;
+  ftNumber?: string;
+  narrative?: string;
   receiptUrl?: string;
+  cycleNumber?: number;
 }
 
 export interface LotteryResultItem {
@@ -490,6 +498,10 @@ function mapUserDetail(raw: Record<string, unknown>): UserDetail {
   const depositRecords: UserDepositRecord[] = (deposits || []).map((d) => {
     const cycle = d.cycle as Record<string, unknown> | undefined;
     const group = cycle?.group as Record<string, unknown> | undefined;
+    const depositDateRaw = d.depositDate as string | undefined;
+    const transferDate = depositDateRaw
+      ? new Date(depositDateRaw).toLocaleDateString('en-CA')
+      : (d.createdAt ? new Date(d.createdAt as string).toLocaleDateString('en-CA') : 'N/A');
     return {
       id: d.id as string,
       groupName: (group?.name as string) || 'Unknown',
@@ -497,9 +509,13 @@ function mapUserDetail(raw: Record<string, unknown>): UserDetail {
       amount: (d.amount as number) || 0,
       status: mapVerificationStatus(d.verificationStatus as string),
       date: d.createdAt ? new Date(d.createdAt as string).toLocaleDateString('en-CA') : 'N/A',
+      transferDate,
+      ftNumber: (d.ftNumber as string) || undefined,
+      narrative: (d.narrative as string) || undefined,
+      senderName: (d.senderName as string) || undefined,
       imageUrl: d.imageUrl as string | undefined,
     };
-  });
+  }).sort((a, b) => a.cycleNumber - b.cycleNumber);
 
   const lotteryWinRecords: UserLotteryWin[] = (lotteryWins || []).map((l) => {
     const cycle = l.cycle as Record<string, unknown> | undefined;
@@ -608,6 +624,11 @@ function mapReceiptItem(raw: Record<string, unknown>): ReceiptItem {
 
 function mapDepositItem(raw: Record<string, unknown>): DepositItem {
   const user = raw.user as Record<string, unknown> | undefined;
+  const cycle = raw.cycle as Record<string, unknown> | undefined;
+  const depositDateRaw = raw.depositDate as string | undefined;
+  const transferDate = depositDateRaw
+    ? new Date(depositDateRaw).toLocaleDateString('en-CA')
+    : (raw.createdAt ? new Date(raw.createdAt as string).toLocaleDateString('en-CA') : 'N/A');
 
   return {
     id: raw.id as string,
@@ -615,7 +636,11 @@ function mapDepositItem(raw: Record<string, unknown>): DepositItem {
     amount: (raw.amount as number) || 0,
     status: mapVerificationStatus(raw.verificationStatus as string),
     date: raw.createdAt ? new Date(raw.createdAt as string).toLocaleDateString('en-CA') : 'N/A',
+    transferDate,
+    ftNumber: (raw.ftNumber as string) || undefined,
+    narrative: (raw.narrative as string) || undefined,
     receiptUrl: raw.imageUrl as string | undefined,
+    cycleNumber: (cycle?.cycleNumber as number) || undefined,
   };
 }
 
