@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, MapPin, X } from 'lucide-react';
-import Button from './Button';
+import { MapPin, Search, X } from 'lucide-react';
+import { Button } from './button';
 
 interface LocationPickerProps {
   isOpen: boolean;

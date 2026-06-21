@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { Camera } from 'lucide-react';
 import { uploadPhoto, getMediaUrl } from '@/lib/api';
-import Button from './Button';
+import { Button } from './button';
 
 interface PhotoUploadProps {
   value: string;
