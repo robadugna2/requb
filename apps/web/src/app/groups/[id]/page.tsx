@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   Trash2,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Plus,
   MapPin,
   Briefcase,
@@ -30,6 +31,12 @@ import {
   ArrowLeftRight,
   BookTemplate,
   Download,
+  Eye,
+  Filter,
+  ArrowUpDown,
+  FileText,
+  TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
@@ -105,11 +112,28 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const groupId = params.id as string;
 
+
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [drawLoading, setDrawLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('deposits');
+
+  // ─── Deposits Tab Filters & UI State ────────────────────────────────────
+  const [depositSearch, setDepositSearch] = useState('');
+  const [depositStatusFilter, setDepositStatusFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const [depositCycleFilter, setDepositCycleFilter] = useState<number | 'all'>('all');
+  const [depositSort, setDepositSort] = useState<{ field: 'date' | 'amount' | 'member'; dir: 'asc' | 'desc' }>({ field: 'date', dir: 'desc' });
+  const [depositPage, setDepositPage] = useState(1);
+  const [selectedDepositIds, setSelectedDepositIds] = useState<Set<string>>(new Set());
+  const [previewDeposit, setPreviewDeposit] = useState<DepositItem | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectingDepositId, setRejectingDepositId] = useState<string | null>(null);
+  const [batchVerifying, setBatchVerifying] = useState(false);
+  const [verifyingDepositId, setVerifyingDepositId] = useState<string | null>(null);
+  const DEPOSITS_PER_PAGE = 25;
+
+
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
   const [disputes, setDisputes] = useState<DisputeItem[]>([]);
@@ -280,43 +304,159 @@ export default function GroupDetailPage() {
     fetchData();
   }, [groupId]);
 
+
   const handleVerify = async (depositId: string) => {
+    setVerifyingDepositId(depositId);
     setError(null);
     try {
       await verifyDeposit(depositId);
-      setDeposits(
-        deposits.map((d) =>
-          d.id === depositId ? { ...d, status: 'verified' as const } : d
-        )
-      );
+      setDeposits(deposits.map((d) => d.id === depositId ? { ...d, status: 'verified' as const } : d));
+      if (previewDeposit?.id === depositId) setPreviewDeposit({ ...previewDeposit, status: 'verified' });
       setSuccess('Deposit verified successfully!');
       setTimeout(() => setSuccess(null), 4000);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      setError(
-        axiosErr.response?.data?.message || 'Failed to verify deposit. Please try again.'
-      );
+      setError(axiosErr.response?.data?.message || 'Failed to verify deposit. Please try again.');
+    } finally {
+      setVerifyingDepositId(null);
     }
   };
 
-  const handleReject = async (depositId: string) => {
+  const handleReject = async (depositId: string, reason?: string) => {
+    setRejectingDepositId(depositId);
     setError(null);
     try {
-      await rejectDeposit(depositId);
-      setDeposits(
-        deposits.map((d) =>
-          d.id === depositId ? { ...d, status: 'rejected' as const } : d
-        )
-      );
-      setSuccess('Deposit rejected successfully.');
+      await rejectDeposit(depositId, reason);
+      setDeposits(deposits.map((d) => d.id === depositId ? { ...d, status: 'rejected' as const, rejectionReason: reason } : d));
+      if (previewDeposit?.id === depositId) setPreviewDeposit({ ...previewDeposit, status: 'rejected', rejectionReason: reason });
+      setRejectReason('');
+      setSuccess('Deposit rejected.');
       setTimeout(() => setSuccess(null), 4000);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      setError(
-        axiosErr.response?.data?.message || 'Failed to reject deposit. Please try again.'
-      );
+      setError(axiosErr.response?.data?.message || 'Failed to reject deposit. Please try again.');
+    } finally {
+      setRejectingDepositId(null);
     }
   };
+
+  const handleBatchVerify = async () => {
+    if (selectedDepositIds.size === 0) return;
+    setBatchVerifying(true);
+    setError(null);
+    let successCount = 0;
+    for (const id of Array.from(selectedDepositIds)) {
+      try {
+        await verifyDeposit(id);
+        successCount++;
+      } catch { /* continue */ }
+    }
+    setDeposits((prev) =>
+      prev.map((d) => selectedDepositIds.has(d.id) ? { ...d, status: 'verified' as const } : d)
+    );
+    setSelectedDepositIds(new Set());
+    setBatchVerifying(false);
+    setSuccess(`${successCount} deposit(s) verified successfully!`);
+    setTimeout(() => setSuccess(null), 4000);
+  };
+
+  const handleExportCSV = useCallback(() => {
+    const rows = filteredSortedDeposits.map((d) => [
+      d.cycleNumber ?? '',
+      d.memberName,
+      d.amount,
+      d.bankName ?? '',
+      d.ftNumber ?? '',
+      d.transferDate,
+      d.senderName ?? '',
+      d.status,
+      d.isLate ? 'Yes' : 'No',
+    ]);
+    const header = ['Cycle', 'Member', 'Amount (ETB)', 'Bank', 'FT Ref', 'Transfer Date', 'Sender', 'Status', 'Late'];
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `deposits-${group?.name ?? groupId}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Deposit Computed Values ─────────────────────────────────────────────
+  const depositCycles = useMemo(() => {
+    const nums = Array.from(new Set(deposits.map((d) => d.cycleNumber).filter(Boolean) as number[]));
+    return nums.sort((a, b) => a - b);
+  }, [deposits]);
+
+  const filteredSortedDeposits = useMemo(() => {
+    let list = [...deposits];
+    if (depositCycleFilter !== 'all') list = list.filter((d) => d.cycleNumber === depositCycleFilter);
+    if (depositStatusFilter !== 'all') list = list.filter((d) => d.status === depositStatusFilter);
+    if (depositSearch.trim()) {
+      const q = depositSearch.trim().toLowerCase();
+      list = list.filter((d) =>
+        d.memberName.toLowerCase().includes(q) ||
+        (d.ftNumber?.toLowerCase().includes(q) ?? false) ||
+        (d.bankName?.toLowerCase().includes(q) ?? false)
+      );
+    }
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (depositSort.field === 'date') cmp = (a.transferDate ?? '').localeCompare(b.transferDate ?? '');
+      else if (depositSort.field === 'amount') cmp = a.amount - b.amount;
+      else if (depositSort.field === 'member') cmp = a.memberName.localeCompare(b.memberName);
+      return depositSort.dir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [deposits, depositCycleFilter, depositStatusFilter, depositSearch, depositSort]);
+
+  const depositKPIs = useMemo(() => {
+    const all = depositCycleFilter === 'all' ? deposits : deposits.filter((d) => d.cycleNumber === depositCycleFilter);
+    return {
+      totalVerified: all.filter((d) => d.status === 'verified').reduce((s, d) => s + d.amount, 0),
+      countVerified: all.filter((d) => d.status === 'verified').length,
+      totalPending: all.filter((d) => d.status === 'pending').reduce((s, d) => s + d.amount, 0),
+      countPending: all.filter((d) => d.status === 'pending').length,
+      countRejected: all.filter((d) => d.status === 'rejected').length,
+      countLate: all.filter((d) => d.isLate).length,
+    };
+  }, [deposits, depositCycleFilter]);
+
+  const depositPageCount = Math.max(1, Math.ceil(filteredSortedDeposits.length / DEPOSITS_PER_PAGE));
+  const pagedDeposits = filteredSortedDeposits.slice((depositPage - 1) * DEPOSITS_PER_PAGE, depositPage * DEPOSITS_PER_PAGE);
+
+  const toggleDepositSort = (field: 'date' | 'amount' | 'member') => {
+    setDepositSort((prev) =>
+      prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' }
+    );
+    setDepositPage(1);
+  };
+
+  const toggleSelectDeposit = (id: string) => {
+    setSelectedDepositIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const pendingPageDeposits = pagedDeposits.filter((d) => d.status === 'pending');
+  const allPagePendingSelected = pendingPageDeposits.length > 0 && pendingPageDeposits.every((d) => selectedDepositIds.has(d.id));
+
+  const toggleSelectAllPage = () => {
+    setSelectedDepositIds((prev) => {
+      const next = new Set(prev);
+      if (allPagePendingSelected) {
+        pendingPageDeposits.forEach((d) => next.delete(d.id));
+      } else {
+        pendingPageDeposits.forEach((d) => next.add(d.id));
+      }
+      return next;
+    });
+  };
+
+
 
   const openAddMemberModal = async () => {
     setShowAddMemberModal(true);
@@ -1202,109 +1342,379 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {/* Deposits Table */}
+      {/* Deposits Tab — Professional Banking UI */}
       {activeTab === 'deposits' && (
-        <div className="card overflow-hidden p-0">
-          {deposits.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="table-header">{t('group.col_member')}</th>
-                    <th className="table-header">{t('group.col_amount')}</th>
-                    <th className="table-header">FT Ref</th>
-                    <th className="table-header">Transfer Method</th>
-                    <th className="table-header">Transfer Date</th>
-                    <th className="table-header">{t('group.col_status')}</th>
-                    <th className="table-header text-right">{t('group.col_actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {(() => {
-                    const grouped = deposits.reduce<Record<number, typeof deposits>>((acc, d) => {
-                      const key = d.cycleNumber || 0;
-                      if (!acc[key]) acc[key] = [];
-                      acc[key].push(d);
-                      return acc;
-                    }, {});
-                    return Object.entries(grouped)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([cycleNum, cycleDeposits]) => (
-                        <React.Fragment key={`cycle-${cycleNum}`}>
-                          <tr className="bg-indigo-50/70">
-                            <td colSpan={7} className="px-4 py-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
-                                  Cycle {cycleNum}
-                                </span>
-                                <span className="text-xs text-indigo-500">
-                                  {cycleDeposits.length} deposit{cycleDeposits.length !== 1 ? 's' : ''}
-                                </span>
+        <div className="space-y-4">
+
+          {/* KPI Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="card p-4 flex items-center gap-3">
+              <div className="p-2 bg-green-50 rounded-lg flex-shrink-0"><TrendingUp className="h-5 w-5 text-green-600" /></div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Verified</p>
+                <p className="text-lg font-bold text-gray-900">ETB {depositKPIs.totalVerified.toLocaleString()}</p>
+                <p className="text-xs text-green-600">{depositKPIs.countVerified} deposits</p>
+              </div>
+            </div>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="p-2 bg-amber-50 rounded-lg flex-shrink-0"><Clock className="h-5 w-5 text-amber-500" /></div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Pending</p>
+                <p className="text-lg font-bold text-gray-900">ETB {depositKPIs.totalPending.toLocaleString()}</p>
+                <p className="text-xs text-amber-600">{depositKPIs.countPending} awaiting</p>
+              </div>
+            </div>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="p-2 bg-red-50 rounded-lg flex-shrink-0"><XCircle className="h-5 w-5 text-red-500" /></div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Rejected</p>
+                <p className="text-lg font-bold text-gray-900">{depositKPIs.countRejected}</p>
+                <p className="text-xs text-red-600">deposits</p>
+              </div>
+            </div>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="p-2 bg-orange-50 rounded-lg flex-shrink-0"><AlertTriangle className="h-5 w-5 text-orange-500" /></div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Late</p>
+                <p className="text-lg font-bold text-gray-900">{depositKPIs.countLate}</p>
+                <p className="text-xs text-orange-600">flagged</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="card p-3">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              {/* Search */}
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={depositSearch}
+                  onChange={(e) => { setDepositSearch(e.target.value); setDepositPage(1); }}
+                  placeholder="Search by member, FT ref, or bank…"
+                  className="input-field pl-9 text-sm w-full"
+                />
+              </div>
+              {/* Cycle filter */}
+              <select
+                value={depositCycleFilter}
+                onChange={(e) => { setDepositCycleFilter(e.target.value === 'all' ? 'all' : Number(e.target.value)); setDepositPage(1); }}
+                className="input-field text-sm min-w-[130px]"
+              >
+                <option value="all">All Cycles</option>
+                {depositCycles.map((c) => <option key={c} value={c}>Cycle {c}</option>)}
+              </select>
+              {/* Sort */}
+              <select
+                value={`${depositSort.field}-${depositSort.dir}`}
+                onChange={(e) => {
+                  const [field, dir] = e.target.value.split('-') as ['date' | 'amount' | 'member', 'asc' | 'desc'];
+                  setDepositSort({ field, dir }); setDepositPage(1);
+                }}
+                className="input-field text-sm min-w-[170px]"
+              >
+                <option value="date-desc">Date — Newest</option>
+                <option value="date-asc">Date — Oldest</option>
+                <option value="amount-desc">Amount — High→Low</option>
+                <option value="amount-asc">Amount — Low→High</option>
+                <option value="member-asc">Member — A→Z</option>
+                <option value="member-desc">Member — Z→A</option>
+              </select>
+              {/* CSV Export */}
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex-shrink-0"
+                title="Export current view as CSV"
+              >
+                <Download className="h-4 w-4" />
+                CSV
+              </button>
+            </div>
+
+            {/* Status filter pills */}
+            <div className="flex gap-2 mt-3 flex-wrap">
+              {(['all', 'pending', 'verified', 'rejected'] as const).map((s) => {
+                const counts: Record<string, number> = {
+                  all: deposits.length,
+                  pending: deposits.filter(d => d.status === 'pending').length,
+                  verified: deposits.filter(d => d.status === 'verified').length,
+                  rejected: deposits.filter(d => d.status === 'rejected').length,
+                };
+                const active = depositStatusFilter === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { setDepositStatusFilter(s); setDepositPage(1); setSelectedDepositIds(new Set()); }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                      active ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                    <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${active ? 'bg-white/20' : 'bg-white text-gray-500'}`}>
+                      {counts[s]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Batch verify action bar */}
+          {selectedDepositIds.size > 0 && (
+            <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
+              <span className="text-sm font-medium text-indigo-800">{selectedDepositIds.size} deposit(s) selected</span>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedDepositIds(new Set())} className="text-xs text-indigo-600 hover:underline">Clear</button>
+                <Button size="sm" onClick={handleBatchVerify} loading={batchVerifying}>
+                  <CheckCircle className="h-3.5 w-3.5 mr-1" /> Verify All
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Deposits Table */}
+          <div className="card overflow-hidden p-0">
+            {filteredSortedDeposits.length > 0 ? (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="table-header w-10">
+                          <input
+                            type="checkbox"
+                            checked={allPagePendingSelected}
+                            onChange={toggleSelectAllPage}
+                            disabled={pendingPageDeposits.length === 0}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            title="Select all pending on this page"
+                          />
+                        </th>
+                        <th className="table-header">
+                          <button onClick={() => toggleDepositSort('member')} className="flex items-center gap-1 hover:text-gray-900">
+                            Member {depositSort.field === 'member' ? (depositSort.dir === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>) : <ArrowUpDown className="h-3 w-3 opacity-40"/>}
+                          </button>
+                        </th>
+                        <th className="table-header">Cycle</th>
+                        <th className="table-header">
+                          <button onClick={() => toggleDepositSort('amount')} className="flex items-center gap-1 hover:text-gray-900">
+                            Amount {depositSort.field === 'amount' ? (depositSort.dir === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>) : <ArrowUpDown className="h-3 w-3 opacity-40"/>}
+                          </button>
+                        </th>
+                        <th className="table-header">Bank</th>
+                        <th className="table-header">FT Ref</th>
+                        <th className="table-header">
+                          <button onClick={() => toggleDepositSort('date')} className="flex items-center gap-1 hover:text-gray-900">
+                            Date {depositSort.field === 'date' ? (depositSort.dir === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>) : <ArrowUpDown className="h-3 w-3 opacity-40"/>}
+                          </button>
+                        </th>
+                        <th className="table-header">Status</th>
+                        <th className="table-header text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {pagedDeposits.map((deposit) => (
+                        <tr
+                          key={deposit.id}
+                          className="hover:bg-gray-50/60 transition-colors cursor-pointer"
+                          onClick={() => setPreviewDeposit(deposit)}
+                        >
+                          <td className="table-cell" onClick={(e) => e.stopPropagation()}>
+                            {deposit.status === 'pending' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedDepositIds.has(deposit.id)}
+                                onChange={() => toggleSelectDeposit(deposit.id)}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                            )}
+                          </td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                                <span className="text-xs font-bold text-primary-700">{deposit.memberName.split(' ').map(n => n[0]).join('').slice(0,2)}</span>
                               </div>
-                            </td>
-                          </tr>
-                          {cycleDeposits.map((deposit) => (
-                            <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="table-cell font-medium text-gray-900">
-                                {deposit.memberName}
-                              </td>
-                              <td className="table-cell text-gray-700">
-                                ETB {deposit.amount.toLocaleString()}
-                              </td>
-                              <td className="table-cell">
-                                {deposit.ftNumber ? (
-                                  <span className="font-mono text-xs text-gray-600 max-w-[120px] truncate block" title={deposit.ftNumber}>
-                                    {deposit.ftNumber}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{deposit.memberName}</p>
+                                {deposit.senderName && deposit.senderName !== deposit.memberName && (
+                                  <p className="text-xs text-gray-400 truncate max-w-[140px]" title={deposit.senderName}>via {deposit.senderName}</p>
                                 )}
-                              </td>
-                              <td className="table-cell">
-                                {deposit.narrative ? (
-                                  <span className="text-xs text-gray-500 max-w-[150px] truncate block" title={deposit.narrative}>
-                                    {deposit.narrative}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
-                                )}
-                              </td>
-                              <td className="table-cell text-gray-500 text-sm">{deposit.transferDate}</td>
-                              <td className="table-cell">
-                                <Badge status={deposit.status} />
-                              </td>
-                              <td className="table-cell text-right">
-                                {deposit.status === 'pending' && (
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      onClick={() => handleVerify(deposit.id)}
-                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                      title="Verify"
-                                    >
-                                      <CheckCircle className="h-5 w-5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleReject(deposit.id)}
-                                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                      title="Reject"
-                                    >
-                                      <XCircle className="h-5 w-5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      ));
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-gray-500">{t('group.no_deposits')}</p>
-            </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="table-cell">
+                            {deposit.cycleNumber ? (
+                              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">C{deposit.cycleNumber}</span>
+                            ) : <span className="text-gray-400 text-xs">—</span>}
+                          </td>
+                          <td className="table-cell">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-semibold text-gray-900">ETB {deposit.amount.toLocaleString()}</span>
+                              {deposit.isLate && (
+                                <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">Late</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="table-cell text-sm text-gray-500">{deposit.bankName || '—'}</td>
+                          <td className="table-cell">
+                            {deposit.ftNumber ? (
+                              <span className="font-mono text-xs text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded max-w-[130px] truncate block" title={deposit.ftNumber}>{deposit.ftNumber}</span>
+                            ) : <span className="text-gray-400 text-xs">—</span>}
+                          </td>
+                          <td className="table-cell text-xs text-gray-500">{deposit.transferDate}</td>
+                          <td className="table-cell"><Badge status={deposit.status} /></td>
+                          <td className="table-cell text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => setPreviewDeposit(deposit)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View details">
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              {deposit.status === 'pending' && (
+                                <>
+                                  <button
+                                    onClick={() => handleVerify(deposit.id)}
+                                    disabled={verifyingDepositId === deposit.id}
+                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Verify"
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleReject(deposit.id)}
+                                    disabled={rejectingDepositId === deposit.id}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Reject"
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {depositPageCount > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/50">
+                    <p className="text-xs text-gray-500">
+                      Showing {((depositPage-1)*DEPOSITS_PER_PAGE)+1}–{Math.min(depositPage*DEPOSITS_PER_PAGE, filteredSortedDeposits.length)} of {filteredSortedDeposits.length}
+                    </p>
+                    <div className="flex gap-1">
+                      <button disabled={depositPage === 1} onClick={() => setDepositPage(p => p-1)} className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition-colors">← Prev</button>
+                      <span className="px-3 py-1.5 text-xs font-medium text-gray-700">{depositPage}/{depositPageCount}</span>
+                      <button disabled={depositPage === depositPageCount} onClick={() => setDepositPage(p => p+1)} className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-gray-100 transition-colors">Next →</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-16">
+                <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No deposits found</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {depositSearch || depositStatusFilter !== 'all' || depositCycleFilter !== 'all'
+                    ? 'Try adjusting your filters or search term'
+                    : 'Deposits will appear here once members submit receipts'}
+                </p>
+                {(depositSearch || depositStatusFilter !== 'all' || depositCycleFilter !== 'all') && (
+                  <button
+                    onClick={() => { setDepositSearch(''); setDepositStatusFilter('all'); setDepositCycleFilter('all'); }}
+                    className="mt-3 text-xs text-primary-600 hover:underline"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Receipt Preview Modal */}
+          {previewDeposit && (
+            <Modal isOpen={!!previewDeposit} onClose={() => { setPreviewDeposit(null); setRejectReason(''); }} title="Deposit Details">
+              <div className="space-y-4">
+                {/* Receipt image */}
+                {previewDeposit.receiptUrl && (
+                  <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                    <img src={getMediaUrl(previewDeposit.receiptUrl)} alt="Receipt" className="w-full max-h-64 object-contain" />
+                  </div>
+                )}
+
+                {/* Status badge */}
+                <div className="flex items-center justify-between">
+                  <Badge status={previewDeposit.status} />
+                  {previewDeposit.isLate && (
+                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Late payment
+                    </span>
+                  )}
+                </div>
+
+                {/* Info grid */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {[
+                    { label: 'Member', value: previewDeposit.memberName },
+                    { label: 'Cycle', value: previewDeposit.cycleNumber ? `Cycle ${previewDeposit.cycleNumber}` : '—' },
+                    { label: 'Amount', value: `ETB ${previewDeposit.amount.toLocaleString()}` },
+                    { label: 'Bank', value: previewDeposit.bankName || '—' },
+                    { label: 'FT Reference', value: previewDeposit.ftNumber || '—' },
+                    { label: 'Transfer Date', value: previewDeposit.transferDate },
+                    { label: 'Sender Name', value: previewDeposit.senderName || '—' },
+                    { label: 'Sender Account', value: previewDeposit.senderAccount || '—' },
+                    { label: 'Branch', value: previewDeposit.branch || '—' },
+                    { label: 'Submitted', value: previewDeposit.date },
+                    ...(previewDeposit.confidence != null ? [{ label: 'OCR Confidence', value: `${(previewDeposit.confidence * 100).toFixed(0)}%` }] : []),
+                    ...(previewDeposit.narrative ? [{ label: 'Method', value: previewDeposit.narrative }] : []),
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-gray-50 rounded-lg p-2.5">
+                      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                      <p className="font-medium text-gray-800 break-all">{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Rejection reason if rejected */}
+                {previewDeposit.status === 'rejected' && previewDeposit.rejectionReason && (
+                  <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm text-red-700">
+                    <p className="font-medium mb-0.5">Rejection Reason</p>
+                    <p>{previewDeposit.rejectionReason}</p>
+                  </div>
+                )}
+
+                {/* Actions for pending */}
+                {previewDeposit.status === 'pending' && (
+                  <div className="border-t border-gray-100 pt-4 space-y-3">
+                    <Button
+                      onClick={() => handleVerify(previewDeposit.id)}
+                      loading={verifyingDepositId === previewDeposit.id}
+                      className="w-full"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" /> Verify Deposit
+                    </Button>
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        placeholder="Rejection reason (optional)…"
+                        className="input-field text-sm w-full"
+                      />
+                      <Button
+                        variant="danger"
+                        onClick={() => handleReject(previewDeposit.id, rejectReason || undefined)}
+                        loading={rejectingDepositId === previewDeposit.id}
+                        className="w-full"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" /> Reject Deposit
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Modal>
           )}
         </div>
       )}

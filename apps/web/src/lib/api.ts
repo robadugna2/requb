@@ -265,6 +265,7 @@ export interface ReceiptItem {
 
 export interface DepositItem {
   id: string;
+  userId: string;
   memberName: string;
   amount: number;
   status: 'verified' | 'pending' | 'rejected';
@@ -274,6 +275,14 @@ export interface DepositItem {
   narrative?: string;
   receiptUrl?: string;
   cycleNumber?: number;
+  bankName?: string;
+  senderName?: string;
+  senderAccount?: string;
+  branch?: string;
+  rejectionReason?: string;
+  isLate: boolean;
+  penaltyApplied: boolean;
+  confidence?: number;
 }
 
 export interface LotteryResultItem {
@@ -632,6 +641,7 @@ function mapDepositItem(raw: Record<string, unknown>): DepositItem {
 
   return {
     id: raw.id as string,
+    userId: (user?.id as string) || '',
     memberName: (user?.name as string) || 'Unknown',
     amount: (raw.amount as number) || 0,
     status: mapVerificationStatus(raw.verificationStatus as string),
@@ -641,6 +651,14 @@ function mapDepositItem(raw: Record<string, unknown>): DepositItem {
     narrative: (raw.narrative as string) || undefined,
     receiptUrl: raw.imageUrl as string | undefined,
     cycleNumber: (cycle?.cycleNumber as number) || undefined,
+    bankName: (raw.bankName as string) || undefined,
+    senderName: (raw.senderName as string) || undefined,
+    senderAccount: (raw.senderAccount as string) || undefined,
+    branch: (raw.branch as string) || undefined,
+    rejectionReason: (raw.rejectionReason as string) || undefined,
+    isLate: (raw.isLate as boolean) || false,
+    penaltyApplied: (raw.penaltyApplied as boolean) || false,
+    confidence: (raw.confidence as number) || undefined,
   };
 }
 
