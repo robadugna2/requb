@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AppSidebar } from './app-sidebar';
-import { AppHeader } from './app-header';
+import { AppSidebar } from '@/components/layout/app-sidebar';
+import Header from '@/components/layout/header';
 import { ToastProvider } from '@/components/ui/Toast';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+
+import PageContainer from '@/components/layout/page-container';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -15,6 +17,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [defaultOpen, setDefaultOpen] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('equb_token');
@@ -23,6 +26,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     } else {
       setIsAuthenticated(true);
     }
+    
+    const sidebarState = localStorage.getItem('sidebar:state');
+    if (sidebarState === 'false') {
+      setDefaultOpen(false);
+    }
+    
     setIsLoading(false);
   }, [router]);
 
@@ -43,16 +52,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <ToastProvider>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-gray-50/50">
-          <AppSidebar />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <AppHeader />
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-              {children}
-            </main>
-          </div>
-        </div>
+      <SidebarProvider defaultOpen={defaultOpen}>
+        <AppSidebar />
+        <SidebarInset>
+          <Header />
+          <PageContainer>
+            {children}
+          </PageContainer>
+        </SidebarInset>
       </SidebarProvider>
     </ToastProvider>
   );

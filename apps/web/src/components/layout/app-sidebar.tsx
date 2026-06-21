@@ -1,127 +1,150 @@
 'use client';
-
-import * as React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Users,
-  Receipt,
-  Ticket,
-  BookTemplate,
-  Bell,
-  Settings,
-  CircleDollarSign,
-  Shield,
-} from 'lucide-react';
-import { getUnreadNotificationCount } from '@/lib/api';
-import { useLanguage } from './LanguageContext';
-
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuBadge,
+  SidebarMenuItem,
+  SidebarRail
 } from '@/components/ui/sidebar';
-
-const navigation = [
-  { name: 'Dashboard', key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
-  { name: 'Groups', key: 'nav.groups', href: '/groups', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
-  { name: 'Members', key: 'nav.members', href: '/members', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { name: 'Receipts', key: 'nav.receipts', href: '/receipts', icon: Receipt, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
-  { name: 'Lottery', key: 'nav.lottery', href: '/lottery', icon: Ticket, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
-  { name: 'Rule Templates', key: 'nav.rules', href: '/rule-templates', icon: BookTemplate, roles: ['SUPER_ADMIN', 'ADMIN'] },
-  { name: 'Notifications', key: 'nav.notifications', href: '/notifications', icon: Bell, roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'] },
-  { name: 'Admins', key: 'nav.admins', href: '/admins', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'] },
-];
+import { navGroups } from '@/config/nav-config';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import * as React from 'react';
+import { ChevronsUpDown, LogOut, User as UserIcon } from 'lucide-react';
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [unreadCount, setUnreadCount] = React.useState(0);
-  const { t } = useLanguage();
-  
-  const [userContext] = React.useState<{name: string, email: string, role: string} | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const token = localStorage.getItem('equb_token');
-    if (!token) return null;
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      const payload = JSON.parse(jsonPayload);
-      return {
-        name: payload.name || 'Admin',
-        email: payload.email || '',
-        role: payload.role || 'ADMIN'
-      };
-    } catch {
-      return null;
-    }
-  });
+  const router = useRouter();
+  const [user, setUser] = React.useState<{ name: string; role: string; email?: string } | null>(null);
 
   React.useEffect(() => {
-    const fetchCount = () => {
-      getUnreadNotificationCount()
-        .then((data) => setUnreadCount(data.count))
-        .catch(() => {});
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
+    // In EQUB app, we get user from local storage or context.
+    const storedUser = localStorage.getItem('equb_user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {}
+    } else {
+      // fallback mock user
+      setUser({ name: 'Admin User', role: 'Super Admin', email: 'admin@equb.com' });
+    }
   }, []);
 
-  const filteredNavigation = navigation.filter(item => !userContext || item.roles.includes(userContext.role));
+  const handleLogout = () => {
+    localStorage.removeItem('equb_token');
+    localStorage.removeItem('equb_user');
+    router.push('/login');
+  };
 
   return (
-    <Sidebar variant="inset" className="border-r border-gray-200">
-      <SidebarHeader className="border-b border-gray-200 py-4 px-4 bg-gray-50/50">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary-600 shadow-sm">
-            <CircleDollarSign className="h-5 w-5 text-white" />
+    <Sidebar collapsible='icon'>
+      <SidebarHeader className='group-data-[collapsible=icon]:pt-4 py-4 px-4'>
+        <div className="flex items-center gap-2">
+          <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary-600 text-white font-bold">
+            E
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-gray-900 leading-tight">Equb</span>
-            <span className="text-[10px] uppercase font-semibold text-gray-500 tracking-wider">{t('nav.admin_panel')}</span>
+          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+            <span className="truncate font-semibold">EQUB Admin</span>
+            <span className="truncate text-xs">Management Portal</span>
           </div>
-        </Link>
+        </div>
       </SidebarHeader>
-      
-      <SidebarContent className="px-2 py-4">
-        <SidebarGroup>
-          <SidebarMenu>
-            {filteredNavigation.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-              const displayName = t(item.key);
-              return (
-                <SidebarMenuItem key={item.name}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={isActive} 
-                    tooltip={displayName}
-                    className={isActive ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-900'}
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{displayName}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  {item.name === 'Notifications' && unreadCount > 0 && (
-                    <SidebarMenuBadge className="bg-primary-600 text-white border-0">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </SidebarMenuBadge>
-                  )}
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
+      <SidebarContent className='overflow-x-hidden'>
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.label || 'ungrouped'} className='py-0'>
+            {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
+            <SidebarMenu>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.title}
+                      isActive={pathname.startsWith(item.url)}
+                    >
+                      <Link href={item.url}>
+                        {Icon && <Icon />}
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size='lg'
+                  className='data-[state=open]:bg-gray-100 data-[state=open]:text-gray-900'
+                >
+                  <Avatar className="h-8 w-8 rounded-lg">
+                    <AvatarFallback className="rounded-lg">{user?.name?.charAt(0) || 'A'}</AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden ml-2">
+                    <span className="truncate font-semibold">{user?.name || 'Admin'}</span>
+                    <span className="truncate text-xs text-gray-500">{user?.role || 'Admin'}</span>
+                  </div>
+                  <ChevronsUpDown className='ml-auto size-4 group-data-[collapsible=icon]:hidden' />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className='w-56 rounded-lg'
+                side='bottom'
+                align='end'
+                sideOffset={4}
+              >
+                <DropdownMenuLabel className='p-0 font-normal'>
+                  <div className='flex items-center gap-2 px-2 py-1.5 text-left text-sm'>
+                    <Avatar className="h-8 w-8 rounded-lg">
+                      <AvatarFallback className="rounded-lg">{user?.name?.charAt(0) || 'A'}</AvatarFallback>
+                    </Avatar>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold">{user?.name || 'Admin'}</span>
+                      <span className="truncate text-xs text-gray-500">{user?.email || ''}</span>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => router.push('/settings')}>
+                    <UserIcon className='mr-2 h-4 w-4' />
+                    Profile Settings
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:bg-red-50 focus:text-red-600">
+                  <LogOut className='mr-2 h-4 w-4' />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
