@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import Button from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { changePassword } from '@/lib/api';
 import { useLanguage, Language } from '@/components/layout/LanguageContext';
 

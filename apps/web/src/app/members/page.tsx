@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search, Plus, Phone, MessageCircle, Users, AlertCircle, ChevronRight } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import Modal from '@/components/ui/Modal';
 import { getMembers, createMember, getGroups, addMemberToGroup } from '@/lib/api';
 import type { MemberListItem, GroupListItem } from '@/lib/api';

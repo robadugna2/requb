@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { getMember, deleteUserWithPassword, updateMember, getMediaUrl, updateMemberShares } from '@/lib/api';
 import type { UserDetail } from '@/lib/api';
@@ -550,7 +550,7 @@ export default function MemberDetailPage() {
                               </td>
                               <td className="table-cell text-gray-500 text-sm">{deposit.transferDate}</td>
                               <td className="table-cell">
-                                <Badge status={deposit.status} />
+                                <StatusBadge status={deposit.status} />
                               </td>
                             </tr>
                           ))}
@@ -592,7 +592,7 @@ export default function MemberDetailPage() {
                         {group.groupName}
                       </td>
                       <td className="table-cell">
-                        <Badge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
+                        <StatusBadge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
                       </td>
                       <td className="table-cell text-gray-500">{group.joinedAt}</td>
                       <td className="table-cell">

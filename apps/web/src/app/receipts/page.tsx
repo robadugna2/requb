@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { getDeposits, verifyDeposit, rejectDeposit, getMediaUrl } from '@/lib/api';
 import type { ReceiptItem } from '@/lib/api';
@@ -208,7 +208,7 @@ export default function ReceiptsPage() {
                   </p>
                   <p className="text-xs text-gray-500">{receipt.groupName}</p>
                 </div>
-                <Badge status={receipt.status} />
+                <StatusBadge status={receipt.status} />
               </div>
 
               {/* OCR Data */}
@@ -359,7 +359,7 @@ export default function ReceiptsPage() {
             <div className="flex items-center justify-between pt-4 border-t border-gray-200">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500">Status:</span>
-                <Badge status={selectedReceipt.status} />
+                <StatusBadge status={selectedReceipt.status} />
               </div>
 
               {selectedReceipt.status === 'pending' && hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits') && (

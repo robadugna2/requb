@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { Plus, Users, Calendar, CircleDollarSign, Search, AlertCircle, MapPin } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
@@ -245,7 +245,7 @@ export default function GroupsPage() {
                     {group.cycleDuration === 'Weekly' ? t('groups.frequency_weekly') : group.cycleDuration === 'Monthly' ? t('groups.frequency_monthly') : group.cycleDuration} {t('groups.cycle').toLowerCase()}
                   </p>
                 </div>
-                <Badge status={group.status} />
+                <StatusBadge status={group.status} />
               </div>
 
               <div className="space-y-3">

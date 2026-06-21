@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { getLotteryResults, triggerLottery, getGroups, getGroup, getGroupRules } from '@/lib/api';
 import type { LotteryResultItem, GroupListItem, GroupDetail, GroupRules } from '@/lib/api';
 import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';

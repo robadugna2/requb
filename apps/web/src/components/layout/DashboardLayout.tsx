@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Sidebar from './Sidebar';
+import { AppSidebar } from './app-sidebar';
+import { AppHeader } from './app-header';
 import { ToastProvider } from '@/components/ui/Toast';
+import { SidebarProvider } from '@/components/ui/sidebar';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -41,15 +43,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden bg-gray-50">
-        {/* Sidebar */}
-        <Sidebar />
-
-        {/* Main content */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-8">{children}</div>
-        </main>
-      </div>
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-gray-50/50">
+          <AppSidebar />
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <AppHeader />
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+              {children}
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
     </ToastProvider>
   );
 }

@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import Button from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import Modal from '@/components/ui/Modal';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
 

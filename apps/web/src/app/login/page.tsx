@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, X, Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { login, forgotPasswordRequest } from '@/lib/api';
-import Button from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/components/layout/LanguageContext';
 
 // ──────────────────────────────────────────────

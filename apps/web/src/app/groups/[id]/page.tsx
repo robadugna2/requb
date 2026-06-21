@@ -40,8 +40,8 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
-import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers, updateGroup } from '@/lib/api';
 import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem, GroupLeaderItem, AdminUserItem } from '@/lib/api';
@@ -1111,7 +1111,7 @@ export default function GroupDetailPage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
-                <Badge status={group.status} />
+                <StatusBadge status={group.status} />
               </div>
               {group.description && (
                 <p className="mt-2 text-sm text-gray-500">{group.description}</p>
@@ -1563,7 +1563,7 @@ export default function GroupDetailPage() {
                             ) : <span className="text-gray-400 text-xs">—</span>}
                           </td>
                           <td className="table-cell text-xs text-gray-500">{deposit.transferDate}</td>
-                          <td className="table-cell"><Badge status={deposit.status} /></td>
+                          <td className="table-cell"><StatusBadge status={deposit.status} /></td>
                           <td className="table-cell text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={() => setPreviewDeposit(deposit)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View details">
@@ -1645,7 +1645,7 @@ export default function GroupDetailPage() {
 
                 {/* Status badge */}
                 <div className="flex items-center justify-between">
-                  <Badge status={previewDeposit.status} />
+                  <StatusBadge status={previewDeposit.status} />
                   {previewDeposit.isLate && (
                     <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" /> Late payment
@@ -1776,9 +1776,9 @@ export default function GroupDetailPage() {
                         </td>
                         <td className="table-cell">
                           {member.hasWon ? (
-                            <Badge status="verified">{t('group.col_won')}</Badge>
+                            <StatusBadge status="verified">{t('group.col_won')}</StatusBadge>
                           ) : (
-                            <Badge status="pending">{t('receipts.pending')}</Badge>
+                            <StatusBadge status="pending">{t('receipts.pending')}</StatusBadge>
                           )}
                         </td>
                         <td className="table-cell text-gray-500">
@@ -2334,7 +2334,7 @@ export default function GroupDetailPage() {
                           {penalty.amount.toLocaleString()}
                         </td>
                         <td className="table-cell">
-                          <Badge
+                          <StatusBadge 
                             status={
                               penalty.status === 'PAID'
                                 ? 'verified'
@@ -2344,7 +2344,7 @@ export default function GroupDetailPage() {
                             }
                           >
                             {penalty.status}
-                          </Badge>
+                          </StatusBadge>
                         </td>
                         <td className="table-cell text-gray-500 text-sm">
                           {new Date(penalty.createdAt).toLocaleDateString()}
@@ -2435,7 +2435,7 @@ export default function GroupDetailPage() {
                           {dispute.description}
                         </td>
                         <td className="table-cell">
-                          <Badge
+                          <StatusBadge 
                             status={
                               dispute.status === 'RESOLVED'
                                 ? 'verified'
@@ -2445,7 +2445,7 @@ export default function GroupDetailPage() {
                             }
                           >
                             {dispute.status}
-                          </Badge>
+                          </StatusBadge>
                         </td>
                         <td className="table-cell text-gray-500 text-sm max-w-xs truncate" title={dispute.resolution}>
                           {dispute.resolution || '-'}
@@ -2524,7 +2524,7 @@ export default function GroupDetailPage() {
                           {swap.reason || '-'}
                         </td>
                         <td className="table-cell">
-                          <Badge
+                          <StatusBadge 
                             status={
                               swap.status === 'APPROVED'
                                 ? 'verified'
@@ -2534,7 +2534,7 @@ export default function GroupDetailPage() {
                             }
                           >
                             {swap.status}
-                          </Badge>
+                          </StatusBadge>
                         </td>
                         <td className="table-cell text-right">
                           {swap.status === 'PENDING' && (
@@ -3089,7 +3089,7 @@ export default function GroupDetailPage() {
                               )}
                             </td>
                             <td className="table-cell">
-                              <Badge
+                              <StatusBadge 
                                 status={
                                   waiver.status === 'ACTIVE'
                                     ? 'active'
@@ -3099,7 +3099,7 @@ export default function GroupDetailPage() {
                                 }
                               >
                                 {waiver.status}
-                              </Badge>
+                              </StatusBadge>
                             </td>
                             <td className="table-cell text-right">
                               {waiver.status === 'ACTIVE' && (
