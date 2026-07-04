@@ -216,7 +216,6 @@ export default function GroupDetailPage() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
 
   // CBE account settings state
-  const [showCbeAccountsModal, setShowCbeAccountsModal] = useState(false);
   const [groupCbeAccounts, setGroupCbeAccounts] = useState<string[]>([]);
   const [availableMembers, setAvailableMembers] = useState<MemberListItem[]>([]);
   const [memberSearch, setMemberSearch] = useState('');
@@ -1173,16 +1172,6 @@ export default function GroupDetailPage() {
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Edit Info
-              </Button>
-            )}
-            {isOwnerOrSuper && (
-              <Button
-                variant="outline"
-                onClick={() => setShowCbeAccountsModal(true)}
-                className="border-blue-200 text-blue-700 hover:bg-blue-50"
-              >
-                <Zap className="h-4 w-4 mr-2" />
-                CBE Accounts
               </Button>
             )}
             {isOwnerOrSuper && (
@@ -4527,6 +4516,30 @@ export default function GroupDetailPage() {
             />
           </div>
 
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2 mb-2 mt-4">
+              <Zap className="h-4 w-4 text-blue-600" />
+              <label className="block text-sm font-semibold text-blue-900">
+                CBE Auto-Verification Accounts
+              </label>
+            </div>
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
+              <p className="text-xs text-blue-700">
+                These accounts are used to verify member deposits automatically via CBE Direct API using FT numbers. Only CBE accounts starting with 1000 are supported.
+              </p>
+            </div>
+            <CbeAccountSettings
+              groupId={groupId}
+              accounts={groupCbeAccounts}
+              onSaveFn={updateGroupCbeAccounts}
+              onSaved={(newAccounts) => {
+                setGroupCbeAccounts(newAccounts);
+                setSuccess('CBE account numbers saved successfully!');
+                setTimeout(() => setSuccess(null), 3000);
+              }}
+            />
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button
               type="button"
@@ -4540,37 +4553,6 @@ export default function GroupDetailPage() {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      {/* CBE Account Settings Modal */}
-      <Modal
-        isOpen={showCbeAccountsModal}
-        onClose={() => setShowCbeAccountsModal(false)}
-        title="CBE Receiver Account Settings"
-        size="sm"
-      >
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
-            <Zap className="h-5 w-5 text-blue-600 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-bold text-blue-800">CBE Direct Auto-Verification</p>
-              <p className="text-xs text-blue-600 mt-0.5">
-                These accounts are used to verify member deposits automatically via CBE Direct API using FT numbers. Only CBE accounts starting with 1000 are supported.
-              </p>
-            </div>
-          </div>
-          <CbeAccountSettings
-            groupId={groupId}
-            accounts={groupCbeAccounts}
-            onSaveFn={updateGroupCbeAccounts}
-            onSaved={(newAccounts) => {
-              setGroupCbeAccounts(newAccounts);
-              setSuccess('CBE account numbers saved successfully!');
-              setTimeout(() => setSuccess(null), 3000);
-              setShowCbeAccountsModal(false);
-            }}
-          />
-        </div>
       </Modal>
 
       <LocationPicker

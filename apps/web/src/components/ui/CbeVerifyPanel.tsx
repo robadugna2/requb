@@ -470,6 +470,7 @@ export function CbeAccountSettings({ groupId, accounts, onSaveFn, onSaved }: Cbe
                   <span className="text-sm font-mono font-semibold text-blue-800">{acc}</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleRemove(acc)}
                   className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
                 >
@@ -496,7 +497,7 @@ export function CbeAccountSettings({ groupId, accounts, onSaveFn, onSaved }: Cbe
             maxLength={13}
             className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
           />
-          <Button variant="outline" onClick={handleAdd} disabled={!newAccount.trim()}>
+          <Button type="button" variant="outline" onClick={handleAdd} disabled={!newAccount.trim()}>
             Add
           </Button>
         </div>
@@ -510,6 +511,7 @@ export function CbeAccountSettings({ groupId, accounts, onSaveFn, onSaved }: Cbe
 
       <div className="flex items-center gap-3">
         <Button
+          type="button"
           onClick={handleSave}
           disabled={saving}
           className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
