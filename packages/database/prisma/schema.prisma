@@ -149,6 +149,7 @@ model EqubGroup {
   status             GroupStatus   @default(ACTIVE)
   bankAccount        String?       @map("bank_account") // shared deposit account number
   bankName           String?       @map("bank_name")
+  cbeAccountNumbers  String[]      @map("cbe_account_numbers") // CBE receiver account numbers for auto-verification
   photoUrl           String?       @map("photo_url")
   endDate            DateTime?     @map("end_date")
   physicalAddress    String?       @map("physical_address")
@@ -233,6 +234,8 @@ model Deposit {
   confidence         Float?             // OCR confidence score 0-1
   isLate             Boolean            @default(false) @map("is_late") // was deposit submitted after deadline?
   penaltyApplied     Boolean            @default(false) @map("penalty_applied") // was a late penalty created?
+  autoVerified       Boolean            @default(false) @map("auto_verified") // was this verified via CBE Direct API?
+  cbeVerificationData Json?             @map("cbe_verification_data") // raw data returned from CBE verification
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 

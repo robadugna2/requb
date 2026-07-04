@@ -8,14 +8,27 @@ import {
   Image as ImageIcon,
   FileText,
   AlertCircle,
+  Zap,
+  Search,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
-import { getDeposits, verifyDeposit, rejectDeposit, getMediaUrl } from '@/lib/api';
-import type { ReceiptItem } from '@/lib/api';
+import { AutoVerifyButton, CbeLookupPanel } from '@/components/ui/CbeVerifyPanel';
+import {
+  getDeposits,
+  verifyDeposit,
+  rejectDeposit,
+  getMediaUrl,
+  autoVerifyDepositCbe,
+  cbeLookup,
+  getGroups,
+} from '@/lib/api';
+import type { ReceiptItem, GroupListItem } from '@/lib/api';
 import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
 export default function ReceiptsPage() {
@@ -29,6 +42,12 @@ export default function ReceiptsPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Group CBE accounts map: groupId -> cbeAccountNumbers
+  const [groupCbeAccounts, setGroupCbeAccounts] = useState<Record<string, string[]>>({});
+
+  // Manual FT lookup panel
+  const [showLookupPanel, setShowLookupPanel] = useState(false);
 
   const fetchReceipts = async () => {
     setLoading(true);
@@ -46,8 +65,24 @@ export default function ReceiptsPage() {
     }
   };
 
+  const fetchGroupCbeAccounts = async () => {
+    try {
+      const groups = await getGroups();
+      const map: Record<string, string[]> = {};
+      groups.forEach((g: GroupListItem & { cbeAccountNumbers?: string[] }) => {
+        if (g.cbeAccountNumbers?.length) {
+          map[g.id] = g.cbeAccountNumbers;
+        }
+      });
+      setGroupCbeAccounts(map);
+    } catch {
+      // silently fail - CBE accounts are optional
+    }
+  };
+
   useEffect(() => {
     fetchReceipts();
+    fetchGroupCbeAccounts();
   }, [statusFilter]);
 
   const handleVerify = async (id: string) => {
@@ -59,6 +94,7 @@ export default function ReceiptsPage() {
           r.id === id ? { ...r, status: 'verified' as const } : r
         )
       );
+      if (selectedReceipt?.id === id) setSelectedReceipt({ ...selectedReceipt, status: 'verified' });
       setSuccess('Receipt verified successfully!');
       setTimeout(() => setSuccess(null), 4000);
       setShowDetailModal(false);
@@ -79,6 +115,7 @@ export default function ReceiptsPage() {
           r.id === id ? { ...r, status: 'rejected' as const } : r
         )
       );
+      if (selectedReceipt?.id === id) setSelectedReceipt({ ...selectedReceipt, status: 'rejected' });
       setSuccess('Receipt rejected successfully.');
       setTimeout(() => setSuccess(null), 4000);
       setShowDetailModal(false);
@@ -88,6 +125,19 @@ export default function ReceiptsPage() {
         axiosErr.response?.data?.message || 'Failed to reject receipt. Please try again.'
       );
     }
+  };
+
+  const handleAutoVerified = (receiptId: string) => {
+    setReceipts((prev) =>
+      prev.map((r) =>
+        r.id === receiptId ? { ...r, status: 'verified' as const, autoVerified: true } : r
+      )
+    );
+    if (selectedReceipt?.id === receiptId) {
+      setSelectedReceipt({ ...selectedReceipt, status: 'verified', autoVerified: true });
+    }
+    setSuccess('✅ Deposit auto-verified via CBE Direct!');
+    setTimeout(() => setSuccess(null), 5000);
   };
 
   const filteredReceipts = receipts.filter((receipt) => {
@@ -126,15 +176,46 @@ export default function ReceiptsPage() {
           <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 font-bold text-lg">×</button>
         </div>
       )}
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('receipts.title')}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {t('receipts.subtitle_pending')} ({pendingCount})
           </p>
         </div>
+
+        {/* Manual FT Lookup toggle */}
+        <Button
+          variant="outline"
+          onClick={() => setShowLookupPanel((v) => !v)}
+          className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+        >
+          <Search className="h-4 w-4" />
+          FT Lookup
+          {showLookupPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
       </div>
+
+      {/* CBE Manual FT Lookup Panel */}
+      {showLookupPanel && (
+        <div className="mb-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-blue-900">CBE Direct — Manual FT Lookup</h3>
+              <p className="text-xs text-blue-600">Verify any transaction using FT number + CBE account</p>
+            </div>
+          </div>
+          <CbeLookupPanel
+            defaultAccount={Object.values(groupCbeAccounts)[0]?.[0] || ''}
+            onLookupFn={cbeLookup}
+          />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -187,12 +268,19 @@ export default function ReceiptsPage() {
           {filteredReceipts.map((receipt) => (
             <div
               key={receipt.id}
-              className="card-hover cursor-pointer"
+              className="card-hover cursor-pointer relative"
               onClick={() => {
                 setSelectedReceipt(receipt);
                 setShowDetailModal(true);
               }}
             >
+              {/* Auto-verified badge */}
+              {receipt.autoVerified && (
+                <div className="absolute top-2 right-2 flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                  <Zap className="h-2.5 w-2.5" /> CBE Auto
+                </div>
+              )}
+
               {/* Receipt thumbnail */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -207,6 +295,9 @@ export default function ReceiptsPage() {
                     {receipt.memberName}
                   </p>
                   <p className="text-xs text-gray-500">{receipt.groupName}</p>
+                  {receipt.ftNumber && (
+                    <p className="text-[10px] text-blue-600 font-mono truncate">{receipt.ftNumber}</p>
+                  )}
                 </div>
                 <StatusBadge status={receipt.status} />
               </div>
@@ -242,6 +333,14 @@ export default function ReceiptsPage() {
                   ETB {receipt.amount.toLocaleString()}
                 </span>
               </div>
+
+              {/* CBE auto-verify hint for pending + has FT */}
+              {receipt.status === 'pending' && receipt.ftNumber && (
+                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-blue-600">
+                  <Zap className="h-3 w-3" />
+                  CBE auto-verify available
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -290,6 +389,14 @@ export default function ReceiptsPage() {
                   {selectedReceipt.date}
                 </p>
               </div>
+              {selectedReceipt.ftNumber && (
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-500 mb-1">FT Transaction Number</p>
+                  <p className="text-sm font-mono font-semibold text-blue-700 bg-blue-50 px-2 py-1 rounded-md inline-block">
+                    {selectedReceipt.ftNumber}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Receipt Image */}
@@ -309,7 +416,7 @@ export default function ReceiptsPage() {
               </div>
             )}
 
-            {/* {t('receipts.ocr_title')} */}
+            {/* OCR Data */}
             {selectedReceipt.ocrData && (
               <div className="bg-gray-50 rounded-xl p-4">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">
@@ -331,8 +438,7 @@ export default function ReceiptsPage() {
                   <div>
                     <p className="text-xs text-gray-500">{t('receipts.extracted_amount')}</p>
                     <p className="text-sm font-medium text-gray-900">
-                      ETB{' '}
-                      {selectedReceipt.ocrData.extractedAmount.toLocaleString()}
+                      ETB {selectedReceipt.ocrData.extractedAmount.toLocaleString()}
                     </p>
                   </div>
                   <div>
@@ -344,14 +450,42 @@ export default function ReceiptsPage() {
                 </div>
 
                 {/* Amount mismatch warning */}
-                {selectedReceipt.ocrData.extractedAmount !==
-                  selectedReceipt.amount && (
+                {selectedReceipt.ocrData.extractedAmount !== selectedReceipt.amount && (
                   <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <p className="text-xs text-yellow-700 font-medium">
-                      t('receipts.ocr_mismatch') + ' (' + t('groups.contribution') + ': ' + selectedReceipt.amount.toLocaleString() + ' vs OCR: ' + selectedReceipt.ocrData.extractedAmount.toLocaleString() + ')'
+                      Amount mismatch: contribution is ETB {selectedReceipt.amount.toLocaleString()} but receipt shows ETB {selectedReceipt.ocrData.extractedAmount.toLocaleString()}
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ─── CBE Auto-Verification Section ─── */}
+            {selectedReceipt.status === 'pending' && (
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
+                    <Zap className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-blue-900">CBE Auto-Verification</h4>
+                    <p className="text-xs text-blue-600">
+                      Verify via CBE Direct API using the FT number
+                    </p>
+                  </div>
+                </div>
+                <AutoVerifyButton
+                  depositId={selectedReceipt.id}
+                  ftNumber={selectedReceipt.ftNumber}
+                  groupId={selectedReceipt.groupId}
+                  cbeAccountNumbers={groupCbeAccounts[selectedReceipt.groupId] || []}
+                  expectedAmount={selectedReceipt.amount}
+                  onVerified={() => handleAutoVerified(selectedReceipt.id)}
+                  onAutoVerifyFn={autoVerifyDepositCbe}
+                  onManualVerify={() => handleVerify(selectedReceipt.id)}
+                  onManualReject={() => handleReject(selectedReceipt.id)}
+                  canManage={hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits')}
+                />
               </div>
             )}
 
@@ -360,9 +494,13 @@ export default function ReceiptsPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-500">Status:</span>
                 <StatusBadge status={selectedReceipt.status} />
+                {selectedReceipt.autoVerified && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Zap className="h-3 w-3" /> CBE Auto-Verified
+                  </span>
+                )}
               </div>
-
-              {selectedReceipt.status === 'pending' && hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits') && (
+              {selectedReceipt.status === 'pending' && !selectedReceipt.ftNumber && hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits') && (
                 <div className="flex gap-3">
                   <Button
                     variant="danger"

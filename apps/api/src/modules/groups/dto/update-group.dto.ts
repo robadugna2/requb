@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsEnum,
   IsInt,
+  IsArray,
   Min,
   MinLength,
 } from 'class-validator';
@@ -79,4 +80,9 @@ export class UpdateGroupDto {
   @IsOptional()
   @IsNumber()
   longitude?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cbeAccountNumbers?: string[];
 }

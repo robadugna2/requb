@@ -37,17 +37,19 @@ import {
   FileText,
   TrendingUp,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
-import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers, updateGroup } from '@/lib/api';
+import { getGroup, getGroupDeposits, verifyDeposit, rejectDeposit, triggerLottery, getMembers, addMemberToGroup, removeMemberFromGroup, createMember, getGroupRules, updateGroupRules, getRuleTemplates, createRuleTemplate, applyRuleTemplate, getMediaUrl, getGroupPenalties, payPenalty, waivePenalty, getGroupDisputes, fileDispute, resolveDispute, getGroupTurnSwaps, respondTurnSwap, requestTurnSwap, getGroupGuarantors, addGuarantor, updateGuarantorStatus, deleteGuarantor, getGroupMemberDues, getMergedGroups, getGroupFeeWaivers, updateMemberShares, createMergedGroup, dissolveMergedGroup, grantFeeWaiver, cancelFeeWaiver, updateMergedGroupPercentages, getMergedGroupDepositStatus, enforceMergedMemberCompliance, getMergedGroupDepositHistory, getGroupLeaders, assignGroupLeader, updateGroupLeader, removeGroupLeader, getAdminUsers, updateGroup, autoVerifyDepositCbe, updateGroupCbeAccounts } from '@/lib/api';
 import type { GroupDetail, DepositItem, MemberListItem, GroupRules, RuleTemplate, PenaltyRecord, DisputeItem, TurnSwapRequest, GuarantorItem, MemberDueCalculation, MergedGroupItem, FeeWaiverItem, MergedMemberDepositStatusItem, MergedGroupDepositHistoryItem, GroupLeaderItem, AdminUserItem } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
+import { AutoVerifyButton, CbeAccountSettings } from '@/components/ui/CbeVerifyPanel';
 
 const PENALTY_TYPES = [
   { value: 'NONE', label: 'No Penalty' },
@@ -212,6 +214,10 @@ export default function GroupDetailPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+
+  // CBE account settings state
+  const [showCbeAccountsModal, setShowCbeAccountsModal] = useState(false);
+  const [groupCbeAccounts, setGroupCbeAccounts] = useState<string[]>([]);
   const [availableMembers, setAvailableMembers] = useState<MemberListItem[]>([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
@@ -290,7 +296,10 @@ export default function GroupDetailPage() {
         getGroup(groupId),
         getGroupDeposits(groupId),
       ]);
-      if (groupData.status === 'fulfilled') setGroup(groupData.value);
+      if (groupData.status === 'fulfilled') {
+        setGroup(groupData.value);
+        setGroupCbeAccounts((groupData.value as any).cbeAccountNumbers || []);
+      }
       else setError('Failed to load group details.');
       if (depositsData.status === 'fulfilled') setDeposits(depositsData.value);
     } catch (err) {
@@ -1168,6 +1177,16 @@ export default function GroupDetailPage() {
             )}
             {isOwnerOrSuper && (
               <Button
+                variant="outline"
+                onClick={() => setShowCbeAccountsModal(true)}
+                className="border-blue-200 text-blue-700 hover:bg-blue-50"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                CBE Accounts
+              </Button>
+            )}
+            {isOwnerOrSuper && (
+              <Button
                 variant="danger"
                 onClick={async () => {
                   const groupName = prompt(`To delete this group, please type its name: "${group.name}"`);
@@ -1684,8 +1703,39 @@ export default function GroupDetailPage() {
                   </div>
                 )}
 
-                {/* Actions for pending */}
+                {/* CBE Auto-Verify section */}
                 {previewDeposit.status === 'pending' && (
+                  <div className="border-t border-blue-100 pt-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 -mx-1 mt-2">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center">
+                        <Zap className="h-3 w-3 text-white" />
+                      </div>
+                      <h4 className="text-sm font-bold text-blue-900">CBE Auto-Verification</h4>
+                    </div>
+                    <AutoVerifyButton
+                      depositId={previewDeposit.id}
+                      ftNumber={previewDeposit.ftNumber}
+                      groupId={groupId}
+                      cbeAccountNumbers={groupCbeAccounts}
+                      expectedAmount={previewDeposit.amount}
+                      onVerified={() => {
+                        setDeposits((prev) =>
+                          prev.map((d) => d.id === previewDeposit.id ? { ...d, status: 'verified' as const, autoVerified: true } : d)
+                        );
+                        setPreviewDeposit({ ...previewDeposit, status: 'verified' });
+                        setSuccess('✅ Deposit auto-verified via CBE Direct!');
+                        setTimeout(() => setSuccess(null), 5000);
+                      }}
+                      onAutoVerifyFn={autoVerifyDepositCbe}
+                      onManualVerify={() => handleVerify(previewDeposit.id)}
+                      onManualReject={() => handleReject(previewDeposit.id)}
+                      canManage={!!(groupPerms?.canManageDeposits || isOwnerOrSuper)}
+                    />
+                  </div>
+                )}
+
+                {/* Actions for pending — only shown when CBE section is not applicable */}
+                {previewDeposit.status === 'pending' && !(groupPerms?.canManageDeposits || isOwnerOrSuper) && (
                   <div className="border-t border-gray-100 pt-4 space-y-3">
                     <Button
                       onClick={() => handleVerify(previewDeposit.id)}
@@ -2354,7 +2404,7 @@ export default function GroupDetailPage() {
                             <div className="flex justify-end gap-1.5">
                               <Button
                                 size="sm"
-                                variant="primary"
+                                variant="default"
                                 onClick={() => handlePayPenalty(penalty.id)}
                               >
                                 {t('group.btn_mark_paid')}
@@ -2454,7 +2504,7 @@ export default function GroupDetailPage() {
                           {dispute.status === 'OPEN' && (
                             <Button
                               size="sm"
-                              variant="primary"
+                              variant="default"
                               onClick={() => setShowResolveModal(dispute.id)}
                             >
                               {t('group.btn_resolve')}
@@ -2541,7 +2591,7 @@ export default function GroupDetailPage() {
                             <div className="flex justify-end gap-1.5">
                               <Button
                                 size="sm"
-                                variant="primary"
+                                variant="default"
                                 onClick={() => handleRespondSwap(swap.id, true)}
                               >
                                 {t('group.btn_approve')}
@@ -2666,7 +2716,7 @@ export default function GroupDetailPage() {
                                 </Button>
                                 <Button
                                   size="sm"
-                                  variant="primary"
+                                  variant="default"
                                   loading={updatingGuarantorId === g.id}
                                   onClick={() => handleUpdateGuarantorStatus(g.id, 'CALLED')}
                                 >
@@ -2849,7 +2899,7 @@ export default function GroupDetailPage() {
                               </Button>
                               <Button
                                 size="sm"
-                                variant="primary"
+                                variant="default"
                                 loading={enforcingCompliance === mg.id}
                                 onClick={() => handleEnforceCompliance(mg.id)}
                               >
@@ -4490,6 +4540,37 @@ export default function GroupDetailPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* CBE Account Settings Modal */}
+      <Modal
+        isOpen={showCbeAccountsModal}
+        onClose={() => setShowCbeAccountsModal(false)}
+        title="CBE Receiver Account Settings"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+            <Zap className="h-5 w-5 text-blue-600 flex-shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-blue-800">CBE Direct Auto-Verification</p>
+              <p className="text-xs text-blue-600 mt-0.5">
+                These accounts are used to verify member deposits automatically via CBE Direct API using FT numbers. Only CBE accounts starting with 1000 are supported.
+              </p>
+            </div>
+          </div>
+          <CbeAccountSettings
+            groupId={groupId}
+            accounts={groupCbeAccounts}
+            onSaveFn={updateGroupCbeAccounts}
+            onSaved={(newAccounts) => {
+              setGroupCbeAccounts(newAccounts);
+              setSuccess('CBE account numbers saved successfully!');
+              setTimeout(() => setSuccess(null), 3000);
+              setShowCbeAccountsModal(false);
+            }}
+          />
+        </div>
       </Modal>
 
       <LocationPicker

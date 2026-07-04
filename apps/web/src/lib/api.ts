@@ -66,6 +66,7 @@ export interface GroupListItem {
   currentCycle: number;
   totalCycles: number;
   createdAt: string;
+  cbeAccountNumbers?: string[];
 }
 
 export interface GroupDetail {
@@ -87,6 +88,7 @@ export interface GroupDetail {
   members: GroupMember[];
   nextDrawDate?: string;
   createdById?: string;
+  cbeAccountNumbers?: string[];
 }
 
 export interface GroupMember {
@@ -254,13 +256,33 @@ export interface ReceiptItem {
   amount: number;
   status: 'verified' | 'pending' | 'rejected';
   date: string;
+  ftNumber?: string;
   receiptImageUrl?: string;
+  autoVerified?: boolean;
   ocrData?: {
     bankName: string;
     transactionRef: string;
     extractedAmount: number;
     extractedDate: string;
   };
+}
+
+export interface CbeTransactionData {
+  ftNumber: string;
+  amount?: number;
+  payer?: string;
+  payerAccount?: string;
+  receiver?: string;
+  receiverAccount?: string;
+  date?: string;
+  reference?: string;
+  reason?: string;
+  branch?: string;
+  commission?: string;
+  vatOnCommission?: string;
+  totalDebited?: string;
+  amountInWords?: string;
+  rawText: string;
 }
 
 export interface DepositItem {
@@ -283,6 +305,8 @@ export interface DepositItem {
   isLate: boolean;
   penaltyApplied: boolean;
   confidence?: number;
+  autoVerified?: boolean;
+  cbeVerificationData?: CbeTransactionData;
 }
 
 export interface LotteryResultItem {
@@ -413,6 +437,7 @@ function mapGroupListItem(raw: Record<string, unknown>): GroupListItem {
     currentCycle,
     totalCycles: raw.maxMembers as number,
     createdAt: raw.createdAt as string,
+    cbeAccountNumbers: (raw.cbeAccountNumbers as string[]) || [],
   };
 }
 
@@ -483,6 +508,7 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
     members,
     nextDrawDate,
     createdById: (raw.createdById as string) || (createdBy?.id as string) || undefined,
+    cbeAccountNumbers: (raw.cbeAccountNumbers as string[]) || [],
   };
 }
 
@@ -626,7 +652,9 @@ function mapReceiptItem(raw: Record<string, unknown>): ReceiptItem {
     amount: (raw.amount as number) || (group?.contributionAmount as number) || 0,
     status: mapVerificationStatus(raw.verificationStatus as string),
     date: raw.createdAt ? new Date(raw.createdAt as string).toLocaleDateString('en-CA') : 'N/A',
+    ftNumber: (raw.ftNumber as string) || undefined,
     receiptImageUrl: raw.imageUrl as string | undefined,
+    autoVerified: (raw.autoVerified as boolean) || false,
     ocrData,
   };
 }
@@ -659,6 +687,8 @@ function mapDepositItem(raw: Record<string, unknown>): DepositItem {
     isLate: (raw.isLate as boolean) || false,
     penaltyApplied: (raw.penaltyApplied as boolean) || false,
     confidence: (raw.confidence as number) || undefined,
+    autoVerified: (raw.autoVerified as boolean) || false,
+    cbeVerificationData: raw.cbeVerificationData as CbeTransactionData | undefined,
   };
 }
 
@@ -1016,6 +1046,55 @@ export const verifyDeposit = async (id: string) => {
 
 export const rejectDeposit = async (id: string, reason?: string) => {
   const response = await api.patch(`/deposits/${id}/reject`, { reason });
+  return response.data;
+};
+
+export interface CbeAutoVerifyResult {
+  verified: boolean;
+  result: {
+    success: boolean;
+    transaction?: CbeTransactionData;
+    error?: string;
+    accountMatched?: boolean;
+    amountMatched?: boolean;
+  };
+  deposit: Record<string, unknown>;
+}
+
+/**
+ * Auto-verify a deposit using CBE Direct API.
+ * Uses the group's configured CBE receiver account number.
+ */
+export const autoVerifyDepositCbe = async (
+  depositId: string,
+  accountNumber?: string,
+): Promise<CbeAutoVerifyResult> => {
+  const response = await api.post(`/deposits/${depositId}/auto-verify-cbe`, {
+    accountNumber,
+  });
+  return response.data as CbeAutoVerifyResult;
+};
+
+/**
+ * Standalone CBE FT number lookup — does not modify any deposit.
+ * Returns raw transaction data from CBE Direct.
+ */
+export const cbeLookup = async (
+  ftNumber: string,
+  accountNumber: string,
+): Promise<CbeTransactionData> => {
+  const response = await api.post('/deposits/cbe-lookup', { ftNumber, accountNumber });
+  return response.data as CbeTransactionData;
+};
+
+/**
+ * Update a group's CBE receiver account numbers.
+ */
+export const updateGroupCbeAccounts = async (
+  groupId: string,
+  cbeAccountNumbers: string[],
+): Promise<unknown> => {
+  const response = await api.patch(`/groups/${groupId}`, { cbeAccountNumbers });
   return response.data;
 };
 
