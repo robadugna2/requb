@@ -155,7 +155,7 @@ export default function MemberDetailPage() {
     setDeleteError(null);
     try {
       await deleteUserWithPassword(memberId, deletePassword);
-      router.push('/members');
+      router.push('/groups');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setDeleteError(

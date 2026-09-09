@@ -21,6 +21,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.notifications': 'Notifications',
     'nav.settings': 'Settings',
     'nav.logout': 'Logout',
+    'nav.admins': 'Admins',
     'nav.admin_panel': 'Admin Dashboard',
     // Dashboard Page
     'db.title': 'Dashboard',
@@ -456,6 +457,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.notifications': 'ማሳወቂያዎች',
     'nav.settings': 'ቅንብሮች',
     'nav.logout': 'ውጣ',
+    'nav.admins': 'አስተዳዳሪዎች',
     'nav.admin_panel': 'የአስተዳዳሪ ሰሌዳ',
     // Dashboard Page
     'db.title': 'ዳሽቦርድ',

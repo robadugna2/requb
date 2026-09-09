@@ -1,0 +1,441 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Users,
+  Calendar,
+  CircleDollarSign,
+  Clock,
+  MapPin,
+  Settings,
+  Trash2,
+  Ticket,
+  Zap,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import StatusBadge from '@/components/ui/StatusBadge';
+import Modal from '@/components/ui/Modal';
+import PhotoUpload from '@/components/ui/PhotoUpload';
+import LocationPicker from '@/components/ui/LocationPicker';
+import { CbeAccountSettings } from '@/components/ui/CbeVerifyPanel';
+import { updateGroup, softDeleteGroup, updateGroupCbeAccounts, getMediaUrl } from '@/lib/api';
+import type { GroupDetail } from '@/lib/api';
+
+interface GroupHeaderProps {
+  group: GroupDetail;
+  groupId: string;
+  isOwnerOrSuper: boolean;
+  canTriggerLottery: boolean;
+  drawLoading: boolean;
+  onDrawLottery: () => void;
+  onGroupUpdated: (group: GroupDetail) => void;
+  onCbeAccountsSaved: (accounts: string[]) => void;
+  notifySuccess: (msg: string) => void;
+  notifyError: (msg: string) => void;
+}
+
+export default function GroupHeader({
+  group,
+  groupId,
+  isOwnerOrSuper,
+  canTriggerLottery,
+  drawLoading,
+  onDrawLottery,
+  onGroupUpdated,
+  onCbeAccountsSaved,
+  notifySuccess,
+  notifyError,
+}: GroupHeaderProps) {
+  const router = useRouter();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    contributionAmount: '',
+    maxMembers: '',
+    cycleDuration: 'Weekly',
+    photoUrl: '',
+    endDate: '',
+    physicalAddress: '',
+    latitude: '',
+    longitude: '',
+  });
+
+  const openEdit = () => {
+    setEditForm({
+      name: group.name,
+      description: group.description || '',
+      contributionAmount: String(group.contributionAmount),
+      maxMembers: String(group.maxMembers),
+      cycleDuration: group.cycleDuration || 'Weekly',
+      photoUrl: group.photoUrl || '',
+      endDate: group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '',
+      physicalAddress: group.physicalAddress || '',
+      latitude: group.latitude ? String(group.latitude) : '',
+      longitude: group.longitude ? String(group.longitude) : '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdating(true);
+    try {
+      let cycleType: string | undefined;
+      if (editForm.cycleDuration) {
+        switch (editForm.cycleDuration.toLowerCase()) {
+          case 'weekly': cycleType = 'weekly'; break;
+          case 'bi-weekly':
+          case 'biweekly': cycleType = 'biweekly'; break;
+          case 'monthly': cycleType = 'monthly'; break;
+          default: cycleType = 'monthly';
+        }
+      }
+
+      const updated = await updateGroup(groupId, {
+        name: editForm.name,
+        description: editForm.description || undefined,
+        contributionAmount: Number(editForm.contributionAmount),
+        maxMembers: Number(editForm.maxMembers),
+        cycleType,
+        photoUrl: editForm.photoUrl || undefined,
+        endDate: editForm.endDate || undefined,
+        physicalAddress: editForm.physicalAddress || undefined,
+        latitude: editForm.latitude ? Number(editForm.latitude) : undefined,
+        longitude: editForm.longitude ? Number(editForm.longitude) : undefined,
+      });
+      setShowEditModal(false);
+      notifySuccess('Group information updated successfully.');
+      onGroupUpdated(updated as GroupDetail);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      notifyError(axiosErr.response?.data?.message || 'Failed to update group information.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const groupName = window.prompt(`To delete this group, please type its name: "${group.name}"`);
+    if (groupName !== group.name) {
+      if (groupName !== null) window.alert('Group name did not match. Deletion cancelled.');
+      return;
+    }
+    try {
+      await softDeleteGroup(groupId);
+      router.push('/groups');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      notifyError(axiosErr.response?.data?.message || 'Failed to delete group.');
+    }
+  };
+
+  return (
+    <>
+      <div className="card mb-6">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            {group.photoUrl ? (
+              <img src={getMediaUrl(group.photoUrl)} alt={group.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100 flex-shrink-0" />
+            ) : (
+              <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <Users className="h-8 w-8 text-gray-400" />
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
+                <StatusBadge status={group.status} />
+              </div>
+              {group.description && (
+                <p className="mt-2 text-sm text-gray-500">{group.description}</p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                {group.physicalAddress && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {group.physicalAddress}
+                    {group.latitude && group.longitude && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${group.latitude},${group.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 hover:underline ml-1"
+                      >
+                        (Map)
+                      </a>
+                    )}
+                  </span>
+                )}
+                {group.endDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Ends: {new Date(group.endDate).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            {isOwnerOrSuper && (
+              <Button variant="secondary" onClick={openEdit}>
+                <Settings className="h-4 w-4 mr-2" />
+                Edit Info
+              </Button>
+            )}
+            {isOwnerOrSuper && (
+              <Button variant="danger" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Group
+              </Button>
+            )}
+            {canTriggerLottery && (
+              <Button onClick={onDrawLottery} loading={drawLoading}>
+                <Ticket className="h-4 w-4 mr-2" />
+                Draw Lottery
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <Users className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Members</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {group.membersCount}/{group.maxMembers}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-50 rounded-lg">
+              <CircleDollarSign className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Contribution</p>
+              <p className="text-sm font-semibold text-gray-900">
+                ETB {group.contributionAmount.toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-50 rounded-lg">
+              <Calendar className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Cycle</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {group.currentCycle}/{group.totalCycles}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-50 rounded-lg">
+              <Clock className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Next Draw</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {group.nextDrawDate || 'TBD'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit Group Info Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Equb Group Details"
+        size="md"
+      >
+        <form onSubmit={handleUpdate} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Group Profile Image
+            </label>
+            <PhotoUpload
+              value={editForm.photoUrl}
+              onChange={(url) => setEditForm({ ...editForm, photoUrl: url })}
+              name={editForm.name || 'Group'}
+              size="md"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Group Name
+            </label>
+            <input
+              type="text"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              className="input-field"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Contribution Per Share (ETB)
+              </label>
+              <input
+                type="number"
+                value={editForm.contributionAmount}
+                onChange={(e) => setEditForm({ ...editForm, contributionAmount: e.target.value })}
+                className="input-field"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Max Members
+              </label>
+              <input
+                type="number"
+                value={editForm.maxMembers}
+                onChange={(e) => setEditForm({ ...editForm, maxMembers: e.target.value })}
+                className="input-field"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Cycle Duration
+            </label>
+            <select
+              value={editForm.cycleDuration}
+              onChange={(e) => setEditForm({ ...editForm, cycleDuration: e.target.value })}
+              className="input-field"
+            >
+              <option value="Weekly">Weekly</option>
+              <option value="Bi-Weekly">Bi-Weekly</option>
+              <option value="Monthly">Monthly</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={editForm.endDate}
+                onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Physical Location
+            </label>
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between">
+              <div className="flex-1 min-w-0 pr-4">
+                {editForm.physicalAddress ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {editForm.physicalAddress}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      GPS: {Number(editForm.latitude).toFixed(6)}, {Number(editForm.longitude).toFixed(6)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No physical location assigned</p>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowLocationPicker(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs py-1.5 px-3"
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Select on Map
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Description (Optional)
+            </label>
+            <textarea
+              value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              className="input-field"
+              rows={3}
+              placeholder="Brief description of the group..."
+            />
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2 mb-2 mt-4">
+              <Zap className="h-4 w-4 text-blue-600" />
+              <label className="block text-sm font-semibold text-blue-900">
+                CBE Auto-Verification Accounts
+              </label>
+            </div>
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
+              <p className="text-xs text-blue-700">
+                These accounts are used to verify member deposits automatically via CBE Direct API using FT numbers. Only CBE accounts starting with 1000 are supported.
+              </p>
+            </div>
+            <CbeAccountSettings
+              groupId={groupId}
+              accounts={group.cbeAccountNumbers || []}
+              onSaveFn={updateGroupCbeAccounts}
+              onSaved={(newAccounts) => {
+                onCbeAccountsSaved(newAccounts);
+                notifySuccess('CBE account numbers saved successfully!');
+              }}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowEditModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" loading={updating}>
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <LocationPicker
+        isOpen={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        initialLatitude={editForm.latitude ? Number(editForm.latitude) : undefined}
+        initialLongitude={editForm.longitude ? Number(editForm.longitude) : undefined}
+        initialAddress={editForm.physicalAddress}
+        onConfirm={(loc) => {
+          setEditForm({
+            ...editForm,
+            physicalAddress: loc.address,
+            latitude: String(loc.latitude),
+            longitude: String(loc.longitude),
+          });
+        }}
+      />
+    </>
+  );
+}

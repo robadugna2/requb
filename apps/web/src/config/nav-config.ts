@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UsersRound, Receipt, UserCog, Settings, BookTemplate, Bell, Ticket } from 'lucide-react';
+import { LayoutDashboard, Users, Receipt, UserCog, Settings, BookTemplate, Bell, Ticket } from 'lucide-react';
 
 export interface NavItem {
   title: string;
@@ -37,13 +37,6 @@ export const navGroups: NavGroup[] = [
         url: '/groups',
         icon: Users,
         roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'],
-      },
-      {
-        title: 'Members',
-        key: 'nav.members',
-        url: '/members',
-        icon: UsersRound,
-        roles: ['SUPER_ADMIN', 'ADMIN'],
       },
       {
         title: 'Receipts',
