@@ -43,6 +43,6 @@ There is no test suite; verify changes by building (`build:api` / `build:web`) a
 
 ## Known Gotchas
 
-- **Working tree is mid-restructure (as of 2026-09-09):** `apps/web/src/`, `packages/` (including the Prisma schema and migrations), and several `scripts/` files are staged for deletion (`git status` shows ~69 `D` entries). The files still exist in `HEAD`, and the root `package.json` workspaces and db scripts still reference them — so `npm run db:*` and the web app are broken until these are restored or replaced. Check `git status` first; restore from HEAD with `git restore --staged --worktree -- <path>` only if the deletions were not intentional.
-- Recent commits restructured the web dashboard onto the "Kiranism" dashboard starter (shadcn/ui based; `apps/web/components.json`), so older docs describing `apps/web/src` page/component paths may be outdated — verify against the actual tree (or `git show HEAD:<path>`).
+- The `prisma` CLI is pinned as a root devDependency (5.22.0, matching `@prisma/client` in `apps/api`). Keep it pinned — `npm run db:generate` uses `npx prisma`, and without the pin npx pulls the latest major version, whose new CLI fails with `CLI.UNKNOWN_COMMAND` ("No command registered for `generate`"). This broke the Render build once already.
+- Deployment: Render builds with `npm install && npm run db:generate && npm run build:api`, so anything that breaks `packages/database/prisma/schema.prisma` or the root prisma pin breaks deploys.
 - Root has helper scripts (`seed-admin.js`, `test-auth.js`, `test-db.js`) that assume a running local Postgres from `docker-compose`.
