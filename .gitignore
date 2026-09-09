@@ -9,3 +9,6 @@ coverage/
 .turbo/
 nul
 **/nul
+
+# local data backups (contains member financial data)
+/backups/
