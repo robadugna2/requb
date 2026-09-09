@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import {
   Users,
   Calendar,
@@ -33,6 +34,49 @@ interface GroupHeaderProps {
   onCbeAccountsSaved: (accounts: string[]) => void;
   notifySuccess: (msg: string) => void;
   notifyError: (msg: string) => void;
+}
+
+function useCountUp(target: number, duration = 900) {
+  const [value, setValue] = useState(0);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    const from = prevRef.current;
+    prevRef.current = target;
+    if (from === target) {
+      setValue(target);
+      return;
+    }
+    let frame: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(from + (target - from) * eased));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+  return value;
+}
+
+function StatCard({ icon, label, value, delay, accent }: { icon: React.ReactNode; label: string; value: string; delay: number; accent: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className={`flex items-center gap-3 p-3 rounded-xl ${accent} bg-opacity-40`}
+    >
+      <div className={`p-2 rounded-lg ${accent}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-sm font-semibold text-gray-900">{value}</p>
+      </div>
+    </motion.div>
+  );
 }
 
 export default function GroupHeader({
@@ -133,9 +177,18 @@ export default function GroupHeader({
     }
   };
 
+  const membersCount = useCountUp(group.membersCount);
+  const contributionCount = useCountUp(group.contributionAmount);
+  const cycleCount = useCountUp(group.currentCycle);
+
   return (
     <>
-      <div className="card mb-6">
+      <motion.div
+        className="card mb-6"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             {group.photoUrl ? (
@@ -202,53 +255,37 @@ export default function GroupHeader({
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Users className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Members</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {group.membersCount}/{group.maxMembers}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <CircleDollarSign className="h-5 w-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Contribution</p>
-              <p className="text-sm font-semibold text-gray-900">
-                ETB {group.contributionAmount.toLocaleString()}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 rounded-lg">
-              <Calendar className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Cycle</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {group.currentCycle}/{group.totalCycles}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Clock className="h-5 w-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Next Draw</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {group.nextDrawDate || 'TBD'}
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-gray-100">
+          <StatCard
+            delay={0.1}
+            accent="bg-blue-50 text-blue-600"
+            icon={<Users className="h-5 w-5" />}
+            label="Members"
+            value={`${membersCount}/${group.maxMembers}`}
+          />
+          <StatCard
+            delay={0.18}
+            accent="bg-green-50 text-green-600"
+            icon={<CircleDollarSign className="h-5 w-5" />}
+            label="Contribution"
+            value={`ETB ${contributionCount.toLocaleString()}`}
+          />
+          <StatCard
+            delay={0.26}
+            accent="bg-purple-50 text-purple-600"
+            icon={<Calendar className="h-5 w-5" />}
+            label="Cycle"
+            value={`${cycleCount}/${group.totalCycles}`}
+          />
+          <StatCard
+            delay={0.34}
+            accent="bg-orange-50 text-orange-600"
+            icon={<Clock className="h-5 w-5" />}
+            label="Next Draw"
+            value={group.nextDrawDate || 'TBD'}
+          />
         </div>
-      </div>
+      </motion.div>
 
       {/* Edit Group Info Modal */}
       <Modal

@@ -11,6 +11,7 @@ import {
   Settings,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { AnimatePresence, motion } from 'framer-motion';
 import { getGroup, triggerLottery } from '@/lib/api';
 import type { GroupDetail } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
@@ -186,74 +187,92 @@ export default function GroupDetailPage() {
         notifyError={notifyError}
       />
 
-      {/* Compact tab bar */}
+      {/* Compact tab bar with sliding active pill */}
       {visibleTabs.length > 0 && (
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit max-w-full overflow-x-auto">
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit max-w-full overflow-x-auto">
           {TAB_DEFS.filter((tab) => visibleTabs.includes(tab.key)).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-                activeTab === key
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+              className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === key ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Icon className="h-4 w-4" />
-              {label}
-              {key === 'members' && (
-                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === key ? 'bg-gray-100 text-gray-600' : 'bg-white text-gray-500'}`}>
-                  {group.membersCount}
-                </span>
+              {activeTab === key && (
+                <motion.span
+                  layoutId="group-tab-pill"
+                  className="absolute inset-0 bg-white rounded-lg shadow-sm ring-1 ring-gray-200/60"
+                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                />
               )}
+              <span className="relative z-10 flex items-center gap-1.5">
+                <Icon className="h-4 w-4" />
+                {label}
+                {key === 'members' && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === key ? 'bg-primary-100 text-primary-700' : 'bg-white text-gray-500'}`}>
+                    {group.membersCount}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>
       )}
 
-      {activeTab === 'deposits' && visibleTabs.includes('deposits') && (
-        <DepositsTab
-          groupId={groupId}
-          group={group}
-          groupCbeAccounts={group.cbeAccountNumbers || []}
-          canManageDeposits={canManageDeposits}
-          refreshKey={refreshKey}
-          notifySuccess={notifySuccess}
-          notifyError={notifyError}
-        />
-      )}
+      {/* Animated tab content */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {activeTab === 'deposits' && visibleTabs.includes('deposits') && (
+            <DepositsTab
+              groupId={groupId}
+              group={group}
+              groupCbeAccounts={group.cbeAccountNumbers || []}
+              canManageDeposits={canManageDeposits}
+              refreshKey={refreshKey}
+              notifySuccess={notifySuccess}
+              notifyError={notifyError}
+            />
+          )}
 
-      {activeTab === 'members' && visibleTabs.includes('members') && (
-        <MembersTab
-          group={group}
-          groupId={groupId}
-          canManage={canManageMembers}
-          refreshKey={refreshKey}
-          notifySuccess={notifySuccess}
-          notifyError={notifyError}
-          onGroupChanged={() => { fetchGroup(); setRefreshKey((k) => k + 1); }}
-        />
-      )}
+          {activeTab === 'members' && visibleTabs.includes('members') && (
+            <MembersTab
+              group={group}
+              groupId={groupId}
+              canManage={canManageMembers}
+              refreshKey={refreshKey}
+              notifySuccess={notifySuccess}
+              notifyError={notifyError}
+              onGroupChanged={() => { fetchGroup(); setRefreshKey((k) => k + 1); }}
+            />
+          )}
 
-      {activeTab === 'requests' && visibleTabs.includes('requests') && (
-        <RequestsTab
-          group={group}
-          groupId={groupId}
-          refreshKey={refreshKey}
-          notifySuccess={notifySuccess}
-          notifyError={notifyError}
-        />
-      )}
+          {activeTab === 'requests' && visibleTabs.includes('requests') && (
+            <RequestsTab
+              group={group}
+              groupId={groupId}
+              refreshKey={refreshKey}
+              notifySuccess={notifySuccess}
+              notifyError={notifyError}
+            />
+          )}
 
-      {activeTab === 'settings' && visibleTabs.includes('settings') && (
-        <SettingsTab
-          groupId={groupId}
-          isOwnerOrSuper={isOwnerOrSuper}
-          refreshKey={refreshKey}
-          notifySuccess={notifySuccess}
-          notifyError={notifyError}
-        />
-      )}
+          {activeTab === 'settings' && visibleTabs.includes('settings') && (
+            <SettingsTab
+              groupId={groupId}
+              isOwnerOrSuper={isOwnerOrSuper}
+              refreshKey={refreshKey}
+              notifySuccess={notifySuccess}
+              notifyError={notifyError}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </DashboardLayout>
   );
 }

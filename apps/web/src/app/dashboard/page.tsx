@@ -27,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Stagger, StaggerItem } from '@/components/ui/motion';
 import {
   Tabs,
   TabsContent,
@@ -197,7 +198,8 @@ export default function DashboardPage() {
           
           <TabsContent value="overview" className="space-y-4">
             {/* KPI Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <StaggerItem className="lift">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">{t('db.stat_groups')}</CardTitle>
@@ -208,6 +210,8 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground mt-1">Total Equb Groups</p>
                 </CardContent>
               </Card>
+              </StaggerItem>
+              <StaggerItem className="lift">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">{t('db.stat_members')}</CardTitle>
@@ -218,6 +222,8 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground mt-1">Active participants</p>
                 </CardContent>
               </Card>
+              </StaggerItem>
+              <StaggerItem className="lift">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">{t('db.stat_receipts')}</CardTitle>
@@ -228,6 +234,8 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground mt-1">Awaiting verification</p>
                 </CardContent>
               </Card>
+              </StaggerItem>
+              <StaggerItem className="lift">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">{t('db.stat_collected')}</CardTitle>
@@ -238,7 +246,8 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground mt-1">Total deposits processed</p>
                 </CardContent>
               </Card>
-            </div>
+              </StaggerItem>
+            </Stagger>
 
             {/* Main Row: Chart + Recent Activity */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">

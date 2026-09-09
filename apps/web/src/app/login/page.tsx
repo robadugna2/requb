@@ -412,7 +412,7 @@ export default function LoginPage() {
           </div>
 
           {/* Glass card */}
-          <div style={{
+          <div className="animate-fade-in-up" style={{
             background: 'rgba(255,255,255,0.07)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',

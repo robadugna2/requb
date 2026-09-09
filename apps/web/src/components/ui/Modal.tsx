@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface ModalProps {
   isOpen: boolean;
@@ -29,8 +30,6 @@ export default function Modal({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const sizeClasses = {
     sm: 'max-w-md',
     md: 'max-w-lg',
@@ -38,33 +37,45 @@ export default function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"
-          onClick={onClose}
-        />
-
-        {/* Modal panel */}
-        <div
-          className={`relative inline-block w-full ${sizeClasses[size]} p-6 my-8 text-left align-middle bg-white rounded-2xl shadow-2xl transform transition-all`}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-            <button
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            {/* Backdrop */}
+            <motion.div
+              className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+            />
 
-          {/* Content */}
-          {children}
+            {/* Modal panel */}
+            <motion.div
+              className={`relative inline-block w-full ${sizeClasses[size]} p-6 my-8 text-left align-middle bg-white rounded-2xl shadow-2xl`}
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Content */}
+              {children}
+            </motion.div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }
