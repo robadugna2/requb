@@ -8,41 +8,42 @@ interface BadgeProps {
   children?: React.ReactNode;
 }
 
+// TailAdmin badge palette (success / warning / error / blue-light / gray)
 const statusConfig = {
   verified: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    dot: 'bg-green-500',
+    bg: 'bg-success-50',
+    text: 'text-success-700',
+    dot: 'bg-success-500',
     label: 'Verified',
   },
   pending: {
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-700',
-    dot: 'bg-yellow-500',
+    bg: 'bg-warning-50',
+    text: 'text-warning-700',
+    dot: 'bg-warning-500',
     label: 'Pending',
   },
   rejected: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    dot: 'bg-red-500',
+    bg: 'bg-error-50',
+    text: 'text-error-700',
+    dot: 'bg-error-500',
     label: 'Rejected',
   },
   active: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    dot: 'bg-green-500',
+    bg: 'bg-success-50',
+    text: 'text-success-700',
+    dot: 'bg-success-500',
     label: 'Active',
   },
   inactive: {
-    bg: 'bg-gray-50',
-    text: 'text-gray-700',
-    dot: 'bg-gray-500',
+    bg: 'bg-gray-100',
+    text: 'text-gray-600',
+    dot: 'bg-gray-400',
     label: 'Inactive',
   },
   completed: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    dot: 'bg-blue-500',
+    bg: 'bg-blue-light-50',
+    text: 'text-blue-light-700',
+    dot: 'bg-blue-light-500',
     label: 'Completed',
   },
 };

@@ -5,19 +5,50 @@ import { useRouter } from 'next/navigation';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import Header from '@/components/layout/header';
 import { ToastProvider } from '@/components/ui/Toast';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
-
-import PageContainer from '@/components/layout/page-container';
+import { SidebarProvider, useSidebar } from '@/components/layout/SidebarContext';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+}
+
+// Backdrop closes the sidebar on mobile when tapping outside
+function Backdrop() {
+  const { isMobileOpen, toggleMobileSidebar } = useSidebar();
+  if (!isMobileOpen) return null;
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-gray-900/50 lg:hidden"
+      onClick={toggleMobileSidebar}
+    />
+  );
+}
+
+// Main shell: fixed sidebar + margin-transitioning content area
+function ShellInner({ children }: { children: React.ReactNode }) {
+  const { isExpanded, isMobileOpen, isHovered } = useSidebar();
+
+  const mainContentMargin = isMobileOpen
+    ? 'ml-0'
+    : isExpanded || isHovered
+    ? 'lg:ml-[290px]'
+    : 'lg:ml-[90px]';
+
+  return (
+    <div className="min-h-screen xl:flex">
+      <AppSidebar />
+      <Backdrop />
+      <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+        <Header />
+        <div className="p-4 mx-auto max-w-7xl md:p-6">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [defaultOpen, setDefaultOpen] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('equb_token');
@@ -26,12 +57,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     } else {
       setIsAuthenticated(true);
     }
-    
-    const sidebarState = localStorage.getItem('sidebar:state');
-    if (sidebarState === 'false') {
-      setDefaultOpen(false);
-    }
-    
     setIsLoading(false);
   }, [router]);
 
@@ -39,7 +64,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-brand-100 border-t-brand-500 rounded-full animate-spin" />
           <p className="text-sm text-gray-500">Loading...</p>
         </div>
       </div>
@@ -52,14 +77,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <ToastProvider>
-      <SidebarProvider defaultOpen={defaultOpen}>
-        <AppSidebar />
-        <SidebarInset>
-          <Header />
-          <PageContainer>
-            {children}
-          </PageContainer>
-        </SidebarInset>
+      <SidebarProvider>
+        <ShellInner>{children}</ShellInner>
       </SidebarProvider>
     </ToastProvider>
   );
