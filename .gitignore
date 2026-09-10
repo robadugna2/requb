@@ -13,3 +13,4 @@ nul
 # local data backups (contains member financial data)
 /backups/
 .zcode/
+apps/api/uploads/
