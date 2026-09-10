@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/Toast';
 import { CbeTransactionCard } from '@/components/ui/CbeVerifyPanel';
 import FtScannerCamera from '@/components/scan/FtScannerCamera';
+import FtImageCropper from '@/components/scan/FtImageCropper';
 import MemberPickerModal from '@/components/scan/MemberPickerModal';
 import {
   getGroups,
@@ -145,6 +146,7 @@ function ScanWorkflow() {
   const [accountNumber, setAccountNumber] = useState('');
   const [addingAccount, setAddingAccount] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -1029,14 +1031,32 @@ function ScanWorkflow() {
           />
         )}
 
-        {/* Camera overlay */}
+        {/* Camera overlay — captures route through the manual crop step */}
         {cameraOpen && (
-          <FtScannerCamera onCapture={startScanSession} onClose={() => setCameraOpen(false)} />
+          <FtScannerCamera
+            onCapture={(file) => {
+              setCameraOpen(false);
+              setPendingCrop(file);
+            }}
+            onClose={() => setCameraOpen(false)}
+          />
+        )}
+
+        {/* Manual crop step before processing */}
+        {pendingCrop && !cameraOpen && (
+          <FtImageCropper
+            file={pendingCrop}
+            onCancel={() => setPendingCrop(null)}
+            onConfirm={(cropped) => {
+              setPendingCrop(null);
+              startScanSession(cropped);
+            }}
+          />
         )}
 
         <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) startScanSession(file);
+          if (file) setPendingCrop(file);
           e.target.value = '';
         }} />
       </div>
