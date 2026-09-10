@@ -9,6 +9,7 @@ import { DepositsModule } from './modules/deposits/deposits.module';
 import { LotteryModule } from './modules/lottery/lottery.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { OcrModule } from './modules/ocr/ocr.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { RuleTemplatesModule } from './modules/rule-templates/rule-templates.module';
@@ -29,6 +30,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     LotteryModule,
     TelegramModule,
     OcrModule,
+    SettingsModule,
     DashboardModule,
     UploadsModule,
     RuleTemplatesModule,

@@ -80,6 +80,17 @@ model Admin {
   @@map("admins")
 }
 
+/// Platform-wide key/value configuration managed by super admins
+/// (e.g. runtime OpenAI API key). Values are encrypted by the API.
+model SystemSetting {
+  key         String   @id
+  value       String
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
 enum MaritalStatus {
   SINGLE
   MARRIED

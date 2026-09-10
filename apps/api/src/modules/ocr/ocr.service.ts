@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { SettingsService } from '../settings/settings.service';
 
 export interface OcrResult {
   ftNumber?: string;
@@ -27,30 +28,38 @@ export interface FtScanResult {
 @Injectable()
 export class OcrService {
   private readonly logger = new Logger(OcrService.name);
-  private openai: OpenAI | null = null;
+  private client: OpenAI | null = null;
+  private clientKey: string | null | undefined; // undefined = not resolved yet
 
-  constructor(private readonly configService: ConfigService) {
-    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
-    if (apiKey) {
-      this.openai = new OpenAI({ apiKey });
-    } else {
-      this.logger.warn(
-        'OPENAI_API_KEY not configured. OCR processing is disabled.',
-      );
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  private async getClient(): Promise<OpenAI | null> {
+    const { key } = await this.settingsService.resolveOpenAiKey();
+    if (!key) return null;
+    if (this.clientKey !== key || !this.client) {
+      this.client = new OpenAI({ apiKey: key });
+      this.clientKey = key;
     }
+    return this.client;
   }
 
   async processReceipt(imageUrl: string): Promise<OcrResult> {
-    if (!this.openai) {
+    const client = await this.getClient();
+    if (!client) {
       this.logger.warn('OpenAI not configured, OCR processing is disabled');
       return {
         confidence: 0,
-        errors: ['OCR processing is disabled. Please configure OPENAI_API_KEY.'],
+        errors: [
+          'OpenAI API key is not configured. A super admin can set it in Settings → AI Configuration.',
+        ],
       };
     }
 
     try {
-      const response = await this.openai.chat.completions.create({
+      const response = await client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           {
@@ -139,17 +148,20 @@ Return ONLY valid JSON. If a field cannot be determined, omit it from the respon
    * since CBE is the only bank with a verification API in this app.
    */
   async extractFtNumbers(imageDataUrl: string): Promise<FtScanResult> {
-    if (!this.openai) {
+    const client = await this.getClient();
+    if (!client) {
       this.logger.warn('OpenAI not configured, FT scanning is disabled');
       return {
         ftNumbers: [],
         confidence: 0,
-        errors: ['OCR processing is disabled. Please configure OPENAI_API_KEY.'],
+        errors: [
+          'OpenAI API key is not configured. A super admin can set it in Settings → AI Configuration.',
+        ],
       };
     }
 
     try {
-      const response = await this.openai.chat.completions.create({
+      const response = await client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           {

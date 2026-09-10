@@ -1637,4 +1637,33 @@ export const getAdminUsers = async (): Promise<AdminUserItem[]> => {
   return response.data as AdminUserItem[];
 };
 
+// ─── System Settings (super admin) ────────────────────────────────────────────
+
+export interface OpenAiSettingStatus {
+  configured: boolean;
+  source: 'database' | 'environment' | null;
+  keyHint: string | null;   // masked, e.g. "sk-…abc4"
+  updatedAt: string | null; // ISO string
+}
+
+export const getOpenAiSetting = async (): Promise<OpenAiSettingStatus> => {
+  const response = await api.get('/settings/openai');
+  return response.data as OpenAiSettingStatus;
+};
+
+export const setOpenAiKey = async (apiKey: string): Promise<OpenAiSettingStatus & { success: boolean }> => {
+  const response = await api.put('/settings/openai', { apiKey });
+  return response.data as OpenAiSettingStatus & { success: boolean };
+};
+
+export const clearOpenAiKey = async (): Promise<OpenAiSettingStatus & { success: boolean }> => {
+  const response = await api.delete('/settings/openai');
+  return response.data as OpenAiSettingStatus & { success: boolean };
+};
+
+export const testOpenAiKey = async (): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/settings/openai/test', {});
+  return response.data as { ok: boolean; message: string };
+};
+
 export default api;

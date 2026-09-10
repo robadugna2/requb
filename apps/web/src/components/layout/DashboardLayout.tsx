@@ -6,6 +6,7 @@ import { AppSidebar } from '@/components/layout/app-sidebar';
 import Header from '@/components/layout/header';
 import { ToastProvider } from '@/components/ui/Toast';
 import { SidebarProvider, useSidebar } from '@/components/layout/SidebarContext';
+import BottomNav from '@/components/layout/BottomNav';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -39,7 +40,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       <Backdrop />
       <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
         <Header />
-        <div className="p-4 mx-auto max-w-7xl md:p-6">{children}</div>
+        <div className="p-4 mx-auto max-w-7xl pb-24 md:p-6 md:pb-24 lg:pb-6">{children}</div>
+        <BottomNav />
       </div>
     </div>
   );

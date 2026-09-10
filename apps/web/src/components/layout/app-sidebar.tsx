@@ -21,6 +21,9 @@ export function AppSidebar() {
   const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered, toggleMobileSidebar } = useSidebar();
+  // The mobile drawer is always wide, so it always shows labels — unlike the
+  // desktop rail, which collapses to icons unless expanded/hovered.
+  const showLabels = isExpanded || isHovered || isMobileOpen;
   const [unreadCount, setUnreadCount] = useState(0);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
@@ -82,10 +85,10 @@ export function AppSidebar() {
           <div key={group.label || 'ungrouped'}>
             <h2
               className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 dark:text-gray-500 ${
-                !isExpanded && !isHovered ? 'lg:justify-center' : 'justify-start'
+                !showLabels ? 'lg:justify-center' : 'justify-start'
               }`}
             >
-              {isExpanded || isHovered ? (
+              {showLabels ? (
                 t(group.label.toLowerCase()) || group.label
               ) : (
                 <span className="flex gap-1">
@@ -114,13 +117,13 @@ export function AppSidebar() {
                       >
                         {Icon && <Icon />}
                       </span>
-                      {(isExpanded || isHovered) && (
+                      {showLabels && (
                         <span className="menu-item-text flex-1">{t(item.key)}</span>
                       )}
                       {item.title === 'Notifications' && unreadCount > 0 && (
                         <span
                           className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold text-white bg-error-500 rounded-full ${
-                            isExpanded || isHovered ? '' : 'absolute right-2 top-2'
+                            showLabels ? '' : 'absolute right-2 top-2'
                           }`}
                         >
                           {unreadCount > 99 ? '99+' : unreadCount}
@@ -172,7 +175,7 @@ export function AppSidebar() {
         <nav className="mb-6">{renderMenuItems()}</nav>
 
         {/* Language quick selector — expanded only */}
-        {(isExpanded || isHovered) && (
+        {showLabels && (
           <div className="mb-6">
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800">
               <Globe className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
@@ -191,7 +194,7 @@ export function AppSidebar() {
         )}
 
         {/* User footer */}
-        {(isExpanded || isHovered) ? (
+        {showLabels ? (
           <div className="border-t border-gray-200 dark:border-gray-800 pt-4 pb-6">
             <div className="flex items-center gap-3 px-1">
               <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center overflow-hidden flex-shrink-0">
