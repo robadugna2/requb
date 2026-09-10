@@ -1687,8 +1687,9 @@ export const clearOpenAiKey = async (): Promise<OpenAiSettingStatus & { success:
   return response.data as OpenAiSettingStatus & { success: boolean };
 };
 
-export const testOpenAiKey = async (): Promise<{ ok: boolean; message: string }> => {
-  const response = await api.post('/settings/openai/test', {});
+/** Tests the typed key when given (before saving), otherwise the saved one. */
+export const testOpenAiKey = async (apiKey?: string): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/settings/openai/test', { apiKey });
   return response.data as { ok: boolean; message: string };
 };
 
@@ -1712,8 +1713,9 @@ export const clearGeminiKey = async (): Promise<OpenAiSettingStatus & { success:
   return response.data as OpenAiSettingStatus & { success: boolean };
 };
 
-export const testGeminiKey = async (): Promise<{ ok: boolean; message: string }> => {
-  const response = await api.post('/settings/gemini/test', {});
+/** Tests the typed key when given (before saving), otherwise the saved one. */
+export const testGeminiKey = async (apiKey?: string): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/settings/gemini/test', { apiKey });
   return response.data as { ok: boolean; message: string };
 };
 

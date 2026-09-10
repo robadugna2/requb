@@ -43,8 +43,9 @@ export class SettingsController {
 
   @Post('openai/test')
   @Roles(Role.SUPER_ADMIN)
-  async testOpenAiKey() {
-    return this.settingsService.testOpenAiKey();
+  async testOpenAiKey(@Body('apiKey') apiKey?: string) {
+    // Tests the typed (not yet saved) key when provided, else the saved one
+    return this.settingsService.testOpenAiKey(apiKey);
   }
 
   @Put('gemini')
@@ -63,7 +64,8 @@ export class SettingsController {
 
   @Post('gemini/test')
   @Roles(Role.SUPER_ADMIN)
-  async testGeminiKey() {
-    return this.settingsService.testGeminiKey();
+  async testGeminiKey(@Body('apiKey') apiKey?: string) {
+    // Tests the typed (not yet saved) key when provided, else the saved one
+    return this.settingsService.testGeminiKey(apiKey);
   }
 }

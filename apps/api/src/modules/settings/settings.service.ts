@@ -58,14 +58,18 @@ export class SettingsService {
     return this.clearRow(OPENAI_KEY_SETTING);
   }
 
-  async testOpenAiKey(): Promise<{ ok: boolean; message: string }> {
-    const { key } = await this.resolveOpenAiKey();
+  async testOpenAiKey(overrideKey?: string): Promise<{ ok: boolean; message: string }> {
+    // Test the key the admin just typed (not yet saved) when provided,
+    // otherwise the currently configured one.
+    const key = overrideKey?.trim()
+      ? overrideKey.trim()
+      : (await this.resolveOpenAiKey()).key;
 
     if (!key) {
       return {
         ok: false,
         message:
-          'No OpenAI API key configured. A super admin can set it in Settings → AI Configuration.',
+          'No OpenAI API key configured. Paste a key above and press Test, or set it in Settings → AI Configuration.',
       };
     }
 
@@ -152,14 +156,18 @@ export class SettingsService {
    * plain axios. A quota-rejected key (429) is reported as valid-but-throttled
    * so free-tier users aren't told their key is broken.
    */
-  async testGeminiKey(): Promise<{ ok: boolean; message: string }> {
-    const { key } = await this.resolveGeminiKey();
+  async testGeminiKey(overrideKey?: string): Promise<{ ok: boolean; message: string }> {
+    // Test the key the admin just typed (not yet saved) when provided,
+    // otherwise the currently configured one.
+    const key = overrideKey?.trim()
+      ? overrideKey.trim()
+      : (await this.resolveGeminiKey()).key;
 
     if (!key) {
       return {
         ok: false,
         message:
-          'No Gemini API key configured. A super admin can set it in Settings → AI Configuration.',
+          'No Gemini API key configured. Paste a key above and press Test, or set it in Settings → AI Configuration.',
       };
     }
 

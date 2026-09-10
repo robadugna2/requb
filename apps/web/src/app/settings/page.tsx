@@ -141,10 +141,23 @@ function SettingsContent() {
       await p.save(p.keyValue.trim());
       p.setKeyValue('');
       p.setShowValue(false);
-      p.setTestResult(null);
       await refreshAiStatus();
       setSuccess(`${p.label} API key saved.`);
       setTimeout(() => setSuccess(null), 4000);
+
+      // Validate immediately so a broken key never sits unnoticed — the
+      // just-saved key is now the configured one.
+      p.setTesting(true);
+      try {
+        const result = await p.test();
+        p.setTestResult(result);
+        if (!result.ok) setError(`${p.label}: ${result.message}`);
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        p.setTestResult({ ok: false, message: axiosErr?.response?.data?.message || 'Test failed' });
+      } finally {
+        p.setTesting(false);
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       setError(
@@ -161,8 +174,27 @@ function SettingsContent() {
     p.setTestResult(null);
 
     try {
-      const result = await p.test();
+      // Prefer the key currently typed in the input (not yet saved) so the
+      // admin can validate before committing; fall back to the saved one.
+      const typed = p.keyValue.trim();
+      const result = await p.test(typed || undefined);
       p.setTestResult(result);
+
+      // A typed key that verified gets saved right away — one action does
+      // everything and the status row reflects it immediately.
+      if (typed && result.ok) {
+        try {
+          await p.save(typed);
+          p.setKeyValue('');
+          p.setShowValue(false);
+          await refreshAiStatus();
+          setSuccess(`${p.label} API key saved.`);
+          setTimeout(() => setSuccess(null), 4000);
+        } catch (err: unknown) {
+          const axiosErr = err as { response?: { data?: { message?: string } } };
+          setError(axiosErr.response?.data?.message || `${p.label} key verified but failed to save.`);
+        }
+      }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       p.setTestResult({
@@ -627,7 +659,7 @@ function AiProviderSection({
             Save Key
           </Button>
           <Button type="button" variant="secondary" onClick={onTest} loading={testing} disabled={testing}>
-            Test Key
+            {keyValue.trim() ? 'Test & Save' : 'Test Key'}
           </Button>
           {status?.source === 'database' && (
             <Button type="button" variant="danger" onClick={onRemove} disabled={saving}>
