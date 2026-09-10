@@ -1113,6 +1113,8 @@ export interface FtScanResult {
   ftNumbers: string[];
   bankName?: string;
   confidence: number;
+  /** Which free/AI detection layer produced the result */
+  detectedVia?: 'qr' | 'ocr' | 'ai' | 'none';
   errors?: string[];
 }
 
@@ -1152,13 +1154,17 @@ export interface CreateDepositPayload {
 
 /**
  * Detect all CBE FT numbers visible on a bank statement / receipt photo
- * (multipart field "image"). Does not create or modify deposits.
+ * (multipart field "image"). Free pipeline: QR → text OCR → optional OpenAI.
+ * When `accountNumber` is given, misread FT tokens are repaired and verified
+ * against CBE. Does not create or modify deposits.
  */
-export const scanFtNumbers = async (file: File): Promise<FtScanResult> => {
+export const scanFtNumbers = async (file: File, accountNumber?: string): Promise<FtScanResult> => {
   const formData = new FormData();
   formData.append('image', file);
+  if (accountNumber) formData.append('account', accountNumber);
   const response = await api.post('/deposits/ft-scan', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000, // first run downloads OCR language data; rotations take time
   });
   return response.data as FtScanResult;
 };

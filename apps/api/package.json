@@ -27,6 +27,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "grammy": "^1.21.0",
+    "jimp": "^0.22.12",
+    "jsqr": "^1.4.0",
     "multer": "^2.1.1",
     "openai": "^4.24.0",
     "passport": "^0.7.0",
@@ -34,6 +36,7 @@
     "pdf-parse": "^1.1.1",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
+    "tesseract.js": "^5.1.1",
     "ws": "^8.21.0"
   },
   "devDependencies": {

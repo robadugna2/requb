@@ -40,6 +40,7 @@ import type {
   GroupMember,
   CbeTransactionData,
   MemberSuggestion,
+  FtScanResult,
 } from '@/lib/api';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -156,6 +157,7 @@ function ScanWorkflow() {
   // Scan state
   const [scanning, setScanning] = useState(false);
   const [scanBank, setScanBank] = useState('');
+  const [scanVia, setScanVia] = useState<FtScanResult['detectedVia']>('none');
   const [scanNotice, setScanNotice] = useState('');
   const [manualFt, setManualFt] = useState('');
 
@@ -320,6 +322,7 @@ function ScanWorkflow() {
     // Reset previous session
     setItems([]);
     setScanBank('');
+    setScanVia('none');
     setScanNotice('');
     setEvidenceError('');
     if (capturePreview) URL.revokeObjectURL(capturePreview);
@@ -338,9 +341,10 @@ function ScanWorkflow() {
       .catch(() => setEvidenceError('Failed to upload the statement photo. Retake or re-upload before creating deposits.'))
       .finally(() => setUploadingEvidence(false));
 
-    const scanPromise = scanFtNumbers(file)
+    const scanPromise = scanFtNumbers(file, accountNumber || undefined)
       .then(async (result) => {
         setScanBank(result.bankName || '');
+        setScanVia(result.detectedVia ?? 'none');
         const fts = Array.from(new Set(result.ftNumbers.map((f) => f.toUpperCase())));
         if (fts.length === 0) {
           setScanNotice(
@@ -490,6 +494,7 @@ function ScanWorkflow() {
     setEvidenceError('');
     setItems([]);
     setScanBank('');
+    setScanVia('none');
     setScanNotice('');
     setShowResults(false);
     setSessionActive(false);
@@ -652,11 +657,28 @@ function ScanWorkflow() {
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white/90">
                     Detected FT Numbers
                   </h3>
-                  {scanBank && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300">
-                      Bank: {scanBank}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {scanVia === 'qr' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400">
+                        Detected via QR code
+                      </span>
+                    )}
+                    {scanVia === 'ocr' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300">
+                        Detected via text OCR (free)
+                      </span>
+                    )}
+                    {scanVia === 'ai' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
+                        Detected via OpenAI
+                      </span>
+                    )}
+                    {scanBank && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300">
+                        Bank: {scanBank}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {scanning ? (

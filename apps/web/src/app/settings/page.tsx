@@ -269,7 +269,7 @@ function SettingsContent() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90">AI Configuration</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">OpenAI powers receipt OCR and camera FT scanning.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Optional — camera FT scanning uses free QR &amp; text OCR first. OpenAI adds an AI fallback for hard-to-read photos and powers Telegram receipt OCR.</p>
               </div>
             </div>
 

@@ -19,8 +19,12 @@ export interface OcrResult {
 
 export interface FtScanResult {
   ftNumbers: string[];
+  /** OCR near-misses (misread tokens); repaired+verified by the controller */
+  nearMisses?: string[];
   bankName?: string;
   confidence: number;
+  /** Which detection layer produced the result (set by FtDetectionService) */
+  detectedVia?: 'qr' | 'ocr' | 'ai' | 'none';
   rawText?: string;
   errors?: string[];
 }
