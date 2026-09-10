@@ -17,8 +17,8 @@ interface StatsCardProps {
 const accentMap = {
   indigo: {
     border: 'border-l-indigo-500',
-    iconBg: 'bg-indigo-50',
-    trendPos: 'text-indigo-600',
+    iconBg: 'bg-indigo-50 dark:bg-brand-500/10',
+    trendPos: 'text-indigo-600 dark:text-brand-400',
     glow: 'shadow-indigo-100',
   },
   emerald: {
@@ -29,8 +29,8 @@ const accentMap = {
   },
   amber: {
     border: 'border-l-amber-500',
-    iconBg: 'bg-amber-50',
-    trendPos: 'text-amber-600',
+    iconBg: 'bg-amber-50 dark:bg-warning-500/10',
+    trendPos: 'text-amber-600 dark:text-warning-400',
     glow: 'shadow-amber-100',
   },
   rose: {
@@ -41,8 +41,8 @@ const accentMap = {
   },
   violet: {
     border: 'border-l-violet-500',
-    iconBg: 'bg-violet-50',
-    trendPos: 'text-violet-600',
+    iconBg: 'bg-violet-50 dark:bg-theme-purple-500/10',
+    trendPos: 'text-violet-600 dark:text-theme-purple-500',
     glow: 'shadow-violet-100',
   },
 };
@@ -61,7 +61,7 @@ export default function StatsCard({
   return (
     <div
       className={clsx(
-        'relative bg-white rounded-2xl border border-gray-100 border-l-4 p-5 transition-all duration-200',
+        'relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 border-l-4 p-5 transition-all duration-200',
         'hover:shadow-lg hover:-translate-y-0.5',
         accent.border,
         accent.glow,
@@ -76,8 +76,8 @@ export default function StatsCard({
 
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider truncate">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 leading-none">{value}</p>
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider truncate">{title}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white/90 leading-none">{value}</p>
 
           {trend && (
             <div className="mt-2.5 flex items-center gap-1.5">
@@ -86,7 +86,7 @@ export default function StatsCard({
                   'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-semibold',
                   trend.value >= 0
                     ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-red-50 text-red-700'
+                    : 'bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400'
                 )}
               >
                 {trend.value >= 0 ? (
@@ -96,7 +96,7 @@ export default function StatsCard({
                 )}
                 {trend.value >= 0 ? '+' : ''}{trend.value}%
               </span>
-              <span className="text-[11px] text-gray-400">{trend.label}</span>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500">{trend.label}</span>
             </div>
           )}
         </div>

@@ -119,12 +119,12 @@ export default function PhotoUpload({ value, onChange, name, size = 'md' }: Phot
   return (
     <div className="flex flex-col items-center gap-2">
       <div
-        className={`relative ${sizeClasses[size]} rounded-full overflow-hidden bg-primary-100 flex items-center justify-center`}
+        className={`relative ${sizeClasses[size]} rounded-full overflow-hidden bg-primary-100 dark:bg-brand-500/15 flex items-center justify-center`}
       >
         {value ? (
           <img src={getMediaUrl(value)} alt={name} className="w-full h-full object-cover" />
         ) : (
-          <span className="text-sm font-bold text-primary-700">{initials}</span>
+          <span className="text-sm font-bold text-primary-700 dark:text-brand-400">{initials}</span>
         )}
 
         {uploading && (
@@ -139,7 +139,7 @@ export default function PhotoUpload({ value, onChange, name, size = 'md' }: Phot
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="px-2.5 py-1 text-xs font-semibold border rounded-lg border-gray-300 hover:bg-gray-50 transition-colors text-gray-700"
+          className="px-2.5 py-1 text-xs font-semibold border rounded-lg border-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors text-gray-700 dark:text-gray-300"
         >
           Upload Photo
         </button>
@@ -147,7 +147,7 @@ export default function PhotoUpload({ value, onChange, name, size = 'md' }: Phot
           type="button"
           onClick={startCamera}
           disabled={uploading}
-          className="px-2.5 py-1 text-xs font-semibold border rounded-lg border-gray-300 hover:bg-gray-50 transition-colors text-gray-700 flex items-center gap-1"
+          className="px-2.5 py-1 text-xs font-semibold border rounded-lg border-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors text-gray-700 dark:text-gray-300 flex items-center gap-1"
         >
           <Camera className="h-3 w-3" />
           Take Photo
@@ -164,8 +164,8 @@ export default function PhotoUpload({ value, onChange, name, size = 'md' }: Phot
 
       {showCamera && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl relative">
-            <h4 className="text-base font-semibold text-gray-900 mb-4">Capture Photo</h4>
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full shadow-2xl relative">
+            <h4 className="text-base font-semibold text-gray-900 dark:text-white/90 mb-4">Capture Photo</h4>
             <div className="aspect-video bg-black rounded-lg overflow-hidden relative mb-4">
               <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
             </div>

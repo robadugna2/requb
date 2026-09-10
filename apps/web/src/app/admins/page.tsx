@@ -266,7 +266,7 @@ export default function AdminsPage() {
     switch (role) {
       case 'SUPER_ADMIN': return <ShieldCheck className="h-4 w-4 text-primary-500" />;
       case 'ADMIN': return <Shield className="h-4 w-4 text-blue-500" />;
-      case 'SUB_ADMIN': return <ShieldAlert className="h-4 w-4 text-orange-500" />;
+      case 'SUB_ADMIN': return <ShieldAlert className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
       default: return <Shield className="h-4 w-4" />;
     }
   };
@@ -275,8 +275,8 @@ export default function AdminsPage() {
     switch (role) {
       case 'SUPER_ADMIN': return 'bg-primary-500/10 text-primary-500 border-primary-500/20';
       case 'ADMIN': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'SUB_ADMIN': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-      default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+      case 'SUB_ADMIN': return 'bg-orange-500/10 text-orange-500 dark:text-orange-400 border-orange-500/20';
+      default: return 'bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20';
     }
   };
 
@@ -288,14 +288,14 @@ export default function AdminsPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.back()}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+              className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.08] rounded-lg transition-colors border border-gray-200 dark:border-gray-800"
               title="Back"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Management</h1>
-              <p className="text-sm text-gray-500">Manage platform administrators and sub-admins</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Admin Management</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Manage platform administrators and sub-admins</p>
             </div>
           </div>
           {canManageAdmins && (
@@ -311,10 +311,10 @@ export default function AdminsPage() {
 
         {/* Password Reset Requests Inbox */}
         {canManageAdmins && (resetRequests.length > 0 || resetRequestsLoading) && (
-          <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 bg-amber-50 border-b border-amber-100">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 bg-amber-50 dark:bg-warning-500/10 border-b border-amber-100">
               <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-amber-600" />
+                <KeyRound className="h-5 w-5 text-amber-600 dark:text-warning-400" />
                 <h2 className="font-semibold text-amber-900">Password Reset Requests</h2>
                 {resetRequests.filter(r => r.status === 'PENDING').length > 0 && (
                   <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-amber-500 text-white rounded-full">
@@ -324,31 +324,31 @@ export default function AdminsPage() {
               </div>
               <button
                 onClick={fetchResetRequests}
-                className="text-xs text-amber-700 hover:text-amber-900 font-medium"
+                className="text-xs text-amber-700 dark:text-warning-400 hover:text-amber-900 font-medium"
               >Refresh</button>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {resetRequestsLoading ? (
-                <div className="p-6 text-center text-gray-400 text-sm">Loading requests...</div>
+                <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">Loading requests...</div>
               ) : resetRequests.length === 0 ? (
-                <div className="p-6 text-center text-gray-400 text-sm">No reset requests</div>
+                <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">No reset requests</div>
               ) : (
                 resetRequests.map((req) => (
                   <div key={req.id} className="flex items-center justify-between px-5 py-4 hover:bg-gray-50/50">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center font-bold text-amber-700 text-sm flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-warning-500/20 flex items-center justify-center font-bold text-amber-700 dark:text-warning-400 text-sm flex-shrink-0">
                         {req.requester.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{req.requester.name}</p>
-                        <p className="text-xs text-gray-500">{req.requester.email} · {req.requester.role.replace('_', ' ')}</p>
-                        <p className="text-xs text-gray-400">{new Date(req.createdAt).toLocaleString()}</p>
+                        <p className="font-medium text-gray-900 dark:text-white/90 text-sm">{req.requester.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{req.requester.email} · {req.requester.role.replace('_', ' ')}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(req.createdAt).toLocaleString()}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {req.status === 'PENDING' ? (
                         <>
-                          <span className="flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-full">
+                          <span className="flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-warning-400 bg-amber-50 dark:bg-warning-500/10 border border-amber-200 px-2 py-1 rounded-full">
                             <Clock className="h-3 w-3" /> Pending
                           </span>
                           <button
@@ -357,15 +357,15 @@ export default function AdminsPage() {
                           >Approve</button>
                           <button
                             onClick={() => { setSelectedResetRequest(req); setRejectionNote(''); setIsRejectModalOpen(true); }}
-                            className="px-3 py-1.5 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg transition-colors"
+                            className="px-3 py-1.5 text-xs font-semibold bg-red-50 dark:bg-error-500/10 hover:bg-red-100 text-red-700 dark:text-error-400 border border-red-200 rounded-lg transition-colors"
                           >Reject</button>
                         </>
                       ) : req.status === 'APPROVED' ? (
-                        <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+                        <span className="flex items-center gap-1 text-xs font-medium text-green-700 dark:text-success-400 bg-green-50 dark:bg-success-500/10 border border-green-200 px-2 py-1 rounded-full">
                           <CheckCircle2 className="h-3 w-3" /> Approved
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 px-2 py-1 rounded-full">
+                        <span className="flex items-center gap-1 text-xs font-medium text-red-700 dark:text-error-400 bg-red-50 dark:bg-error-500/10 border border-red-200 px-2 py-1 rounded-full">
                           <XCircle className="h-3 w-3" /> Rejected
                         </span>
                       )}
@@ -378,9 +378,9 @@ export default function AdminsPage() {
         )}
 
         {/* Search */}
-        <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-4 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="Search admins by name or email..."
@@ -392,11 +392,11 @@ export default function AdminsPage() {
         </div>
 
         {/* Admins Table Card */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th className="p-4">Name & Contact</th>
                   <th className="p-4">Role</th>
                   <th className="p-4">Status</th>
@@ -405,27 +405,27 @@ export default function AdminsPage() {
                   {canManageAdmins && <th className="p-4 text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400">Loading admins...</td>
+                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400 dark:text-gray-500">Loading admins...</td>
                   </tr>
                 ) : filteredAdmins.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400">No admins found</td>
+                    <td colSpan={canManageAdmins ? 6 : 5} className="p-8 text-center text-gray-400 dark:text-gray-500">No admins found</td>
                   </tr>
                 ) : (
                   filteredAdmins.map((admin) => (
                     <tr key={admin.id} className="hover:bg-gray-50/30 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-700">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/[0.08] flex items-center justify-center font-bold text-gray-700 dark:text-gray-300">
                             {admin.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{admin.name}</p>
-                            <p className="text-xs text-gray-500">{admin.email}</p>
-                            {admin.phone && <p className="text-xs text-gray-400">{admin.phone}</p>}
+                            <p className="font-medium text-gray-900 dark:text-white/90">{admin.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{admin.email}</p>
+                            {admin.phone && <p className="text-xs text-gray-400 dark:text-gray-500">{admin.phone}</p>}
                           </div>
                         </div>
                       </td>
@@ -437,33 +437,33 @@ export default function AdminsPage() {
                       </td>
                       <td className="p-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          admin.status === 'ACTIVE' ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-700'
+                          admin.status === 'ACTIVE' ? 'bg-green-500/10 text-green-700 dark:text-success-400' : 'bg-red-500/10 text-red-700 dark:text-error-400'
                         }`}>
                           {admin.status}
                         </span>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm text-gray-700">
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
                           {admin.createdBy ? admin.createdBy.name : 'System'}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
                           {format(new Date(admin.createdAt), 'MMM d, yyyy')}
                         </div>
                       </td>
-                      <td className="p-4 text-sm text-gray-700">
+                      <td className="p-4 text-sm text-gray-700 dark:text-gray-300">
                         {admin.role === 'SUB_ADMIN' ? (
                           canManageAdmins ? (
                             <button 
                               onClick={() => openAssignModal(admin)}
-                              className="text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
+                              className="text-primary-600 dark:text-brand-400 hover:text-primary-700 font-medium underline underline-offset-2"
                             >
                               {admin._count?.groupLeadership || 0} assigned
                             </button>
                           ) : (
-                            <span className="text-gray-600">{admin._count?.groupLeadership || 0} assigned</span>
+                            <span className="text-gray-600 dark:text-gray-400">{admin._count?.groupLeadership || 0} assigned</span>
                           )
                         ) : (
-                          <span className="text-gray-400">All (Owned)</span>
+                          <span className="text-gray-400 dark:text-gray-500">All (Owned)</span>
                         )}
                       </td>
                       {canManageAdmins && (
@@ -472,7 +472,7 @@ export default function AdminsPage() {
                             {admin.role === 'SUB_ADMIN' && (
                               <button
                                 onClick={() => openAssignModal(admin)}
-                                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+                                className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.08] border border-gray-200 dark:border-gray-800 rounded-lg transition-colors"
                                 title="Manage Groups"
                               >
                                 <Shield className="h-4 w-4" />
@@ -482,8 +482,8 @@ export default function AdminsPage() {
                               onClick={() => handleToggleStatus(admin)}
                               className={`p-2 rounded-lg border transition-colors ${
                                 admin.status === 'ACTIVE' 
-                                  ? 'text-orange-600 hover:text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100' 
-                                  : 'text-green-600 hover:text-green-700 bg-green-50 border-green-200 hover:bg-green-100'
+                                  ? 'text-orange-600 dark:text-orange-400 hover:text-orange-700 bg-orange-50 dark:bg-orange-500/10 border-orange-200 hover:bg-orange-100' 
+                                  : 'text-green-600 dark:text-success-400 hover:text-green-700 bg-green-50 dark:bg-success-500/10 border-green-200 hover:bg-green-100'
                               }`}
                               title={admin.status === 'ACTIVE' ? 'Suspend Admin' : 'Reactivate Admin'}
                             >
@@ -491,7 +491,7 @@ export default function AdminsPage() {
                             </button>
                             <button
                               onClick={() => handleDelete(admin.id)}
-                              className="p-2 text-red-600 hover:text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg transition-colors"
+                              className="p-2 text-red-600 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 bg-red-50 dark:bg-error-500/10 border border-red-200 hover:bg-red-100 rounded-lg transition-colors"
                               title="Delete Admin"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -516,7 +516,7 @@ export default function AdminsPage() {
         >
           <form onSubmit={handleCreateAdmin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
               <input
                 type="text"
                 required
@@ -527,7 +527,7 @@ export default function AdminsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
               <input
                 type="email"
                 required
@@ -538,7 +538,7 @@ export default function AdminsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number (Optional)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number (Optional)</label>
               <input
                 type="tel"
                 value={formData.phone}
@@ -548,7 +548,7 @@ export default function AdminsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
               <input
                 type="password"
                 required
@@ -584,35 +584,35 @@ export default function AdminsPage() {
         >
           {selectedAdmin && (
             <div className="space-y-6">
-              <p className="text-sm text-gray-500">
-                Assign <strong className="text-gray-900">{selectedAdmin.name}</strong> to manage specific groups
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Assign <strong className="text-gray-900 dark:text-white/90">{selectedAdmin.name}</strong> to manage specific groups
               </p>
 
               <div className="space-y-6">
                 {/* Existing Assignments */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Current Assignments</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Current Assignments</h3>
                   {selectedAdmin.groupLeadership?.length === 0 ? (
-                    <div className="p-4 bg-gray-50 rounded-lg text-sm text-gray-500 border border-gray-200">
+                    <div className="p-4 bg-gray-50 dark:bg-white/[0.04] rounded-lg text-sm text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800">
                       No groups assigned yet.
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {selectedAdmin.groupLeadership?.map((assignment: any) => (
-                        <div key={assignment.group.id} className="p-4 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+                        <div key={assignment.group.id} className="p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center shadow-sm">
                           <div>
                             <div className="font-semibold text-gray-950">{assignment.group.name}</div>
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {assignment.canManageMembers && <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium">Members</span>}
-                              {assignment.canManageDeposits && <span className="text-xs bg-green-50 text-green-700 border border-green-100 px-2 py-0.5 rounded font-medium">Deposits</span>}
-                              {assignment.canTriggerLottery && <span className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded font-medium">Lottery</span>}
-                              {assignment.canManageRules && <span className="text-xs bg-orange-50 text-orange-700 border border-orange-100 px-2 py-0.5 rounded font-medium">Rules</span>}
+                              {assignment.canManageMembers && <span className="text-xs bg-blue-50 dark:bg-blue-light-500/10 text-blue-700 border border-blue-100 px-2 py-0.5 rounded font-medium">Members</span>}
+                              {assignment.canManageDeposits && <span className="text-xs bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 border border-green-100 px-2 py-0.5 rounded font-medium">Deposits</span>}
+                              {assignment.canTriggerLottery && <span className="text-xs bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 border border-purple-100 px-2 py-0.5 rounded font-medium">Lottery</span>}
+                              {assignment.canManageRules && <span className="text-xs bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-100 px-2 py-0.5 rounded font-medium">Rules</span>}
                             </div>
                           </div>
                           <Button
                             variant="ghost"
                             onClick={() => handleRemoveGroup(assignment.group.id)}
-                            className="text-red-500 hover:text-red-700 p-2"
+                            className="text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 p-2"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -623,11 +623,11 @@ export default function AdminsPage() {
                 </div>
 
                 {/* Assign New Group Form */}
-                <div className="border-t border-gray-200 pt-6">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Assign New Group</h3>
+                <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Assign New Group</h3>
                   <form onSubmit={handleAssignGroup} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Select Group</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Group</label>
                       <select
                         required
                         value={assignData.groupId}
@@ -642,41 +642,41 @@ export default function AdminsPage() {
                     </div>
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                      <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors">
                         <input
                           type="checkbox"
                           checked={assignData.canManageMembers}
                           onChange={(e) => setAssignData({ ...assignData, canManageMembers: e.target.checked })}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                          className="rounded border-gray-300 text-primary-600 dark:text-brand-400 focus:ring-primary-500 h-4 w-4"
                         />
-                        <span className="text-sm font-medium text-gray-700">Manage Members</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage Members</span>
                       </label>
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                      <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors">
                         <input
                           type="checkbox"
                           checked={assignData.canManageDeposits}
                           onChange={(e) => setAssignData({ ...assignData, canManageDeposits: e.target.checked })}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                          className="rounded border-gray-300 text-primary-600 dark:text-brand-400 focus:ring-primary-500 h-4 w-4"
                         />
-                        <span className="text-sm font-medium text-gray-700">Manage Deposits</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage Deposits</span>
                       </label>
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                      <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors">
                         <input
                           type="checkbox"
                           checked={assignData.canTriggerLottery}
                           onChange={(e) => setAssignData({ ...assignData, canTriggerLottery: e.target.checked })}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                          className="rounded border-gray-300 text-primary-600 dark:text-brand-400 focus:ring-primary-500 h-4 w-4"
                         />
-                        <span className="text-sm font-medium text-gray-700">Trigger Lottery</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Trigger Lottery</span>
                       </label>
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                      <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors">
                         <input
                           type="checkbox"
                           checked={assignData.canManageRules}
                           onChange={(e) => setAssignData({ ...assignData, canManageRules: e.target.checked })}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                          className="rounded border-gray-300 text-primary-600 dark:text-brand-400 focus:ring-primary-500 h-4 w-4"
                         />
-                        <span className="text-sm font-medium text-gray-700">Manage Rules</span>
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Manage Rules</span>
                       </label>
                     </div>
 
@@ -704,12 +704,12 @@ export default function AdminsPage() {
         <Modal isOpen={isApproveModalOpen} onClose={() => setIsApproveModalOpen(false)} title="Set Temporary Password" size="sm">
           {selectedResetRequest && (
             <form onSubmit={handleApproveReset} className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Set a temporary password for <strong>{selectedResetRequest.requester.name}</strong>.
                 They will be required to change it on their next login.
               </p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Temporary Password</label>
                 <input
                   type="text"
                   required
@@ -720,7 +720,7 @@ export default function AdminsPage() {
                   placeholder="e.g. Temp@1234"
                   autoFocus
                 />
-                <p className="text-xs text-gray-400 mt-1">Minimum 6 characters. Share this with the admin verbally or via phone.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Minimum 6 characters. Share this with the admin verbally or via phone.</p>
               </div>
               <div className="flex gap-3 pt-2">
                 <Button type="button" variant="secondary" onClick={() => setIsApproveModalOpen(false)} className="flex-1">Cancel</Button>
@@ -736,14 +736,14 @@ export default function AdminsPage() {
         <Modal isOpen={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Reset Request" size="sm">
           {selectedResetRequest && (
             <form onSubmit={handleRejectReset} className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-700">
+              <div className="flex items-center gap-3 p-3 bg-red-50 dark:bg-error-500/10 rounded-lg border border-red-100">
+                <AlertCircle className="h-5 w-5 text-red-500 dark:text-error-400 flex-shrink-0" />
+                <p className="text-sm text-red-700 dark:text-error-400">
                   Rejecting the request from <strong>{selectedResetRequest.requester.name}</strong>.
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rejection Note (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Rejection Note (Optional)</label>
                 <textarea
                   value={rejectionNote}
                   onChange={e => setRejectionNote(e.target.value)}
@@ -772,21 +772,21 @@ export default function AdminsPage() {
           >
             <div className="text-center py-4 space-y-4">
               {alertPopup.type === 'success' && (
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-success-500/20">
+                  <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-success-400" />
                 </div>
               )}
               {alertPopup.type === 'error' && (
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                  <AlertCircle className="h-6 w-6 text-red-600" />
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-error-500/20">
+                  <AlertCircle className="h-6 w-6 text-red-600 dark:text-error-400" />
                 </div>
               )}
               {alertPopup.type === 'info' && (
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-                  <Shield className="h-6 w-6 text-blue-600" />
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-light-500/20">
+                  <Shield className="h-6 w-6 text-blue-600 dark:text-blue-light-400" />
                 </div>
               )}
-              <p className="text-sm text-gray-600">{alertPopup.message}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{alertPopup.message}</p>
               <div className="pt-2">
                 <Button onClick={() => setAlertPopup(null)} variant="secondary" className="w-full">
                   OK
@@ -806,9 +806,9 @@ export default function AdminsPage() {
           >
             <div className="text-center py-4 space-y-4">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100">
-                <AlertCircle className="h-6 w-6 text-orange-600" />
+                <AlertCircle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
               </div>
-              <p className="text-sm text-gray-600">{confirmPopup.message}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{confirmPopup.message}</p>
               <div className="pt-2 flex gap-3">
                 <Button
                   onClick={() => setConfirmPopup(null)}

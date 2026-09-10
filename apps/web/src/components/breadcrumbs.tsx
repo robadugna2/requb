@@ -11,12 +11,12 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label="breadcrumb">
-      <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-gray-500 sm:gap-2.5">
+      <ol className="flex flex-wrap items-center gap-1.5 break-words text-sm text-gray-500 dark:text-gray-400 sm:gap-2.5">
         {items.map((item, index) => (
           <Fragment key={item.title}>
             {index !== items.length - 1 && (
               <li className="hidden md:inline-flex items-center gap-1.5">
-                <Link href={item.link} className="transition-colors hover:text-gray-900">
+                <Link href={item.link} className="transition-colors hover:text-gray-900 dark:hover:text-white/90">
                   {item.title}
                 </Link>
               </li>
@@ -27,7 +27,7 @@ export function Breadcrumbs() {
               </li>
             )}
             {index === items.length - 1 && (
-              <li className="font-normal text-gray-900">
+              <li className="font-normal text-gray-900 dark:text-white/90">
                 <span role="link" aria-disabled="true" aria-current="page">
                   {item.title}
                 </span>

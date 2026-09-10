@@ -261,15 +261,15 @@ export default function RuleTemplatesPage() {
     <DashboardLayout>
       {/* Success / Error Banners */}
       {success && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg">×</button>
         </div>
       )}
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+          <button onClick={() => setError(null)} className="text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 font-bold text-lg">×</button>
         </div>
       )}
 
@@ -277,13 +277,13 @@ export default function RuleTemplatesPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('rules.title')}</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{t('rules.title')}</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {t('rules.subtitle')}
             </p>
           </div>
           {templates.length > 0 && (
-            <span className="inline-flex items-center justify-center h-6 px-2.5 text-xs font-bold text-indigo-700 bg-indigo-100 rounded-full">
+            <span className="inline-flex items-center justify-center h-6 px-2.5 text-xs font-bold text-indigo-700 dark:text-brand-400 bg-indigo-100 rounded-full">
               {templates.length}
             </span>
           )}
@@ -297,7 +297,7 @@ export default function RuleTemplatesPage() {
       {/* Search */}
       {templates.length > 0 && (
         <div className="relative mb-6">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder={t('rules.search_placeholder')}
@@ -313,7 +313,7 @@ export default function RuleTemplatesPage() {
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">{t('rules.loading')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('rules.loading')}</p>
           </div>
         </div>
       ) : filteredTemplates.length > 0 ? (
@@ -325,19 +325,19 @@ export default function RuleTemplatesPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="p-2 bg-indigo-50 rounded-lg flex-shrink-0">
-                    <BookTemplate className="h-5 w-5 text-indigo-600" />
+                  <div className="p-2 bg-indigo-50 dark:bg-brand-500/10 rounded-lg flex-shrink-0">
+                    <BookTemplate className="h-5 w-5 text-indigo-600 dark:text-brand-400" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white/90 truncate">
                       {template.name}
                     </h3>
                     {template.description && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
                         {template.description}
                       </p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1.5">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
                       Created by {template.createdBy.name} · {getRelativeTime(template.createdAt)}
                     </p>
                   </div>
@@ -345,14 +345,14 @@ export default function RuleTemplatesPage() {
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
                     onClick={() => openEditModal(template)}
-                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-brand-500/10 rounded-lg transition-colors"
                     title="Edit template"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setDeleteConfirmId(template.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-error-500/10 rounded-lg transition-colors"
                     title="Delete template"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -361,26 +361,26 @@ export default function RuleTemplatesPage() {
               </div>
 
               {/* Rule Summary Badges */}
-              <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-gray-100">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700">
+              <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400">
                   <Ban className="h-2.5 w-2.5" />
                   {getPenaltyLabel(template.latePenaltyType)}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700">
                   <Wallet className="h-2.5 w-2.5" />
                   {getPayoutLabel(template.payoutSchedule)}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 dark:bg-blue-light-500/10 text-blue-700">
                   <Shield className="h-2.5 w-2.5" />
                   {getWithdrawalLabel(template.earlyWithdrawalPolicy)}
                 </span>
                 {template.requireGuarantor && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 text-orange-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400">
                     {t('group.label_require_guarantor')}
                   </span>
                 )}
                 {template.allowSkipRound && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-700">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400">
                     {t('group.label_allow_skip')}
                   </span>
                 )}
@@ -391,16 +391,16 @@ export default function RuleTemplatesPage() {
       ) : templates.length > 0 ? (
         <div className="text-center py-16 card">
           <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">{t('rules.no_templates_match')}</h3>
-          <p className="text-gray-500 text-sm">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">{t('rules.no_templates_match')}</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             {t('rules.no_templates_match_desc')}
           </p>
         </div>
       ) : (
         <div className="text-center py-16 card">
           <BookTemplate className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">{t('rules.no_templates')}</h3>
-          <p className="text-gray-500 text-sm mb-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">{t('rules.no_templates')}</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
             {t('rules.no_templates_desc')}
           </p>
           <Button onClick={openCreateModal} size="sm">
@@ -421,7 +421,7 @@ export default function RuleTemplatesPage() {
           {/* Name & Description */}
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('rules.label_name')}</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('rules.label_name')}</label>
               <input
                 type="text"
                 value={form.name}
@@ -432,7 +432,7 @@ export default function RuleTemplatesPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('rules.label_desc')}</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('rules.label_desc')}</label>
               <textarea
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -446,14 +446,14 @@ export default function RuleTemplatesPage() {
           {/* Penalty Settings */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-red-50 rounded-lg">
-                <Ban className="h-4 w-4 text-red-600" />
+              <div className="p-1.5 bg-red-50 dark:bg-error-500/10 rounded-lg">
+                <Ban className="h-4 w-4 text-red-600 dark:text-error-400" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_penalty')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_penalty')}</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_late_penalty')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_late_penalty')}</label>
                 <select
                   value={form.latePenaltyType}
                   onChange={(e) => setForm({ ...form, latePenaltyType: e.target.value })}
@@ -466,7 +466,7 @@ export default function RuleTemplatesPage() {
               </div>
               {form.latePenaltyType === 'FIXED' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Penalty Amount (ETB)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Penalty Amount (ETB)</label>
                   <input
                     type="number"
                     value={form.latePenaltyAmount ?? ''}
@@ -479,7 +479,7 @@ export default function RuleTemplatesPage() {
               )}
               {form.latePenaltyType === 'PERCENTAGE' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Penalty Percentage (%)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Penalty Percentage (%)</label>
                   <input
                     type="number"
                     value={form.latePenaltyPercent ?? ''}
@@ -492,7 +492,7 @@ export default function RuleTemplatesPage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Grace Period (Days)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Grace Period (Days)</label>
                 <input
                   type="number"
                   value={form.gracePeriodDays}
@@ -502,7 +502,7 @@ export default function RuleTemplatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_max_missed')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_max_missed')}</label>
                 <input
                   type="number"
                   value={form.maxMissedPayments}
@@ -517,16 +517,16 @@ export default function RuleTemplatesPage() {
           {/* Deposit Rules */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-green-50 rounded-lg">
-                <CircleDollarSign className="h-4 w-4 text-green-600" />
+              <div className="p-1.5 bg-green-50 dark:bg-success-500/10 rounded-lg">
+                <CircleDollarSign className="h-4 w-4 text-green-600 dark:text-success-400" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_deposit')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_deposit')}</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
                 <div>
-                  <p className="text-xs font-medium text-gray-900">{t('group.label_require_exact')}</p>
-                  <p className="text-[10px] text-gray-500">{t('group.desc_require_exact')}</p>
+                  <p className="text-xs font-medium text-gray-900 dark:text-white/90">{t('group.label_require_exact')}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">{t('group.desc_require_exact')}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -539,7 +539,7 @@ export default function RuleTemplatesPage() {
                 </label>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Deposit Deadline (Day of Month)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Deposit Deadline (Day of Month)</label>
                 <input
                   type="number"
                   value={form.depositDeadlineDay ?? ''}
@@ -551,7 +551,7 @@ export default function RuleTemplatesPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Min Verification Time (Hours)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Min Verification Time (Hours)</label>
                 <input
                   type="number"
                   value={form.minVerificationHours}
@@ -566,16 +566,16 @@ export default function RuleTemplatesPage() {
           {/* Member Rules */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-blue-50 rounded-lg">
-                <Shield className="h-4 w-4 text-blue-600" />
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-light-500/10 rounded-lg">
+                <Shield className="h-4 w-4 text-blue-600 dark:text-blue-light-400" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_member')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_member')}</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
                 <div>
-                  <p className="text-xs font-medium text-gray-900">{t('group.label_allow_skip')}</p>
-                  <p className="text-[10px] text-gray-500">{t('group.desc_skip_round')}</p>
+                  <p className="text-xs font-medium text-gray-900 dark:text-white/90">{t('group.label_allow_skip')}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">{t('group.desc_skip_round')}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -589,7 +589,7 @@ export default function RuleTemplatesPage() {
               </div>
               {form.allowSkipRound && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_max_skips')}</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_max_skips')}</label>
                   <input
                     type="number"
                     value={form.maxSkipsAllowed}
@@ -599,10 +599,10 @@ export default function RuleTemplatesPage() {
                   />
                 </div>
               )}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
                 <div>
-                  <p className="text-xs font-medium text-gray-900">{t('group.label_require_guarantor')}</p>
-                  <p className="text-[10px] text-gray-500">{t('group.desc_require_guarantor')}</p>
+                  <p className="text-xs font-medium text-gray-900 dark:text-white/90">{t('group.label_require_guarantor')}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">{t('group.desc_require_guarantor')}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -615,7 +615,7 @@ export default function RuleTemplatesPage() {
                 </label>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_min_members')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_min_members')}</label>
                 <input
                   type="number"
                   value={form.minMembersToStart}
@@ -630,14 +630,14 @@ export default function RuleTemplatesPage() {
           {/* Payout Configuration */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-purple-50 rounded-lg">
-                <Wallet className="h-4 w-4 text-purple-600" />
+              <div className="p-1.5 bg-purple-50 dark:bg-theme-purple-500/10 rounded-lg">
+                <Wallet className="h-4 w-4 text-purple-600 dark:text-theme-purple-500" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_payout')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_payout')}</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_payout_schedule')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_payout_schedule')}</label>
                 <select
                   value={form.payoutSchedule}
                   onChange={(e) => setForm({ ...form, payoutSchedule: e.target.value })}
@@ -650,7 +650,7 @@ export default function RuleTemplatesPage() {
               </div>
               {form.payoutSchedule === 'CUSTOM' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Payout Delay (Days)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Payout Delay (Days)</label>
                   <input
                     type="number"
                     value={form.payoutDelayDays}
@@ -661,7 +661,7 @@ export default function RuleTemplatesPage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_early_withdrawal')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_early_withdrawal')}</label>
                 <select
                   value={form.earlyWithdrawalPolicy}
                   onChange={(e) => setForm({ ...form, earlyWithdrawalPolicy: e.target.value })}
@@ -674,7 +674,7 @@ export default function RuleTemplatesPage() {
               </div>
               {form.earlyWithdrawalPolicy === 'WITH_FEE' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Early Withdrawal Fee (ETB)</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Early Withdrawal Fee (ETB)</label>
                   <input
                     type="number"
                     value={form.earlyWithdrawalFee ?? ''}
@@ -691,14 +691,14 @@ export default function RuleTemplatesPage() {
           {/* Governance */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-orange-50 rounded-lg">
-                <Scale className="h-4 w-4 text-orange-600" />
+              <div className="p-1.5 bg-orange-50 dark:bg-orange-500/10 rounded-lg">
+                <Scale className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_governance')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_governance')}</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('group.label_dispute_method')}</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{t('group.label_dispute_method')}</label>
                 <select
                   value={form.disputeResolution}
                   onChange={(e) => setForm({ ...form, disputeResolution: e.target.value })}
@@ -715,10 +715,10 @@ export default function RuleTemplatesPage() {
           {/* Additional Rules */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-gray-100 rounded-lg">
-                <Settings className="h-4 w-4 text-gray-600" />
+              <div className="p-1.5 bg-gray-100 dark:bg-white/[0.08] rounded-lg">
+                <Settings className="h-4 w-4 text-gray-600 dark:text-gray-400" />
               </div>
-              <h4 className="text-sm font-semibold text-gray-900">{t('group.rules_additional')}</h4>
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90">{t('group.rules_additional')}</h4>
             </div>
             <textarea
               value={form.customRules}
@@ -731,7 +731,7 @@ export default function RuleTemplatesPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-100">
+        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
           <Button variant="secondary" onClick={closeFormModal}>
             {t('rules.btn_cancel')}
           </Button>
@@ -750,9 +750,9 @@ export default function RuleTemplatesPage() {
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Are you sure you want to delete{' '}
-            <span className="font-semibold text-gray-900">
+            <span className="font-semibold text-gray-900 dark:text-white/90">
               {deleteTarget?.name}
             </span>
             ? This action cannot be undone.

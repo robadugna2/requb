@@ -74,12 +74,12 @@ function greeting() {
 function activityIcon(type: string) {
   const map: Record<string, { icon: React.ReactNode; bg: string; text: string }> = {
     deposit: { icon: <CircleDollarSign className="h-4 w-4" />, bg: 'bg-emerald-100', text: 'text-emerald-600' },
-    verification: { icon: <CheckCircle className="h-4 w-4" />, bg: 'bg-blue-100', text: 'text-blue-600' },
-    lottery: { icon: <Trophy className="h-4 w-4" />, bg: 'bg-amber-100', text: 'text-amber-600' },
+    verification: { icon: <CheckCircle className="h-4 w-4" />, bg: 'bg-blue-100 dark:bg-blue-light-500/20', text: 'text-blue-600 dark:text-blue-light-400' },
+    lottery: { icon: <Trophy className="h-4 w-4" />, bg: 'bg-amber-100 dark:bg-warning-500/20', text: 'text-amber-600 dark:text-warning-400' },
     penalty: { icon: <ShieldAlert className="h-4 w-4" />, bg: 'bg-rose-100', text: 'text-rose-600' },
-    dispute: { icon: <Gavel className="h-4 w-4" />, bg: 'bg-violet-100', text: 'text-violet-600' },
+    dispute: { icon: <Gavel className="h-4 w-4" />, bg: 'bg-violet-100', text: 'text-violet-600 dark:text-theme-purple-500' },
   };
-  return map[type] ?? { icon: <Activity className="h-4 w-4" />, bg: 'bg-gray-100', text: 'text-gray-500' };
+  return map[type] ?? { icon: <Activity className="h-4 w-4" />, bg: 'bg-gray-100 dark:bg-white/[0.08]', text: 'text-gray-500 dark:text-gray-400' };
 }
 
 export default function DashboardPage() {
@@ -169,7 +169,7 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       {error && (
-        <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200 flex items-center gap-3 text-sm text-red-700">
+        <div className="mb-4 p-4 rounded-xl bg-red-50 dark:bg-error-500/10 border border-red-200 flex items-center gap-3 text-sm text-red-700 dark:text-error-400">
           <AlertCircle className="h-4 w-4" />
           <span className="flex-1">{error}</span>
           <button onClick={() => setError(null)} className="font-bold hover:text-red-900">×</button>
@@ -373,7 +373,7 @@ export default function DashboardPage() {
                           <Button size="icon" variant="outline" className="h-8 w-8 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700" onClick={() => handleVerify(r.id)} disabled={!!verifying[r.id]}>
                             <CheckCircle className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="outline" className="h-8 w-8 text-red-600 border-red-200 bg-red-50 hover:bg-red-100 hover:text-red-700" onClick={() => handleReject(r.id)} disabled={!!verifying[r.id]}>
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-red-600 dark:text-error-400 border-red-200 bg-red-50 dark:bg-error-500/10 hover:bg-red-100 hover:text-red-700 dark:hover:text-red-400" onClick={() => handleReject(r.id)} disabled={!!verifying[r.id]}>
                             <XCircle className="h-4 w-4" />
                           </Button>
                         </div>

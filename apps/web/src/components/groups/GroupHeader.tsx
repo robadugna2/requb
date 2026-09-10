@@ -72,8 +72,8 @@ function StatCard({ icon, label, value, delay, accent }: { icon: React.ReactNode
         {icon}
       </div>
       <div>
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-semibold text-gray-900">{value}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{value}</p>
       </div>
     </motion.div>
   );
@@ -192,21 +192,21 @@ export default function GroupHeader({
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             {group.photoUrl ? (
-              <img src={getMediaUrl(group.photoUrl)} alt={group.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100 flex-shrink-0" />
+              <img src={getMediaUrl(group.photoUrl)} alt={group.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100 dark:bg-white/[0.08] flex-shrink-0" />
             ) : (
-              <div className="w-20 h-20 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                <Users className="h-8 w-8 text-gray-400" />
+              <div className="w-20 h-20 rounded-lg bg-gray-100 dark:bg-white/[0.08] flex items-center justify-center flex-shrink-0">
+                <Users className="h-8 w-8 text-gray-400 dark:text-gray-500" />
               </div>
             )}
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{group.name}</h1>
                 <StatusBadge status={group.status} />
               </div>
               {group.description && (
-                <p className="mt-2 text-sm text-gray-500">{group.description}</p>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{group.description}</p>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                 {group.physicalAddress && (
                   <span className="flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5" />
@@ -216,7 +216,7 @@ export default function GroupHeader({
                         href={`https://www.google.com/maps/search/?api=1&query=${group.latitude},${group.longitude}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary-600 hover:underline ml-1"
+                        className="text-primary-600 dark:text-brand-400 hover:underline ml-1"
                       >
                         (Map)
                       </a>
@@ -255,31 +255,31 @@ export default function GroupHeader({
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-gray-100">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
           <StatCard
             delay={0.1}
-            accent="bg-blue-50 text-blue-600"
+            accent="bg-blue-50 dark:bg-blue-light-500/10 text-blue-600 dark:text-blue-light-400"
             icon={<Users className="h-5 w-5" />}
             label="Members"
             value={`${membersCount}/${group.maxMembers}`}
           />
           <StatCard
             delay={0.18}
-            accent="bg-green-50 text-green-600"
+            accent="bg-green-50 dark:bg-success-500/10 text-green-600 dark:text-success-400"
             icon={<CircleDollarSign className="h-5 w-5" />}
             label="Contribution"
             value={`ETB ${contributionCount.toLocaleString()}`}
           />
           <StatCard
             delay={0.26}
-            accent="bg-purple-50 text-purple-600"
+            accent="bg-purple-50 dark:bg-theme-purple-500/10 text-purple-600 dark:text-theme-purple-500"
             icon={<Calendar className="h-5 w-5" />}
             label="Cycle"
             value={`${cycleCount}/${group.totalCycles}`}
           />
           <StatCard
             delay={0.34}
-            accent="bg-orange-50 text-orange-600"
+            accent="bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
             icon={<Clock className="h-5 w-5" />}
             label="Next Draw"
             value={group.nextDrawDate || 'TBD'}
@@ -296,7 +296,7 @@ export default function GroupHeader({
       >
         <form onSubmit={handleUpdate} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
               Group Profile Image
             </label>
             <PhotoUpload
@@ -308,7 +308,7 @@ export default function GroupHeader({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Group Name
             </label>
             <input
@@ -322,7 +322,7 @@ export default function GroupHeader({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Contribution Per Share (ETB)
               </label>
               <input
@@ -334,7 +334,7 @@ export default function GroupHeader({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Max Members
               </label>
               <input
@@ -348,7 +348,7 @@ export default function GroupHeader({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Cycle Duration
             </label>
             <select
@@ -364,7 +364,7 @@ export default function GroupHeader({
 
           <div className="grid grid-cols-1 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 End Date
               </label>
               <input
@@ -377,22 +377,22 @@ export default function GroupHeader({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Physical Location
             </label>
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 bg-gray-50 dark:bg-white/[0.04] flex items-center justify-between">
               <div className="flex-1 min-w-0 pr-4">
                 {editForm.physicalAddress ? (
                   <>
-                    <p className="text-sm font-medium text-gray-800 truncate">
+                    <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">
                       {editForm.physicalAddress}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       GPS: {Number(editForm.latitude).toFixed(6)}, {Number(editForm.longitude).toFixed(6)}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">No physical location assigned</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">No physical location assigned</p>
                 )}
               </div>
               <Button
@@ -408,7 +408,7 @@ export default function GroupHeader({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Description (Optional)
             </label>
             <textarea
@@ -420,14 +420,14 @@ export default function GroupHeader({
             />
           </div>
 
-          <div className="pt-2 border-t border-gray-100">
+          <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-2 mb-2 mt-4">
-              <Zap className="h-4 w-4 text-blue-600" />
+              <Zap className="h-4 w-4 text-blue-600 dark:text-blue-light-400" />
               <label className="block text-sm font-semibold text-blue-900">
                 CBE Auto-Verification Accounts
               </label>
             </div>
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mb-4">
+            <div className="p-3 bg-blue-50 dark:bg-blue-light-500/10 border border-blue-100 rounded-lg mb-4">
               <p className="text-xs text-blue-700">
                 These accounts are used to verify member deposits automatically via CBE Direct API using FT numbers. Only CBE accounts starting with 1000 are supported.
               </p>
@@ -443,7 +443,7 @@ export default function GroupHeader({
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button
               type="button"
               variant="secondary"

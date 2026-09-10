@@ -192,7 +192,7 @@ export default function MemberDetailPage() {
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">{t('member.loading_detail')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('member.loading_detail')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -204,15 +204,15 @@ export default function MemberDetailPage() {
       <DashboardLayout>
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           {t('member.back')}
         </button>
         <div className="text-center py-16 card">
           <AlertCircle className="h-12 w-12 text-red-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">{t('member.not_found')}</h3>
-          <p className="text-gray-500 text-sm">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">{t('member.not_found')}</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             {error || t('member.not_found_desc')}
           </p>
         </div>
@@ -236,21 +236,21 @@ export default function MemberDetailPage() {
       {/* Back button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+        className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         {t('member.back')}
       </button>
 
       {success && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg">×</button>
         </div>
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center gap-3">
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center gap-3">
           <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
@@ -261,7 +261,7 @@ export default function MemberDetailPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-5">
             {/* Avatar / Photo */}
-            <div className="w-20 h-20 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-brand-500/15 flex items-center justify-center overflow-hidden flex-shrink-0">
               {user.photoUrl ? (
                 <img
                   src={getMediaUrl(user.photoUrl)}
@@ -269,7 +269,7 @@ export default function MemberDetailPage() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-2xl font-bold text-primary-700">
+                <span className="text-2xl font-bold text-primary-700 dark:text-brand-400">
                   {user.name
                     .split(' ')
                     .map((n) => n[0])
@@ -279,20 +279,20 @@ export default function MemberDetailPage() {
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{user.name}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{user.name}</h1>
               <div className="flex items-center gap-4 mt-2">
-                <div className="flex items-center gap-1.5 text-gray-600">
+                <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                   <Phone className="h-4 w-4" />
                   <span className="text-sm">{user.phone}</span>
                 </div>
                 {user.telegramId && (
-                  <div className="flex items-center gap-1.5 text-blue-600">
+                  <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-light-400">
                     <MessageCircle className="h-4 w-4" />
                     <span className="text-sm">{user.telegramId}</span>
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                 {t('member.since')} {user.createdAt}
               </p>
             </div>
@@ -319,43 +319,43 @@ export default function MemberDetailPage() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Users className="h-5 w-5 text-blue-600" />
+            <div className="p-2 bg-blue-50 dark:bg-blue-light-500/10 rounded-lg">
+              <Users className="h-5 w-5 text-blue-600 dark:text-blue-light-400" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">{t('member.tab_groups')}</p>
-              <p className="text-sm font-semibold text-gray-900">{user.groups.length}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.tab_groups')}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.groups.length}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 rounded-lg">
-              <CircleDollarSign className="h-5 w-5 text-green-600" />
+            <div className="p-2 bg-green-50 dark:bg-success-500/10 rounded-lg">
+              <CircleDollarSign className="h-5 w-5 text-green-600 dark:text-success-400" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">{t('members.col_deposits')}</p>
-              <p className="text-sm font-semibold text-gray-900">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('members.col_deposits')}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">
                 ETB {user.totalDeposits.toLocaleString()}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 rounded-lg">
-              <Trophy className="h-5 w-5 text-purple-600" />
+            <div className="p-2 bg-purple-50 dark:bg-theme-purple-500/10 rounded-lg">
+              <Trophy className="h-5 w-5 text-purple-600 dark:text-theme-purple-500" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">{t('member.stat_wins')}</p>
-              <p className="text-sm font-semibold text-gray-900">{user.lotteryWins.length}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.stat_wins')}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.lotteryWins.length}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Calendar className="h-5 w-5 text-orange-600" />
+            <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg">
+              <Calendar className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             </div>
             <div>
-              <p className="text-xs text-gray-500">{t('member.stat_payments')}</p>
-              <p className="text-sm font-semibold text-gray-900">{user.deposits.length}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.stat_payments')}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.deposits.length}</p>
             </div>
           </div>
         </div>
@@ -365,38 +365,38 @@ export default function MemberDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* {t('member.personal_info')} */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-gray-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             {t('member.personal_info')}
           </h2>
           <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_gov_id')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_gov_id')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.governmentId || 'Not provided'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">Bank Account Name</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">Bank Account Name</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.bankAccountName || 'Not provided'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_marital')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_marital')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {formatMaritalStatus(user.maritalStatus)}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_employment')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_employment')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {formatEmploymentType(user.employmentType)}
               </span>
             </div>
             <div className="flex justify-between items-center py-2">
-              <span className="text-sm text-gray-500">{t('members.label_employer')}</span>
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_employer')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.employerName || 'Not specified'}
               </span>
             </div>
@@ -405,38 +405,38 @@ export default function MemberDetailPage() {
 
         {/* {t('members.address')} */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-gray-400" />
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-4 flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             {t('members.address')}
           </h2>
           <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_country')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_country')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.country || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_city')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_city')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.city || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">Sub {t('members.label_city')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">Sub {t('members.label_city')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.subCity || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50">
-              <span className="text-sm text-gray-500">{t('members.label_woreda')}</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_woreda')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.woreda || 'Not specified'}
               </span>
             </div>
             <div className="flex justify-between items-center py-2">
-              <span className="text-sm text-gray-500">{t('members.label_house')}</span>
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_house')}</span>
+              <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.houseNumber || 'Not specified'}
               </span>
             </div>
@@ -445,13 +445,13 @@ export default function MemberDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-white/[0.08] p-1 rounded-lg w-fit">
         <button
           onClick={() => setActiveTab('deposits')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
             activeTab === 'deposits'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white/90 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           {t('member.tab_deposits')} ({user.deposits.length})
@@ -460,8 +460,8 @@ export default function MemberDetailPage() {
           onClick={() => setActiveTab('groups')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
             activeTab === 'groups'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white/90 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           {t('member.tab_groups')} ({user.groups.length})
@@ -470,8 +470,8 @@ export default function MemberDetailPage() {
           onClick={() => setActiveTab('wins')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
             activeTab === 'wins'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white/90 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           {t('member.stat_wins')} ({user.lotteryWins.length})
@@ -484,7 +484,7 @@ export default function MemberDetailPage() {
           {user.deposits.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                   <tr>
                     <th className="table-header">Group</th>
                     <th className="table-header">Cycle</th>
@@ -495,7 +495,7 @@ export default function MemberDetailPage() {
                     <th className="table-header">{t('group.col_status')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {(() => {
                     const grouped = user.deposits.reduce<Record<number, typeof user.deposits>>((acc, d) => {
                       const key = d.cycleNumber || 0;
@@ -510,7 +510,7 @@ export default function MemberDetailPage() {
                           <tr className="bg-indigo-50/70">
                             <td colSpan={7} className="px-4 py-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                                <span className="text-xs font-bold text-indigo-700 dark:text-brand-400 uppercase tracking-wide">
                                   Cycle {cycleNum}
                                 </span>
                                 <span className="text-xs text-indigo-500">
@@ -521,34 +521,34 @@ export default function MemberDetailPage() {
                           </tr>
                           {cycleDeposits.map((deposit) => (
                             <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="table-cell font-medium text-gray-900">
+                              <td className="table-cell font-medium text-gray-900 dark:text-white/90">
                                 {deposit.groupName}
                               </td>
-                              <td className="table-cell text-gray-500">
+                              <td className="table-cell text-gray-500 dark:text-gray-400">
                                 Cycle {deposit.cycleNumber}
                               </td>
-                              <td className="table-cell text-gray-700">
+                              <td className="table-cell text-gray-700 dark:text-gray-300">
                                 ETB {deposit.amount.toLocaleString()}
                               </td>
                               <td className="table-cell">
                                 {deposit.ftNumber ? (
-                                  <span className="font-mono text-xs text-gray-600 max-w-[120px] truncate block" title={deposit.ftNumber}>
+                                  <span className="font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[120px] truncate block" title={deposit.ftNumber}>
                                     {deposit.ftNumber}
                                   </span>
                                 ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
+                                  <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                 )}
                               </td>
                               <td className="table-cell">
                                 {deposit.narrative ? (
-                                  <span className="text-xs text-gray-500 max-w-[150px] truncate block" title={deposit.narrative}>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 max-w-[150px] truncate block" title={deposit.narrative}>
                                     {deposit.narrative}
                                   </span>
                                 ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
+                                  <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                 )}
                               </td>
-                              <td className="table-cell text-gray-500 text-sm">{deposit.transferDate}</td>
+                              <td className="table-cell text-gray-500 dark:text-gray-400 text-sm">{deposit.transferDate}</td>
                               <td className="table-cell">
                                 <StatusBadge status={deposit.status} />
                               </td>
@@ -563,7 +563,7 @@ export default function MemberDetailPage() {
           ) : (
             <div className="text-center py-12">
               <CircleDollarSign className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">{t('member.no_deposits')}</p>
+              <p className="text-gray-500 dark:text-gray-400">{t('member.no_deposits')}</p>
             </div>
           )}
         </div>
@@ -575,7 +575,7 @@ export default function MemberDetailPage() {
           {user.groups.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                   <tr>
                     <th className="table-header">{t('member.col_group_name')}</th>
                     <th className="table-header">{t('group.col_status')}</th>
@@ -585,22 +585,22 @@ export default function MemberDetailPage() {
                     <th className="table-header text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {user.groups.map((group) => (
                     <tr key={group.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="table-cell font-medium text-gray-900">
+                      <td className="table-cell font-medium text-gray-900 dark:text-white/90">
                         {group.groupName}
                       </td>
                       <td className="table-cell">
                         <StatusBadge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
                       </td>
-                      <td className="table-cell text-gray-500">{group.joinedAt}</td>
+                      <td className="table-cell text-gray-500 dark:text-gray-400">{group.joinedAt}</td>
                       <td className="table-cell">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-brand-500/10 text-indigo-700 dark:text-brand-400 ring-1 ring-inset ring-indigo-700/10">
                           {group.shares} {t('member.col_shares')}
                         </span>
                       </td>
-                      <td className="table-cell font-semibold text-gray-900">
+                      <td className="table-cell font-semibold text-gray-900 dark:text-white/90">
                         ETB {(group.contributionAmount * group.shares).toLocaleString()}
                       </td>
                       <td className="table-cell text-right">
@@ -611,14 +611,14 @@ export default function MemberDetailPage() {
                               setShareValue(group.shares);
                               setShowEditSharesModal(true);
                             }}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-1.5 text-indigo-600 dark:text-brand-400 hover:bg-indigo-50 dark:hover:bg-brand-500/10 rounded-lg transition-colors"
                             title={t('member.edit_shares')}
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => router.push(`/groups/${group.groupId}`)}
-                            className="p-1.5 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                            className="p-1.5 text-primary-600 dark:text-brand-400 hover:bg-primary-50 rounded-lg transition-colors"
                             title="View group"
                           >
                             <Eye className="h-4 w-4" />
@@ -633,7 +633,7 @@ export default function MemberDetailPage() {
           ) : (
             <div className="text-center py-12">
               <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">{t('member.no_groups')}</p>
+              <p className="text-gray-500 dark:text-gray-400">{t('member.no_groups')}</p>
             </div>
           )}
         </div>
@@ -645,7 +645,7 @@ export default function MemberDetailPage() {
           {user.lotteryWins.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                   <tr>
                     <th className="table-header">Group</th>
                     <th className="table-header">Cycle</th>
@@ -653,19 +653,19 @@ export default function MemberDetailPage() {
                     <th className="table-header">{t('group.col_date')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {user.lotteryWins.map((win) => (
                     <tr key={win.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="table-cell font-medium text-gray-900">
+                      <td className="table-cell font-medium text-gray-900 dark:text-white/90">
                         {win.groupName}
                       </td>
-                      <td className="table-cell text-gray-500">
+                      <td className="table-cell text-gray-500 dark:text-gray-400">
                         Cycle {win.cycleNumber}
                       </td>
-                      <td className="table-cell font-semibold text-green-700">
+                      <td className="table-cell font-semibold text-green-700 dark:text-success-400">
                         ETB {win.amountWon.toLocaleString()}
                       </td>
-                      <td className="table-cell text-gray-500">{win.date}</td>
+                      <td className="table-cell text-gray-500 dark:text-gray-400">{win.date}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -674,7 +674,7 @@ export default function MemberDetailPage() {
           ) : (
             <div className="text-center py-12">
               <Trophy className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">{t('member.no_wins')}</p>
+              <p className="text-gray-500 dark:text-gray-400">{t('member.no_wins')}</p>
             </div>
           )}
         </div>
@@ -692,20 +692,20 @@ export default function MemberDetailPage() {
         size="sm"
       >
         <form onSubmit={handleDelete} className="space-y-4">
-          <div className="p-4 rounded-lg bg-red-50 border border-red-100">
-            <p className="text-sm text-red-700">
+          <div className="p-4 rounded-lg bg-red-50 dark:bg-error-500/10 border border-red-100">
+            <p className="text-sm text-red-700 dark:text-error-400">
               {t('member.delete_warning')}
             </p>
           </div>
 
           {deleteError && (
-            <div className="p-3 rounded bg-red-50 text-red-600 text-xs font-medium border border-red-100">
+            <div className="p-3 rounded bg-red-50 dark:bg-error-500/10 text-red-600 dark:text-error-400 text-xs font-medium border border-red-100">
               {deleteError}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               {t('member.delete_confirm_label')}
             </label>
             <input
@@ -759,10 +759,10 @@ export default function MemberDetailPage() {
 
           {/* Basic Info */}
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2">{t('members.basic_info')}</h4>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90 border-b border-gray-100 dark:border-gray-800 pb-2">{t('members.basic_info')}</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_name')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_name')}</label>
                 <input
                   type="text"
                   value={editData.name}
@@ -772,7 +772,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_phone')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_phone')}</label>
                 <input
                   type="tel"
                   value={editData.phone}
@@ -782,7 +782,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_gov_id')} / Digital ID</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_gov_id')} / Digital ID</label>
                 <input
                   type="text"
                   value={editData.governmentId}
@@ -791,7 +791,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Bank Account Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Bank Account Name</label>
                 <input
                   type="text"
                   value={editData.bankAccountName}
@@ -801,7 +801,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_telegram')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_telegram')}</label>
                 <input
                   type="text"
                   value={editData.telegramId}
@@ -814,10 +814,10 @@ export default function MemberDetailPage() {
 
           {/* {t('members.personal_details')} */}
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2">{t('members.personal_details')}</h4>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90 border-b border-gray-100 dark:border-gray-800 pb-2">{t('members.personal_details')}</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_marital')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_marital')}</label>
                 <select
                   value={editData.maritalStatus}
                   onChange={(e) => setEditData({ ...editData, maritalStatus: e.target.value })}
@@ -829,7 +829,7 @@ export default function MemberDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_employment')} Type</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_employment')} Type</label>
                 <select
                   value={editData.employmentType}
                   onChange={(e) => setEditData({ ...editData, employmentType: e.target.value })}
@@ -841,7 +841,7 @@ export default function MemberDetailPage() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_employer')} / Company Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_employer')} / Company Name</label>
                 <input
                   type="text"
                   value={editData.employerName}
@@ -854,10 +854,10 @@ export default function MemberDetailPage() {
 
           {/* {t('members.address')} */}
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2">{t('members.address')}</h4>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-white/90 border-b border-gray-100 dark:border-gray-800 pb-2">{t('members.address')}</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_country')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_country')}</label>
                 <input
                   type="text"
                   value={editData.country}
@@ -866,7 +866,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_city')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_city')}</label>
                 <input
                   type="text"
                   value={editData.city}
@@ -875,7 +875,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Sub {t('members.label_city')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Sub {t('members.label_city')}</label>
                 <input
                   type="text"
                   value={editData.subCity}
@@ -884,7 +884,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_woreda')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_woreda')}</label>
                 <input
                   type="text"
                   value={editData.woreda}
@@ -893,7 +893,7 @@ export default function MemberDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('members.label_house')}</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('members.label_house')}</label>
                 <input
                   type="text"
                   value={editData.houseNumber}
@@ -904,7 +904,7 @@ export default function MemberDetailPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button type="button" variant="secondary" onClick={() => setShowEditModal(false)}>
               {t('members.btn_cancel')}
             </Button>
@@ -924,11 +924,11 @@ export default function MemberDetailPage() {
         <form onSubmit={handleEditShares} className="space-y-4">
           <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-indigo-900 mb-1">{editingShareGroup?.groupName}</h4>
-            <p className="text-xs text-indigo-700">{t('groups.amount_per_share_hint')}</p>
+            <p className="text-xs text-indigo-700 dark:text-brand-400">{t('groups.amount_per_share_hint')}</p>
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               {t('members.label_shares')}
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
@@ -940,7 +940,7 @@ export default function MemberDetailPage() {
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     shareValue === preset
                       ? 'bg-primary-600 text-white shadow-sm ring-2 ring-primary-600 ring-offset-1'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                      : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.04] border border-gray-200 dark:border-gray-800'
                   }`}
                 >
                   {preset === 0.25 ? t('members.share_quarter') : preset === 0.5 ? t('members.share_half') : preset === 0.75 ? t('members.share_three_quarter') : preset === 1 ? t('members.share_full') : preset}
@@ -961,14 +961,14 @@ export default function MemberDetailPage() {
               placeholder="Custom shares count (0.25 - 10)"
             />
             {editingShareGroup && (
-              <div className="flex items-center justify-between text-xs text-indigo-800 bg-indigo-100/60 rounded-md px-2.5 py-1.5 mt-2">
+              <div className="flex items-center justify-between text-xs text-indigo-800 dark:text-brand-300 bg-indigo-100/60 rounded-md px-2.5 py-1.5 mt-2">
                 <span>Expected per cycle:</span>
                 <span className="font-bold">ETB {(editingShareGroup.contributionAmount * shareValue).toLocaleString()}</span>
               </div>
             )}
           </div>
 
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button
               type="button"
               variant="secondary"

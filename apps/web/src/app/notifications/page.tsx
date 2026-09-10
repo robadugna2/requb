@@ -27,16 +27,16 @@ import {
 import type { NotificationItem } from '@/lib/api';
 
 const NOTIFICATION_CONFIG: Record<string, { icon: React.ElementType; bg: string; iconColor: string; dotColor: string }> = {
-  DEADLINE_APPROACHING: { icon: Clock, bg: 'bg-yellow-50', iconColor: 'text-yellow-600', dotColor: 'bg-yellow-500' },
-  PAYMENT_OVERDUE: { icon: AlertCircle, bg: 'bg-red-50', iconColor: 'text-red-600', dotColor: 'bg-red-500' },
-  DEPOSIT_VERIFIED: { icon: CheckCircle, bg: 'bg-green-50', iconColor: 'text-green-600', dotColor: 'bg-green-500' },
-  DEPOSIT_REJECTED: { icon: XCircle, bg: 'bg-red-50', iconColor: 'text-red-600', dotColor: 'bg-red-500' },
-  LOTTERY_WIN: { icon: Ticket, bg: 'bg-purple-50', iconColor: 'text-purple-600', dotColor: 'bg-purple-500' },
-  MEMBER_JOINED: { icon: UserPlus, bg: 'bg-green-50', iconColor: 'text-green-600', dotColor: 'bg-green-500' },
-  MEMBER_REMOVED: { icon: Trash2, bg: 'bg-red-50', iconColor: 'text-red-600', dotColor: 'bg-red-500' },
-  RULE_VIOLATION: { icon: Shield, bg: 'bg-red-50', iconColor: 'text-red-600', dotColor: 'bg-red-500' },
-  CYCLE_STARTED: { icon: Calendar, bg: 'bg-blue-50', iconColor: 'text-blue-600', dotColor: 'bg-blue-500' },
-  GENERAL: { icon: Info, bg: 'bg-blue-50', iconColor: 'text-blue-600', dotColor: 'bg-blue-500' },
+  DEADLINE_APPROACHING: { icon: Clock, bg: 'bg-yellow-50 dark:bg-warning-500/10', iconColor: 'text-yellow-600', dotColor: 'bg-yellow-500' },
+  PAYMENT_OVERDUE: { icon: AlertCircle, bg: 'bg-red-50 dark:bg-error-500/10', iconColor: 'text-red-600 dark:text-error-400', dotColor: 'bg-red-500' },
+  DEPOSIT_VERIFIED: { icon: CheckCircle, bg: 'bg-green-50 dark:bg-success-500/10', iconColor: 'text-green-600 dark:text-success-400', dotColor: 'bg-green-500' },
+  DEPOSIT_REJECTED: { icon: XCircle, bg: 'bg-red-50 dark:bg-error-500/10', iconColor: 'text-red-600 dark:text-error-400', dotColor: 'bg-red-500' },
+  LOTTERY_WIN: { icon: Ticket, bg: 'bg-purple-50 dark:bg-theme-purple-500/10', iconColor: 'text-purple-600 dark:text-theme-purple-500', dotColor: 'bg-purple-500' },
+  MEMBER_JOINED: { icon: UserPlus, bg: 'bg-green-50 dark:bg-success-500/10', iconColor: 'text-green-600 dark:text-success-400', dotColor: 'bg-green-500' },
+  MEMBER_REMOVED: { icon: Trash2, bg: 'bg-red-50 dark:bg-error-500/10', iconColor: 'text-red-600 dark:text-error-400', dotColor: 'bg-red-500' },
+  RULE_VIOLATION: { icon: Shield, bg: 'bg-red-50 dark:bg-error-500/10', iconColor: 'text-red-600 dark:text-error-400', dotColor: 'bg-red-500' },
+  CYCLE_STARTED: { icon: Calendar, bg: 'bg-blue-50 dark:bg-blue-light-500/10', iconColor: 'text-blue-600 dark:text-blue-light-400', dotColor: 'bg-blue-500' },
+  GENERAL: { icon: Info, bg: 'bg-blue-50 dark:bg-blue-light-500/10', iconColor: 'text-blue-600 dark:text-blue-light-400', dotColor: 'bg-blue-500' },
 };
 
 const FILTER_TABS = [
@@ -132,8 +132,8 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('notifications.title')}</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{t('notifications.title')}</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {t('notifications.subtitle')}
             </p>
           </div>
@@ -157,22 +157,22 @@ export default function NotificationsPage() {
       </div>
 
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+          <button onClick={() => setError(null)} className="text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 font-bold text-lg">×</button>
         </div>
       )}
 
       {/* Filter Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-white/[0.08] p-1 rounded-lg w-fit">
         {FILTER_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setFilter(tab.key as 'all' | 'unread' | 'read')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
               filter === tab.key
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white/90 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
             {tab.key === 'all' ? t('receipts.all_status') : tab.key === 'unread' ? t('receipts.pending') : t('receipts.verified')}
@@ -185,7 +185,7 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">{t('notifications.loading')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('notifications.loading')}</p>
           </div>
         </div>
       ) : notifications.length > 0 ? (
@@ -214,17 +214,17 @@ export default function NotificationsPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className={`text-sm font-semibold ${!notification.read ? 'text-gray-900' : 'text-gray-600'}`}>
+                        <h3 className={`text-sm font-semibold ${!notification.read ? 'text-gray-900 dark:text-white/90' : 'text-gray-600 dark:text-gray-400'}`}>
                           {notification.title}
                         </h3>
                         {!notification.read && (
                           <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />
                         )}
                       </div>
-                      <p className={`text-sm mt-0.5 ${!notification.read ? 'text-gray-700' : 'text-gray-500'}`}>
+                      <p className={`text-sm mt-0.5 ${!notification.read ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
                         {notification.message}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1.5">
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
                         {getRelativeTime(notification.createdAt)}
                       </p>
                     </div>
@@ -233,7 +233,7 @@ export default function NotificationsPage() {
                         e.stopPropagation();
                         handleDelete(notification.id);
                       }}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                      className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-error-500/10 rounded-lg transition-colors flex-shrink-0"
                       title="Delete notification"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -247,14 +247,14 @@ export default function NotificationsPage() {
       ) : (
         <div className="text-center py-16 card">
           <Bell className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">
             {filter === 'unread'
               ? t('notifications.all_caught_up')
               : filter === 'read'
               ? t('notifications.no_read')
               : t('notifications.no_notifications')}
           </h3>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             {filter === 'unread'
               ? t('notifications.no_unread_desc')
               : filter === 'read'

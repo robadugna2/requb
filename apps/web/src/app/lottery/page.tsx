@@ -460,7 +460,7 @@ export default function LotteryPage() {
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">{t('lottery.loading')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('lottery.loading')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -470,29 +470,29 @@ export default function LotteryPage() {
   return (
     <DashboardLayout>
       {success && (
-        <div className="mb-6 p-4 rounded-xl bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-xl bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg leading-none">×</button>
         </div>
       )}
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center gap-3">
+        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center gap-3">
           <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 font-bold text-lg leading-none">×</button>
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 font-bold text-lg leading-none">×</button>
         </div>
       )}
 
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lottery Draw Arena</h1>
-          <p className="mt-1 text-sm text-gray-500">Run transparency-focused live draws for active saving circles.</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">Lottery Draw Arena</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Run transparency-focused live draws for active saving circles.</p>
         </div>
         <button
           onClick={() => setSoundOn(!soundOn)}
-          className={`p-2.5 rounded-xl border border-gray-200 transition-all ${
-            soundOn ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400'
+          className={`p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 transition-all ${
+            soundOn ? 'bg-indigo-50 dark:bg-brand-500/10 text-indigo-600 dark:text-brand-400 border-indigo-200' : 'bg-white dark:bg-gray-900 text-gray-400 dark:text-gray-500'
           }`}
           title="Toggle Sound FX"
         >
@@ -684,15 +684,15 @@ export default function LotteryPage() {
       </div>
 
       {/* Past Results */}
-      <div className="card overflow-hidden p-0 bg-white border border-gray-100 rounded-2xl shadow-sm">
-        <div className="p-6 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">Past Draw Results</h3>
-          <p className="text-sm text-gray-500 mt-1">Audit log of all rotating pool wins generated across all saving circles.</p>
+      <div className="card overflow-hidden p-0 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm">
+        <div className="p-6 border-b border-gray-100 dark:border-gray-800">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white/90">Past Draw Results</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Audit log of all rotating pool wins generated across all saving circles.</p>
         </div>
         {results.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="table-header">Group</th>
                   <th className="table-header">Cycle</th>
@@ -701,32 +701,32 @@ export default function LotteryPage() {
                   <th className="table-header">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {results.map((result) => (
                   <tr key={result.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="table-cell">
                       <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">{result.groupName}</span>
+                        <Users className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                        <span className="font-medium text-gray-900 dark:text-white/90">{result.groupName}</span>
                       </div>
                     </td>
                     <td className="table-cell">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-brand-500/10 text-indigo-700 dark:text-brand-400 text-xs font-semibold">
                         Cycle {result.cycle}
                       </span>
                     </td>
                     <td className="table-cell">
                       <div className="flex items-center gap-2">
                         <Trophy className="h-4 w-4 text-yellow-500" />
-                        <span className="font-medium text-gray-900">{result.winnerName}</span>
+                        <span className="font-medium text-gray-900 dark:text-white/90">{result.winnerName}</span>
                       </div>
                     </td>
-                    <td className="table-cell font-semibold text-gray-900">
+                    <td className="table-cell font-semibold text-gray-900 dark:text-white/90">
                       ETB {result.amount.toLocaleString()}
                     </td>
-                    <td className="table-cell text-gray-500">
+                    <td className="table-cell text-gray-500 dark:text-gray-400">
                       <div className="flex items-center gap-1.5 text-xs">
-                        <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                        <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
                         {result.date}
                       </div>
                     </td>
@@ -738,8 +738,8 @@ export default function LotteryPage() {
         ) : (
           <div className="text-center py-16">
             <Ticket className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">No draw results found</p>
-            <p className="text-gray-400 text-sm mt-1">Select a group above and trigger the draw.</p>
+            <p className="text-gray-500 dark:text-gray-400">No draw results found</p>
+            <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Select a group above and trigger the draw.</p>
           </div>
         )}
       </div>

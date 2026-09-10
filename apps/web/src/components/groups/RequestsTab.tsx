@@ -54,18 +54,18 @@ function SectionCard({
     <div className="card">
       <div className="flex items-center justify-between mb-4 gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-gray-50 rounded-lg flex-shrink-0">{icon}</div>
+          <div className="p-2 bg-gray-50 dark:bg-white/[0.04] rounded-lg flex-shrink-0">{icon}</div>
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white/90 flex items-center gap-2 flex-wrap">
               {title}
-              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{count}</span>
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-white/[0.08] px-2 py-0.5 rounded-full">{count}</span>
               {pendingCount != null && pendingCount > 0 && (
-                <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-semibold text-amber-700 dark:text-warning-400 bg-amber-100 dark:bg-warning-500/20 px-2 py-0.5 rounded-full">
                   {pendingCount} pending
                 </span>
               )}
             </h3>
-            <p className="text-sm text-gray-500">{subtitle}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
           </div>
         </div>
         {action}
@@ -79,8 +79,8 @@ function EmptyState({ icon, title, hint }: { icon: React.ReactNode; title: strin
   return (
     <div className="text-center py-12">
       <div className="flex justify-center mb-3 text-gray-300">{icon}</div>
-      <p className="text-gray-500 text-sm">{title}</p>
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      <p className="text-gray-500 dark:text-gray-400 text-sm">{title}</p>
+      {hint && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -210,12 +210,12 @@ export default function RequestsTab({
       {/* Ethiopian context note for Wase */}
       <div className="card bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
-            <Shield className="h-5 w-5 text-amber-700" />
+          <div className="p-2 bg-amber-100 dark:bg-warning-500/20 rounded-lg flex-shrink-0">
+            <Shield className="h-5 w-5 text-amber-700 dark:text-warning-400" />
           </div>
           <div>
             <h4 className="font-semibold text-amber-900">Wase / ዋስ (Guarantor)</h4>
-            <p className="text-sm text-amber-700 mt-0.5">
+            <p className="text-sm text-amber-700 dark:text-warning-400 mt-0.5">
               In traditional Equb, a guarantor vouches for a member&apos;s reliability and can be called upon if they default.
             </p>
           </div>
@@ -224,7 +224,7 @@ export default function RequestsTab({
 
       {/* Disputes */}
       <SectionCard
-        icon={<Gavel className="h-5 w-5 text-orange-500" />}
+        icon={<Gavel className="h-5 w-5 text-orange-500 dark:text-orange-400" />}
         title="Disputes"
         subtitle="Member conflicts requiring resolution"
         count={disputes.length}
@@ -243,7 +243,7 @@ export default function RequestsTab({
         ) : disputes.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="table-header">Filed By</th>
                   <th className="table-header">Against</th>
@@ -253,21 +253,21 @@ export default function RequestsTab({
                   <th className="table-header text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {disputes.map((dispute) => (
                   <tr key={dispute.id} className="hover:bg-gray-50/30 transition-colors">
-                    <td className="table-cell font-medium text-gray-900">
+                    <td className="table-cell font-medium text-gray-900 dark:text-white/90">
                       {dispute.filedBy?.name || 'Unknown'}
                     </td>
-                    <td className="table-cell text-gray-500">
+                    <td className="table-cell text-gray-500 dark:text-gray-400">
                       {dispute.againstUser?.name || 'Group / General'}
                     </td>
                     <td className="table-cell">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 uppercase">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-white/[0.08] text-gray-800 dark:text-white/90 uppercase">
                         {dispute.type}
                       </span>
                     </td>
-                    <td className="table-cell text-gray-500 max-w-xs truncate" title={dispute.description}>
+                    <td className="table-cell text-gray-500 dark:text-gray-400 max-w-xs truncate" title={dispute.description}>
                       {dispute.description}
                     </td>
                     <td className="table-cell">
@@ -321,7 +321,7 @@ export default function RequestsTab({
         ) : swaps.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="table-header">Requester</th>
                   <th className="table-header">Target</th>
@@ -332,18 +332,18 @@ export default function RequestsTab({
                   <th className="table-header text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {swaps.map((swap) => (
                   <tr key={swap.id} className="hover:bg-gray-50/30 transition-colors">
-                    <td className="table-cell font-medium text-gray-900">
+                    <td className="table-cell font-medium text-gray-900 dark:text-white/90">
                       {swap.requester?.name || 'Unknown'}
                     </td>
-                    <td className="table-cell text-gray-900">
+                    <td className="table-cell text-gray-900 dark:text-white/90">
                       {swap.target?.name || 'Unknown'}
                     </td>
-                    <td className="table-cell text-center text-gray-500 font-semibold">{swap.requesterTurn}</td>
-                    <td className="table-cell text-center text-gray-500 font-semibold">{swap.targetTurn}</td>
-                    <td className="table-cell text-gray-500 max-w-xs truncate" title={swap.reason}>
+                    <td className="table-cell text-center text-gray-500 dark:text-gray-400 font-semibold">{swap.requesterTurn}</td>
+                    <td className="table-cell text-center text-gray-500 dark:text-gray-400 font-semibold">{swap.targetTurn}</td>
+                    <td className="table-cell text-gray-500 dark:text-gray-400 max-w-xs truncate" title={swap.reason}>
                       {swap.reason || '-'}
                     </td>
                     <td className="table-cell">
@@ -383,7 +383,7 @@ export default function RequestsTab({
 
       {/* Guarantors (Wase / ዋስ) */}
       <SectionCard
-        icon={<Shield className="h-5 w-5 text-amber-600" />}
+        icon={<Shield className="h-5 w-5 text-amber-600 dark:text-warning-400" />}
         title="Guarantors (ዋስ)"
         subtitle="Traditional guarantor arrangements"
         count={guarantors.length}
@@ -402,7 +402,7 @@ export default function RequestsTab({
         ) : guarantors.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                 <tr>
                   <th className="table-header">Guarantor</th>
                   <th className="table-header">Guaranteed</th>
@@ -412,38 +412,38 @@ export default function RequestsTab({
                   <th className="table-header text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {guarantors.map((g) => (
                   <tr key={g.id} className="hover:bg-gray-50/30 transition-colors">
                     <td className="table-cell">
                       <div>
-                        <p className="font-medium text-gray-900">{g.guarantorUser?.name}</p>
-                        <p className="text-xs text-gray-400">{g.guarantorUser?.phone}</p>
+                        <p className="font-medium text-gray-900 dark:text-white/90">{g.guarantorUser?.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{g.guarantorUser?.phone}</p>
                       </div>
                     </td>
                     <td className="table-cell">
                       <div>
-                        <p className="font-medium text-gray-900">{g.guaranteedUser?.name}</p>
-                        <p className="text-xs text-gray-400">{g.guaranteedUser?.phone}</p>
+                        <p className="font-medium text-gray-900 dark:text-white/90">{g.guaranteedUser?.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{g.guaranteedUser?.phone}</p>
                       </div>
                     </td>
                     <td className="table-cell">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                           g.status === 'ACTIVE'
-                            ? 'bg-green-100 text-green-700'
+                            ? 'bg-green-100 dark:bg-success-500/20 text-green-700 dark:text-success-400'
                             : g.status === 'CALLED'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-gray-100 text-gray-600'
+                            ? 'bg-red-100 dark:bg-error-500/20 text-red-700 dark:text-error-400'
+                            : 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-gray-400'
                         }`}
                       >
                         {g.status === 'ACTIVE' ? `✅ Active` : g.status === 'CALLED' ? `🚨 Called` : `⚪ Released`}
                       </span>
                     </td>
-                    <td className="table-cell text-gray-500 text-sm max-w-xs truncate" title={g.notes}>
+                    <td className="table-cell text-gray-500 dark:text-gray-400 text-sm max-w-xs truncate" title={g.notes}>
                       {g.notes || '-'}
                     </td>
-                    <td className="table-cell text-gray-500 text-sm">
+                    <td className="table-cell text-gray-500 dark:text-gray-400 text-sm">
                       {new Date(g.createdAt).toLocaleDateString()}
                     </td>
                     <td className="table-cell text-right">
@@ -471,7 +471,7 @@ export default function RequestsTab({
                         {(g.status === 'RELEASED' || g.status === 'CALLED') && (
                           <button
                             onClick={() => handleDeleteGuarantor(g.id)}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-1.5 text-red-500 dark:text-error-400 hover:bg-red-50 dark:hover:bg-error-500/10 rounded-lg transition-colors"
                             title="Remove record"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -503,7 +503,7 @@ export default function RequestsTab({
       >
         <form onSubmit={handleFileDispute} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Dispute Type</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Dispute Type</label>
             <select
               value={disputeForm.type}
               onChange={(e) => setDisputeForm({ ...disputeForm, type: e.target.value })}
@@ -518,7 +518,7 @@ export default function RequestsTab({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Against Member</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Against Member</label>
             <select
               value={disputeForm.againstUserId}
               onChange={(e) => setDisputeForm({ ...disputeForm, againstUserId: e.target.value })}
@@ -534,7 +534,7 @@ export default function RequestsTab({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
             <textarea
               value={disputeForm.description}
               onChange={(e) => setDisputeForm({ ...disputeForm, description: e.target.value })}
@@ -575,7 +575,7 @@ export default function RequestsTab({
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Resolution Notes</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Resolution Notes</label>
             <textarea
               value={resolveText}
               onChange={(e) => setResolveText(e.target.value)}
@@ -615,12 +615,12 @@ export default function RequestsTab({
         size="sm"
       >
         <form onSubmit={handleRequestSwap} className="space-y-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Request to exchange payout turn positions with another member.
           </p>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Target Member</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Target Member</label>
             <select
               value={swapForm.targetId}
               onChange={(e) => setSwapForm({ ...swapForm, targetId: e.target.value })}
@@ -637,7 +637,7 @@ export default function RequestsTab({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason</label>
             <textarea
               value={swapForm.reason}
               onChange={(e) => setSwapForm({ ...swapForm, reason: e.target.value })}
@@ -676,14 +676,14 @@ export default function RequestsTab({
         size="sm"
       >
         <form onSubmit={handleAssignGuarantor} className="space-y-4">
-          <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
-            <p className="text-sm text-amber-700">
+          <div className="p-3 bg-amber-50 dark:bg-warning-500/10 rounded-lg border border-amber-100">
+            <p className="text-sm text-amber-700 dark:text-warning-400">
               <strong>Rule:</strong> A member who has already won cannot act as a guarantor.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Guarantor</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Guarantor</label>
             <select
               value={guarantorForm.guarantorUserId}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, guarantorUserId: e.target.value })}
@@ -700,7 +700,7 @@ export default function RequestsTab({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Guaranteed Member</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Guaranteed Member</label>
             <select
               value={guarantorForm.guaranteedUserId}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, guaranteedUserId: e.target.value })}
@@ -719,7 +719,7 @@ export default function RequestsTab({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Notes</label>
             <textarea
               value={guarantorForm.notes}
               onChange={(e) => setGuarantorForm({ ...guarantorForm, notes: e.target.value })}

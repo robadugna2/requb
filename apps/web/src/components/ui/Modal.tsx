@@ -53,7 +53,7 @@ export default function Modal({
 
             {/* Modal panel */}
             <motion.div
-              className={`relative inline-block w-full ${sizeClasses[size]} p-6 my-8 text-left align-middle bg-white rounded-2xl shadow-2xl`}
+              className={`relative inline-block w-full ${sizeClasses[size]} p-6 my-8 text-left align-middle bg-white dark:bg-gray-900 rounded-2xl shadow-2xl`}
               initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -61,10 +61,10 @@ export default function Modal({
             >
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white/90">{title}</h3>
                 <button
                   onClick={onClose}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/[0.08] rounded-lg transition-colors"
                 >
                   <X className="h-5 w-5" />
                 </button>

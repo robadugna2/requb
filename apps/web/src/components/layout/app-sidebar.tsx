@@ -81,7 +81,7 @@ export function AppSidebar() {
         return (
           <div key={group.label || 'ungrouped'}>
             <h2
-              className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
+              className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 dark:text-gray-500 ${
                 !isExpanded && !isHovered ? 'lg:justify-center' : 'justify-start'
               }`}
             >
@@ -139,7 +139,7 @@ export function AppSidebar() {
 
   return (
     <aside
-      className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white border-r border-gray-200 text-gray-900 h-screen transition-all duration-300 ease-in-out z-50
+      className={`fixed mt-16 flex flex-col lg:mt-0 top-0 px-5 left-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white/90 h-screen transition-all duration-300 ease-in-out z-50
         ${isExpanded || isMobileOpen || isHovered ? 'w-[290px]' : 'w-[90px]'}
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0`}
@@ -156,8 +156,8 @@ export function AppSidebar() {
                 <CircleDollarSign className="h-5 w-5 text-white" />
               </div>
               <div className="grid text-left leading-tight">
-                <span className="truncate text-lg font-bold text-gray-800">Equb</span>
-                <span className="truncate text-xs text-gray-500">{t('nav.admin_panel')}</span>
+                <span className="truncate text-lg font-bold text-gray-800 dark:text-white/90">Equb</span>
+                <span className="truncate text-xs text-gray-500 dark:text-gray-400">{t('nav.admin_panel')}</span>
               </div>
             </div>
           ) : (
@@ -174,12 +174,12 @@ export function AppSidebar() {
         {/* Language quick selector — expanded only */}
         {(isExpanded || isHovered) && (
           <div className="mb-6">
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
-              <Globe className="h-4 w-4 text-gray-500 flex-shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 dark:bg-white/[0.04] border border-gray-200 dark:border-gray-800">
+              <Globe className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as Language)}
-                className="bg-transparent text-xs font-medium text-gray-700 hover:text-gray-900 focus:outline-none cursor-pointer w-full"
+                className="bg-transparent text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white/90 focus:outline-none cursor-pointer w-full"
               >
                 <option value="en">English 🇺🇸</option>
                 <option value="am">አማርኛ 🇪🇹</option>
@@ -192,7 +192,7 @@ export function AppSidebar() {
 
         {/* User footer */}
         {(isExpanded || isHovered) ? (
-          <div className="border-t border-gray-200 pt-4 pb-6">
+          <div className="border-t border-gray-200 dark:border-gray-800 pt-4 pb-6">
             <div className="flex items-center gap-3 px-1">
               <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center overflow-hidden flex-shrink-0">
                 {photoUrl ? (
@@ -202,12 +202,12 @@ export function AppSidebar() {
                 )}
               </div>
               <div className="grid flex-1 text-left leading-tight min-w-0">
-                <span className="truncate text-sm font-semibold text-gray-800">{user?.name || 'Admin'}</span>
-                <span className="truncate text-xs text-gray-500">{user?.role || 'ADMIN'}</span>
+                <span className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">{user?.name || 'Admin'}</span>
+                <span className="truncate text-xs text-gray-500 dark:text-gray-400">{user?.role || 'ADMIN'}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-2 text-gray-400 hover:text-error-500 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-2 text-gray-400 dark:text-gray-500 hover:text-error-500 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors"
                 title={t('nav.logout')}
               >
                 <LogOut className="h-4 w-4" />
@@ -215,10 +215,10 @@ export function AppSidebar() {
             </div>
           </div>
         ) : (
-          <div className="border-t border-gray-200 pt-4 pb-6 flex justify-center">
+          <div className="border-t border-gray-200 dark:border-gray-800 pt-4 pb-6 flex justify-center">
             <button
               onClick={handleLogout}
-              className="p-2.5 text-gray-400 hover:text-error-500 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-error-500 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.08] transition-colors"
               title={t('nav.logout')}
             >
               <LogOut className="h-5 w-5" />

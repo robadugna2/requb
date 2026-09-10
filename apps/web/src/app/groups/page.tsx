@@ -166,7 +166,7 @@ export default function GroupsPage() {
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">{t('groups.loading')}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('groups.loading')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -178,8 +178,8 @@ export default function GroupsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('groups.title')}</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{t('groups.title')}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {t('groups.subtitle')}
           </p>
         </div>
@@ -199,24 +199,24 @@ export default function GroupsPage() {
       </div>
 
       {success && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg">×</button>
         </div>
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center gap-3">
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center gap-3">
           <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 font-bold text-lg">×</button>
         </div>
       )}
 
       {/* Search */}
       <div className="mb-6">
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder={t('groups.search_placeholder')}
@@ -238,10 +238,10 @@ export default function GroupsPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                  <h3 className="font-semibold text-gray-900 dark:text-white/90 group-hover:text-primary-600 transition-colors">
                     {group.name}
                   </h3>
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                     {group.cycleDuration === 'Weekly' ? t('groups.frequency_weekly') : group.cycleDuration === 'Monthly' ? t('groups.frequency_monthly') : group.cycleDuration} {t('groups.cycle').toLowerCase()}
                   </p>
                 </div>
@@ -250,39 +250,39 @@ export default function GroupsPage() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500">
+                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                     <Users className="h-4 w-4" />
                     {t('groups.members')}
                   </span>
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-gray-900 dark:text-white/90">
                     {group.membersCount}/{group.maxMembers}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500">
+                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                     <CircleDollarSign className="h-4 w-4" />
                     {t('groups.contribution')}
                   </span>
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-gray-900 dark:text-white/90">
                     ETB {group.contributionAmount.toLocaleString()}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500">
+                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                     <Calendar className="h-4 w-4" />
                     {t('groups.cycle')}
                   </span>
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-gray-900 dark:text-white/90">
                     {group.currentCycle}/{group.totalCycles}
                   </span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                   <span>{t('groups.progress')}</span>
                   <span>
                     {group.totalCycles > 0
@@ -291,7 +291,7 @@ export default function GroupsPage() {
                     %
                   </span>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div className="w-full bg-gray-100 dark:bg-white/[0.08] rounded-full h-1.5">
                   <div
                     className="bg-primary-600 h-1.5 rounded-full transition-all duration-500"
                     style={{
@@ -310,8 +310,8 @@ export default function GroupsPage() {
       ) : (
         <div className="text-center py-16 card">
           <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">{t('groups.no_groups')}</h3>
-          <p className="text-gray-500 text-sm">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">{t('groups.no_groups')}</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             {searchQuery
               ? t('groups.no_groups_match')
               : t('groups.no_groups_desc')}
@@ -334,12 +334,12 @@ export default function GroupsPage() {
       >
         <form onSubmit={handleCreateGroup} className="space-y-4">
           {error && (
-            <div className="p-3 rounded bg-red-50 text-red-600 text-xs font-medium border border-red-100">
+            <div className="p-3 rounded bg-red-50 dark:bg-error-500/10 text-red-600 dark:text-error-400 text-xs font-medium border border-red-100">
               {error}
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               {t('groups.label_name')}
             </label>
             <input
@@ -356,7 +356,7 @@ export default function GroupsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 {t('groups.label_amount_per_share')}
               </label>
               <input
@@ -372,12 +372,12 @@ export default function GroupsPage() {
                 placeholder="5000"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {t('groups.amount_per_share_hint')}
               </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 {t('groups.label_max_members')}
               </label>
               <input
@@ -394,7 +394,7 @@ export default function GroupsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               {t('groups.label_duration')}
             </label>
             <select
@@ -411,7 +411,7 @@ export default function GroupsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
               Group Profile Image
             </label>
             <PhotoUpload
@@ -424,7 +424,7 @@ export default function GroupsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 End Date
               </label>
               <input
@@ -437,7 +437,7 @@ export default function GroupsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Rule Template
               </label>
               <select
@@ -456,22 +456,22 @@ export default function GroupsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               Physical Location
             </label>
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between">
+            <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 bg-gray-50 dark:bg-white/[0.04] flex items-center justify-between">
               <div className="flex-1 min-w-0 pr-4">
                 {formData.physicalAddress ? (
                   <>
-                    <p className="text-sm font-medium text-gray-800 truncate">
+                    <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">
                       {formData.physicalAddress}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       GPS: {Number(formData.latitude).toFixed(6)}, {Number(formData.longitude).toFixed(6)}
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">No physical location assigned</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">No physical location assigned</p>
                 )}
               </div>
               <Button
@@ -487,7 +487,7 @@ export default function GroupsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               {t('groups.label_description')}
             </label>
             <textarea
@@ -542,10 +542,10 @@ export default function GroupsPage() {
           {trashGroups.length > 0 ? (
             <div className="grid grid-cols-1 gap-4">
               {trashGroups.map((group) => (
-                <div key={group.id} className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">
+                <div key={group.id} className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 dark:bg-white/[0.04]">
                   <div>
-                    <h4 className="font-semibold text-gray-900">{group.name}</h4>
-                    <p className="text-sm text-gray-500">Deleted: {new Date(group.createdAt).toLocaleDateString()}</p>
+                    <h4 className="font-semibold text-gray-900 dark:text-white/90">{group.name}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Deleted: {new Date(group.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="secondary" size="sm" onClick={() => handleRestoreGroup(group.id)}>
@@ -559,11 +559,11 @@ export default function GroupsPage() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               No groups in the recycle bin.
             </div>
           )}
-          <div className="flex justify-end pt-4 border-t border-gray-100">
+          <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button variant="secondary" onClick={() => setShowTrashModal(false)}>Close</Button>
           </div>
         </div>

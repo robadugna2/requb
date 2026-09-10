@@ -17,10 +17,10 @@ const buttonVariants = cva(
         danger:
           "bg-error-500 text-white shadow-theme-xs hover:bg-error-600",
         outline:
-          "border border-gray-300 bg-white shadow-theme-xs hover:bg-gray-50 text-gray-700",
+          "border border-gray-300 bg-white dark:bg-gray-900 shadow-theme-xs hover:bg-gray-50 dark:hover:bg-white/[0.04] text-gray-700 dark:text-gray-300",
         secondary:
-          "bg-gray-100 text-gray-700 shadow-theme-xs hover:bg-gray-200",
-        ghost: "hover:bg-gray-100 text-gray-700",
+          "bg-gray-100 dark:bg-white/[0.08] text-gray-700 dark:text-gray-300 shadow-theme-xs hover:bg-gray-200 dark:hover:bg-white/[0.12]",
+        ghost: "hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-700 dark:text-gray-300",
         link: "text-brand-500 underline-offset-4 hover:underline",
       },
       size: {

@@ -123,7 +123,7 @@ export default function GroupDetailPage() {
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">Loading group…</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading group…</p>
           </div>
         </div>
       </DashboardLayout>
@@ -135,15 +135,15 @@ export default function GroupDetailPage() {
       <DashboardLayout>
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to groups
         </button>
         <div className="text-center py-16 card">
           <AlertCircle className="h-12 w-12 text-red-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">Group not found</h3>
-          <p className="text-gray-500 text-sm">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">Group not found</h3>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             This group may have been deleted or you don&apos;t have access to it.
           </p>
         </div>
@@ -154,21 +154,21 @@ export default function GroupDetailPage() {
   return (
     <DashboardLayout>
       {success && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 text-green-700 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg">×</button>
         </div>
       )}
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-center justify-between">
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 font-bold text-lg">×</button>
+          <button onClick={() => setError(null)} className="text-red-500 dark:text-error-400 hover:text-red-700 dark:hover:text-red-400 font-bold text-lg">×</button>
         </div>
       )}
 
       <button
         onClick={() => router.push('/groups')}
-        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+        className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to groups
@@ -189,19 +189,19 @@ export default function GroupDetailPage() {
 
       {/* Compact tab bar with sliding active pill */}
       {visibleTabs.length > 0 && (
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit max-w-full overflow-x-auto">
+        <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-white/[0.08] p-1 rounded-xl w-fit max-w-full overflow-x-auto">
           {TAB_DEFS.filter((tab) => visibleTabs.includes(tab.key)).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               className={`relative flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                activeTab === key ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                activeTab === key ? 'text-gray-900 dark:text-white/90' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               {activeTab === key && (
                 <motion.span
                   layoutId="group-tab-pill"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm ring-1 ring-gray-200/60"
+                  className="absolute inset-0 bg-white dark:bg-gray-900 rounded-lg shadow-sm ring-1 ring-gray-200/60"
                   transition={{ type: 'spring', stiffness: 420, damping: 34 }}
                 />
               )}
@@ -209,7 +209,7 @@ export default function GroupDetailPage() {
                 <Icon className="h-4 w-4" />
                 {label}
                 {key === 'members' && (
-                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === key ? 'bg-primary-100 text-primary-700' : 'bg-white text-gray-500'}`}>
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${activeTab === key ? 'bg-primary-100 dark:bg-brand-500/15 text-primary-700 dark:text-brand-400' : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400'}`}>
                     {group.membersCount}
                   </span>
                 )}

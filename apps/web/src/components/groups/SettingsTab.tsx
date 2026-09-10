@@ -71,10 +71,10 @@ function Toggle({
   description: string;
 }) {
   return (
-    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
       <div className="pr-3">
-        <p className="text-sm font-medium text-gray-900">{title}</p>
-        <p className="text-xs text-gray-500">{description}</p>
+        <p className="text-sm font-medium text-gray-900 dark:text-white/90">{title}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
       </div>
       <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
         <input
@@ -94,8 +94,8 @@ function SectionCard({ icon, title, action, children }: { icon: React.ReactNode;
     <div className="card">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">{icon}</div>
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <div className="p-2 bg-gray-100 dark:bg-white/[0.08] rounded-lg flex-shrink-0">{icon}</div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white/90">{title}</h3>
         </div>
         {action}
       </div>
@@ -301,7 +301,7 @@ export default function SettingsTab({
       <div className="flex items-center justify-center py-16">
         <div className="flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Loading group settings…</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading group settings…</p>
         </div>
       </div>
     );
@@ -311,8 +311,8 @@ export default function SettingsTab({
     return (
       <div className="text-center py-16 card">
         <Settings className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-1">Unable to load rules</h3>
-        <p className="text-gray-500 text-sm">Refresh the page and try again.</p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white/90 mb-1">Unable to load rules</h3>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">Refresh the page and try again.</p>
       </div>
     );
   }
@@ -322,12 +322,12 @@ export default function SettingsTab({
       {/* Template Toolbar */}
       <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="p-2 bg-indigo-50 rounded-lg">
-            <BookTemplate className="h-5 w-5 text-indigo-600" />
+          <div className="p-2 bg-indigo-50 dark:bg-brand-500/10 rounded-lg">
+            <BookTemplate className="h-5 w-5 text-indigo-600 dark:text-brand-400" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900">Rule Templates</h3>
-            <p className="text-xs text-gray-500">Load or save reusable rule configurations</p>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white/90">Rule Templates</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Load or save reusable rule configurations</p>
           </div>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -350,7 +350,7 @@ export default function SettingsTab({
                 </option>
               ))}
             </select>
-            <Download className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <Download className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 dark:text-gray-500 pointer-events-none" />
           </div>
           <Button size="sm" variant="secondary" onClick={() => setShowSaveTemplateModal(true)}>
             <BookTemplate className="h-4 w-4 mr-1.5" />
@@ -360,10 +360,10 @@ export default function SettingsTab({
       </div>
 
       {/* Penalty Settings */}
-      <SectionCard icon={<Ban className="h-5 w-5 text-red-600" />} title="Penalty Settings">
+      <SectionCard icon={<Ban className="h-5 w-5 text-red-600 dark:text-error-400" />} title="Penalty Settings">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Late Penalty</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Late Penalty</label>
             <select
               value={rules.latePenaltyType}
               onChange={(e) => setRules({ ...rules, latePenaltyType: e.target.value as GroupRules['latePenaltyType'] })}
@@ -376,7 +376,7 @@ export default function SettingsTab({
           </div>
           {rules.latePenaltyType === 'FIXED' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Penalty Amount (ETB)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Penalty Amount (ETB)</label>
               <input
                 type="number"
                 value={rules.latePenaltyAmount ?? ''}
@@ -389,7 +389,7 @@ export default function SettingsTab({
           )}
           {rules.latePenaltyType === 'PERCENTAGE' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Penalty Percentage (%)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Penalty Percentage (%)</label>
               <input
                 type="number"
                 value={rules.latePenaltyPercent ?? ''}
@@ -402,7 +402,7 @@ export default function SettingsTab({
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Grace Period (Days)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Grace Period (Days)</label>
             <input
               type="number"
               value={rules.gracePeriodDays}
@@ -412,7 +412,7 @@ export default function SettingsTab({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Missed Payments (before removal)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Max Missed Payments (before removal)</label>
             <input
               type="number"
               value={rules.maxMissedPayments}
@@ -425,7 +425,7 @@ export default function SettingsTab({
       </SectionCard>
 
       {/* Deposit Rules */}
-      <SectionCard icon={<CircleDollarSign className="h-5 w-5 text-green-600" />} title="Deposit Rules">
+      <SectionCard icon={<CircleDollarSign className="h-5 w-5 text-green-600 dark:text-success-400" />} title="Deposit Rules">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Toggle
             checked={rules.requireExactAmount}
@@ -434,7 +434,7 @@ export default function SettingsTab({
             description="Deposits must match the expected share amount"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit Deadline Day</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Deposit Deadline Day</label>
             <input
               type="number"
               value={rules.depositDeadlineDay ?? ''}
@@ -446,7 +446,7 @@ export default function SettingsTab({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Verification Hours</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Min Verification Hours</label>
             <input
               type="number"
               value={rules.minVerificationHours}
@@ -459,7 +459,7 @@ export default function SettingsTab({
       </SectionCard>
 
       {/* Member Rules */}
-      <SectionCard icon={<Shield className="h-5 w-5 text-blue-600" />} title="Member Rules">
+      <SectionCard icon={<Shield className="h-5 w-5 text-blue-600 dark:text-blue-light-400" />} title="Member Rules">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Toggle
             checked={rules.allowSkipRound}
@@ -469,7 +469,7 @@ export default function SettingsTab({
           />
           {rules.allowSkipRound && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Skips Allowed</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Max Skips Allowed</label>
               <input
                 type="number"
                 value={rules.maxSkipsAllowed}
@@ -486,7 +486,7 @@ export default function SettingsTab({
             description="Every member needs a guarantor"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Min Members to Start</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Min Members to Start</label>
             <input
               type="number"
               value={rules.minMembersToStart}
@@ -526,7 +526,7 @@ export default function SettingsTab({
       <SectionCard icon={<CircleDollarSign className="h-5 w-5 text-teal-600" />} title="Admin Fee">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Fee Type</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Fee Type</label>
             <select
               value={rules.adminFeeType ?? 'NONE'}
               onChange={(e) => setRules({ ...rules, adminFeeType: e.target.value as GroupRules['adminFeeType'] })}
@@ -539,7 +539,7 @@ export default function SettingsTab({
           </div>
           {rules.adminFeeType === 'FIXED' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Fee Amount (ETB)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Fee Amount (ETB)</label>
               <input
                 type="number"
                 value={rules.adminFeeAmount ?? ''}
@@ -552,7 +552,7 @@ export default function SettingsTab({
           )}
           {rules.adminFeeType === 'PERCENTAGE' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Fee Percentage (%)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Fee Percentage (%)</label>
               <input
                 type="number"
                 value={rules.adminFeePercent ?? ''}
@@ -569,10 +569,10 @@ export default function SettingsTab({
       </SectionCard>
 
       {/* Payout Configuration */}
-      <SectionCard icon={<Wallet className="h-5 w-5 text-purple-600" />} title="Payout Configuration">
+      <SectionCard icon={<Wallet className="h-5 w-5 text-purple-600 dark:text-theme-purple-500" />} title="Payout Configuration">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Payout Schedule</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Payout Schedule</label>
             <select
               value={rules.payoutSchedule}
               onChange={(e) => setRules({ ...rules, payoutSchedule: e.target.value as GroupRules['payoutSchedule'] })}
@@ -585,7 +585,7 @@ export default function SettingsTab({
           </div>
           {rules.payoutSchedule === 'CUSTOM' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payout Delay (Days)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Payout Delay (Days)</label>
               <input
                 type="number"
                 value={rules.payoutDelayDays}
@@ -596,7 +596,7 @@ export default function SettingsTab({
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Early Withdrawal</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Early Withdrawal</label>
             <select
               value={rules.earlyWithdrawalPolicy}
               onChange={(e) => setRules({ ...rules, earlyWithdrawalPolicy: e.target.value as GroupRules['earlyWithdrawalPolicy'] })}
@@ -609,7 +609,7 @@ export default function SettingsTab({
           </div>
           {rules.earlyWithdrawalPolicy === 'WITH_FEE' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Early Withdrawal Fee (ETB)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Early Withdrawal Fee (ETB)</label>
               <input
                 type="number"
                 value={rules.earlyWithdrawalFee ?? ''}
@@ -624,10 +624,10 @@ export default function SettingsTab({
       </SectionCard>
 
       {/* Governance */}
-      <SectionCard icon={<Scale className="h-5 w-5 text-orange-600" />} title="Governance">
+      <SectionCard icon={<Scale className="h-5 w-5 text-orange-600 dark:text-orange-400" />} title="Governance">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Dispute Resolution Method</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Dispute Resolution Method</label>
             <select
               value={rules.disputeResolution}
               onChange={(e) => setRules({ ...rules, disputeResolution: e.target.value as GroupRules['disputeResolution'] })}
@@ -639,7 +639,7 @@ export default function SettingsTab({
             </select>
           </div>
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Custom Rules</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Custom Rules</label>
             <textarea
               value={rules.customRules ?? ''}
               onChange={(e) => setRules({ ...rules, customRules: e.target.value || undefined })}
@@ -662,7 +662,7 @@ export default function SettingsTab({
       {/* Group Leaders (owner/super-admin only) */}
       {isOwnerOrSuper && (
         <SectionCard
-          icon={<Shield className="h-5 w-5 text-indigo-600" />}
+          icon={<Shield className="h-5 w-5 text-indigo-600 dark:text-brand-400" />}
           title="Group Leaders"
           action={
             <Button size="sm" onClick={() => setShowAssignLeaderModal(true)}>
@@ -672,14 +672,14 @@ export default function SettingsTab({
           }
         >
           {leadersLoading ? (
-            <div className="py-8 flex justify-center text-gray-500">Loading leaders…</div>
+            <div className="py-8 flex justify-center text-gray-500 dark:text-gray-400">Loading leaders…</div>
           ) : leaders.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {leaders.map((leader) => (
-                <div key={leader.id} className="p-4 border rounded-lg bg-white shadow-sm flex flex-col justify-between">
+                <div key={leader.id} className="p-4 border rounded-lg bg-white dark:bg-gray-900 shadow-sm flex flex-col justify-between">
                   <div>
-                    <h4 className="font-semibold text-gray-900">{leader.admin.name}</h4>
-                    <p className="text-sm text-gray-500">{leader.admin.email}</p>
+                    <h4 className="font-semibold text-gray-900 dark:text-white/90">{leader.admin.name}</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{leader.admin.email}</p>
                     <div className="mt-3 space-y-1">
                       {([
                         { key: 'canManageMembers', label: 'Can Manage Members' },
@@ -687,7 +687,7 @@ export default function SettingsTab({
                         { key: 'canTriggerLottery', label: 'Can Trigger Lottery' },
                         { key: 'canManageRules', label: 'Can Manage Rules' },
                       ] as const).map(({ key, label }) => (
-                        <label key={key} className="flex items-center text-sm text-gray-700">
+                        <label key={key} className="flex items-center text-sm text-gray-700 dark:text-gray-300">
                           <input
                             type="checkbox"
                             checked={leader[key]}
@@ -708,7 +708,7 @@ export default function SettingsTab({
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500 border border-dashed rounded-lg bg-gray-50">
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400 border border-dashed rounded-lg bg-gray-50 dark:bg-white/[0.04]">
               <Shield className="h-10 w-10 text-gray-300 mx-auto mb-3" />
               <p>No sub-admins assigned to this group.</p>
             </div>
@@ -730,11 +730,11 @@ export default function SettingsTab({
         size="sm"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Save the current rule configuration as a reusable template that can be applied to other groups.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Template Name *</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Template Name *</label>
             <input
               type="text"
               value={templateName}
@@ -745,7 +745,7 @@ export default function SettingsTab({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description (Optional)</label>
             <textarea
               value={templateDescription}
               onChange={(e) => setTemplateDescription(e.target.value)}
@@ -783,7 +783,7 @@ export default function SettingsTab({
       >
         <form onSubmit={handleAssignLeader} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Admin</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Select Admin</label>
             <select
               value={leaderForm.adminId}
               onChange={(e) => setLeaderForm({ ...leaderForm, adminId: e.target.value })}
@@ -797,14 +797,14 @@ export default function SettingsTab({
             </select>
           </div>
           <div className="space-y-2 mt-4">
-            <h4 className="text-sm font-medium text-gray-700">Permissions</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Permissions</h4>
             {([
               { key: 'canManageMembers', label: 'Can Manage Members' },
               { key: 'canManageDeposits', label: 'Can Manage Deposits' },
               { key: 'canTriggerLottery', label: 'Can Trigger Lottery' },
               { key: 'canManageRules', label: 'Can Manage Rules' },
             ] as const).map(({ key, label }) => (
-              <label key={key} className="flex items-center text-sm text-gray-700">
+              <label key={key} className="flex items-center text-sm text-gray-700 dark:text-gray-300">
                 <input
                   type="checkbox"
                   checked={leaderForm[key]}

@@ -43,27 +43,27 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
 
   const variantStyles: Record<ToastVariant, { bg: string; border: string; icon: React.ReactNode; text: string }> = {
     warning: {
-      bg: 'bg-amber-50',
+      bg: 'bg-amber-50 dark:bg-warning-500/10',
       border: 'border-amber-200',
-      icon: <ShieldAlert className="h-5 w-5 text-amber-600 flex-shrink-0" />,
+      icon: <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-warning-400 flex-shrink-0" />,
       text: 'text-amber-900',
     },
     error: {
-      bg: 'bg-red-50',
+      bg: 'bg-red-50 dark:bg-error-500/10',
       border: 'border-red-200',
-      icon: <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />,
+      icon: <AlertCircle className="h-5 w-5 text-red-600 dark:text-error-400 flex-shrink-0" />,
       text: 'text-red-900',
     },
     success: {
-      bg: 'bg-green-50',
+      bg: 'bg-green-50 dark:bg-success-500/10',
       border: 'border-green-200',
-      icon: <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />,
+      icon: <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-success-400 flex-shrink-0" />,
       text: 'text-green-900',
     },
     info: {
-      bg: 'bg-blue-50',
+      bg: 'bg-blue-50 dark:bg-blue-light-500/10',
       border: 'border-blue-200',
-      icon: <Info className="h-5 w-5 text-blue-600 flex-shrink-0" />,
+      icon: <Info className="h-5 w-5 text-blue-600 dark:text-blue-light-400 flex-shrink-0" />,
       text: 'text-blue-900',
     },
   };
@@ -82,7 +82,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         onClick={handleClose}
         className="p-1 rounded hover:bg-black/5 transition-colors flex-shrink-0"
       >
-        <X className="h-4 w-4 text-gray-500" />
+        <X className="h-4 w-4 text-gray-500 dark:text-gray-400" />
       </button>
     </div>
   );

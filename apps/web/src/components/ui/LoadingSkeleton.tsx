@@ -4,7 +4,7 @@ import React from 'react';
 
 function Pulse({ className }: { className?: string }) {
   return (
-    <div className={`animate-pulse bg-gray-200 rounded ${className || ''}`} />
+    <div className={`animate-pulse bg-gray-200 dark:bg-gray-700 rounded ${className || ''}`} />
   );
 }
 
@@ -25,10 +25,10 @@ export function CardSkeleton() {
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="card overflow-hidden p-0">
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-gray-100 dark:border-gray-800">
         <Pulse className="h-4 w-48" />
       </div>
-      <div className="divide-y divide-gray-50">
+      <div className="divide-y divide-gray-50 dark:divide-gray-800">
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="flex items-center gap-4 p-4">
             <Pulse className="h-8 w-8 rounded-full" />
