@@ -7,6 +7,10 @@ import { Prisma, VerificationStatus, PenaltyReason } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
+import {
+  MEMBER_MATCH_THRESHOLD,
+  rankMembersByPayerName,
+} from './member-matching';
 
 export interface CreateDepositData {
   cycleId: string;
@@ -21,7 +25,10 @@ export interface CreateDepositData {
   senderAccount?: string;
   receiverAccount?: string;
   branch?: string;
+  narrative?: string;
   confidence?: number;
+  /** Present on the admin create path; validated against the cycle's group */
+  groupId?: string;
 }
 
 @Injectable()
@@ -252,6 +259,13 @@ export class DepositsService {
       throw new NotFoundException(`Cycle with ID ${data.cycleId} not found`);
     }
 
+    // Admin create path: groupId is supplied and must match the cycle's group
+    if (data.groupId && data.groupId !== cycle.groupId) {
+      throw new BadRequestException(
+        'The selected cycle does not belong to the selected group',
+      );
+    }
+
     // Verify the user exists
     const user = await this.prisma.user.findUnique({
       where: { id: data.userId },
@@ -259,6 +273,18 @@ export class DepositsService {
 
     if (!user) {
       throw new NotFoundException(`User with ID ${data.userId} not found`);
+    }
+
+    // Admin create path: deposits require an active membership in the group
+    if (data.groupId) {
+      const membership = await this.prisma.groupMembership.findUnique({
+        where: { groupId_userId: { groupId: data.groupId, userId: data.userId } },
+      });
+      if (!membership || membership.status === 'REMOVED') {
+        throw new BadRequestException(
+          `${user.name} is not a member of this group. Add them to the group first.`,
+        );
+      }
     }
 
     // Validate deposit details against rules
@@ -303,6 +329,7 @@ export class DepositsService {
         senderAccount: data.senderAccount,
         receiverAccount: data.receiverAccount,
         branch: data.branch,
+        narrative: data.narrative,
         confidence: data.confidence,
       },
       include: {
@@ -319,5 +346,42 @@ export class DepositsService {
       where: { cycleId, verificationStatus: 'VERIFIED' },
       include: { user: true },
     });
+  }
+
+  /**
+   * Suggest group members whose names best match a bank-transaction payer
+   * name (from a CBE receipt lookup). Used by the camera FT scanner to
+   * auto-pair transactions to members; unmatched payers must be picked
+   * manually by the admin.
+   */
+  async suggestMembersForPayer(groupId: string, payerName: string) {
+    const memberships = await this.prisma.groupMembership.findMany({
+      where: { groupId, status: { not: 'REMOVED' } },
+      select: {
+        status: true,
+        user: { select: { id: true, name: true, phone: true, photoUrl: true } },
+      },
+    });
+
+    const suggestions = rankMembersByPayerName(
+      payerName,
+      memberships.map((m) => ({
+        userId: m.user.id,
+        name: m.user.name,
+        phone: m.user.phone,
+        photoUrl: m.user.photoUrl ?? undefined,
+        membershipStatus: m.status,
+      })),
+    );
+
+    const best = suggestions[0];
+    return {
+      payerName,
+      suggestions,
+      bestMatch:
+        best && best.score >= MEMBER_MATCH_THRESHOLD
+          ? { ...best, autoPaired: true }
+          : null,
+    };
   }
 }

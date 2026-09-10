@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CheckCircle,
   XCircle,
@@ -17,6 +18,7 @@ import {
   AlertTriangle,
   Ban,
   Zap,
+  ScanLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -55,6 +57,7 @@ export default function DepositsTab({
   notifySuccess,
   notifyError,
 }: DepositsTabProps) {
+  const router = useRouter();
   const [deposits, setDeposits] = useState<DepositItem[]>([]);
   const [penalties, setPenalties] = useState<PenaltyRecord[]>([]);
   const [penaltiesLoading, setPenaltiesLoading] = useState(false);
@@ -337,6 +340,12 @@ export default function DepositsTab({
             <Download className="h-4 w-4" />
             CSV
           </button>
+          {canManageDeposits && (
+            <Button size="sm" onClick={() => router.push(`/scan?group=${groupId}`)} className="flex-shrink-0">
+              <ScanLine className="h-4 w-4 mr-1" />
+              Scan FT
+            </Button>
+          )}
         </div>
 
         {/* Status filter pills */}

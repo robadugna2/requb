@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Receipt, UserCog, Settings, BookTemplate, Bell, Ticket } from 'lucide-react';
+import { LayoutDashboard, Users, Receipt, UserCog, Settings, BookTemplate, Bell, Ticket, ScanLine } from 'lucide-react';
 
 export interface NavItem {
   title: string;
@@ -43,6 +43,13 @@ export const navGroups: NavGroup[] = [
         key: 'nav.receipts',
         url: '/receipts',
         icon: Receipt,
+        roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'],
+      },
+      {
+        title: 'Scan FT',
+        key: 'nav.scan',
+        url: '/scan',
+        icon: ScanLine,
         roles: ['SUPER_ADMIN', 'ADMIN', 'SUB_ADMIN'],
       },
       {

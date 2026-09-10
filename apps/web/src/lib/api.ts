@@ -89,6 +89,15 @@ export interface GroupDetail {
   nextDrawDate?: string;
   createdById?: string;
   cbeAccountNumbers?: string[];
+  cycles?: GroupCycleInfo[];
+}
+
+export interface GroupCycleInfo {
+  id: string;
+  cycleNumber: number;
+  status: 'PENDING' | 'ACTIVE' | 'COMPLETED';
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface GroupMember {
@@ -481,6 +490,16 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
       };
     });
 
+  const cycleInfos: GroupCycleInfo[] = (cycles || [])
+    .map((c) => ({
+      id: c.id as string,
+      cycleNumber: c.cycleNumber as number,
+      status: (c.status as GroupCycleInfo['status']) || 'PENDING',
+      startDate: c.startDate as string | undefined,
+      endDate: c.endDate as string | undefined,
+    }))
+    .sort((a, b) => a.cycleNumber - b.cycleNumber);
+
   // Calculate next draw date from latest active cycle's end date
   let nextDrawDate: string | undefined;
   if (latestCycle && (latestCycle.status as string) === 'ACTIVE') {
@@ -509,6 +528,7 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
     nextDrawDate,
     createdById: (raw.createdById as string) || (createdBy?.id as string) || undefined,
     cbeAccountNumbers: (raw.cbeAccountNumbers as string[]) || [],
+    cycles: cycleInfos,
   };
 }
 
@@ -1085,6 +1105,81 @@ export const cbeLookup = async (
 ): Promise<CbeTransactionData> => {
   const response = await api.post('/deposits/cbe-lookup', { ftNumber, accountNumber });
   return response.data as CbeTransactionData;
+};
+
+// ─── Camera FT Scanner ────────────────────────────────────────────────────────
+
+export interface FtScanResult {
+  ftNumbers: string[];
+  bankName?: string;
+  confidence: number;
+  errors?: string[];
+}
+
+export interface MemberSuggestion {
+  userId: string;
+  name: string;
+  phone?: string;
+  photoUrl?: string;
+  membershipStatus?: string;
+  score: number;
+  autoPaired?: boolean;
+}
+
+export interface SuggestMembersResult {
+  payerName: string;
+  suggestions: MemberSuggestion[];
+  bestMatch: MemberSuggestion | null;
+}
+
+export interface CreateDepositPayload {
+  cycleId: string;
+  userId: string;
+  groupId: string;
+  imageUrl: string;
+  ftNumber?: string;
+  amount?: number;
+  bankName?: string;
+  depositDate?: string;
+  senderName?: string;
+  senderAccount?: string;
+  receiverAccount?: string;
+  branch?: string;
+  narrative?: string;
+  confidence?: number;
+}
+
+/**
+ * Detect all CBE FT numbers visible on a bank statement / receipt photo
+ * (multipart field "image"). Does not create or modify deposits.
+ */
+export const scanFtNumbers = async (file: File): Promise<FtScanResult> => {
+  const formData = new FormData();
+  formData.append('image', file);
+  const response = await api.post('/deposits/ft-scan', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data as FtScanResult;
+};
+
+/**
+ * Fuzzy-match a bank-transaction payer name against a group's members.
+ */
+export const suggestMembers = async (
+  groupId: string,
+  payerName: string,
+): Promise<SuggestMembersResult> => {
+  const response = await api.post('/deposits/suggest-members', { groupId, payerName });
+  return response.data as SuggestMembersResult;
+};
+
+/**
+ * Create a deposit from the admin dashboard (e.g. camera FT scanner flow).
+ * Returns the raw created deposit (with id) — call autoVerifyDepositCbe next.
+ */
+export const createDeposit = async (payload: CreateDepositPayload): Promise<{ id: string }> => {
+  const response = await api.post('/deposits', payload);
+  return response.data as { id: string };
 };
 
 /**

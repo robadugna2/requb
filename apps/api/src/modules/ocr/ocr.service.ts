@@ -16,6 +16,14 @@ export interface OcrResult {
   errors?: string[];
 }
 
+export interface FtScanResult {
+  ftNumbers: string[];
+  bankName?: string;
+  confidence: number;
+  rawText?: string;
+  errors?: string[];
+}
+
 @Injectable()
 export class OcrService {
   private readonly logger = new Logger(OcrService.name);
@@ -119,6 +127,99 @@ Return ONLY valid JSON. If a field cannot be determined, omit it from the respon
       return {
         confidence: 0,
         errors: [error instanceof Error ? error.message : 'OCR processing failed'],
+      };
+    }
+  }
+
+  /**
+   * Detects ALL transaction/FT reference numbers visible on a bank statement
+   * or receipt photo (a hardcopy statement page can contain many).
+   * Accepts a base64 data-URL so no publicly reachable image URL is needed.
+   * Only CBE-format references ("FT" + 10 alphanumeric chars) are returned,
+   * since CBE is the only bank with a verification API in this app.
+   */
+  async extractFtNumbers(imageDataUrl: string): Promise<FtScanResult> {
+    if (!this.openai) {
+      this.logger.warn('OpenAI not configured, FT scanning is disabled');
+      return {
+        ftNumbers: [],
+        confidence: 0,
+        errors: ['OCR processing is disabled. Please configure OPENAI_API_KEY.'],
+      };
+    }
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an OCR specialist for Ethiopian bank documents. Find ALL transaction reference numbers visible in this image. A single receipt contains one reference number; a bank statement page may contain many rows, each with its own reference number.
+
+Rules:
+- CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB12345. They usually appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows.
+- Return every reference number you can read, including unclear ones (make your best reading of each).
+- Also report which bank the document is from (e.g., CBE, Telebirr, Awash, BOA, Dashen).
+
+Return ONLY valid JSON in this exact shape:
+{ "ftNumbers": ["FT...", "..."], "bankName": "CBE", "confidence": 0.85 }`,
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Find all transaction / FT reference numbers in this bank document photo:',
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageDataUrl,
+                  detail: 'high',
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 1000,
+        temperature: 0,
+      });
+
+      const content = response.choices[0]?.message?.content;
+
+      if (!content) {
+        return { ftNumbers: [], confidence: 0, errors: ['No response from OCR service'] };
+      }
+
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        return { ftNumbers: [], confidence: 0, rawText: content, errors: ['Could not parse OCR response as JSON'] };
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Normalize each candidate (strip punctuation/spaces the model may have
+      // read around the reference) then keep only valid CBE-format numbers.
+      const ftNumbers: string[] = Array.from(
+        new Set(
+          (Array.isArray(parsed.ftNumbers) ? parsed.ftNumbers : [])
+            .map((ft: unknown) => String(ft ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''))
+            .filter((ft: string) => /^FT\w{10}$/.test(ft)),
+        ),
+      );
+
+      return {
+        ftNumbers,
+        bankName: parsed.bankName || undefined,
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        rawText: content,
+      };
+    } catch (error: unknown) {
+      this.logger.error('FT scan processing error', error);
+      return {
+        ftNumbers: [],
+        confidence: 0,
+        errors: [error instanceof Error ? error.message : 'FT scanning failed'],
       };
     }
   }

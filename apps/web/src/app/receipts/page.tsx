@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Filter,
   CheckCircle,
@@ -12,6 +13,7 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
+  ScanLine,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
@@ -33,6 +35,7 @@ import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
 export default function ReceiptsPage() {
   const { t } = useLanguage();
+  const router = useRouter();
   const permissions = useAdminPermissions();
   const [receipts, setReceipts] = useState<ReceiptItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,16 +189,22 @@ export default function ReceiptsPage() {
           </p>
         </div>
 
-        {/* Manual FT Lookup toggle */}
-        <Button
-          variant="outline"
-          onClick={() => setShowLookupPanel((v) => !v)}
-          className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
-        >
+        {/* Camera FT scanner + Manual FT Lookup toggle */}
+        <div className="flex gap-2">
+          <Button onClick={() => router.push('/scan')} className="gap-2">
+            <ScanLine className="h-4 w-4" />
+            Scan FT
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowLookupPanel((v) => !v)}
+            className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
           <Search className="h-4 w-4" />
           FT Lookup
           {showLookupPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </Button>
+          </Button>
+        </div>
       </div>
 
       {/* CBE Manual FT Lookup Panel */}
