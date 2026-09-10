@@ -16,6 +16,8 @@ export interface MemberMatchCandidate {
   photoUrl?: string;
   membershipStatus?: string;
   score: number;
+  /** Which stored field produced the best score */
+  matchedVia: 'name' | 'bankAccountName';
 }
 
 const MIN_TOKEN_SIMILARITY = 0.75;
@@ -50,6 +52,11 @@ export function levenshtein(a: string, b: string): number {
 
 function tokenSimilarity(a: string, b: string): number {
   if (a === b) return 1;
+  // Single-letter initial (e.g. "H" in "H/Michael" or OCR'd initials) matches a
+  // longer token that starts with it.
+  if ((a.length === 1 && b.startsWith(a)) || (b.length === 1 && a.startsWith(b))) {
+    return 0.85;
+  }
   const maxLen = Math.max(a.length, b.length);
   if (maxLen === 0) return 1;
   return 1 - levenshtein(a, b) / maxLen;
@@ -91,18 +98,49 @@ export function scoreNameMatch(payerName: string, memberName: string): number {
 /** Confidence threshold above which a suggestion is offered as auto-paired. */
 export const MEMBER_MATCH_THRESHOLD = 0.6;
 
+/**
+ * Margin between the top two candidates below which the match is considered
+ * ambiguous and must be resolved by a human (two members with very similar
+ * names should never be auto-guessed).
+ */
+export const AMBIGUITY_MARGIN = 0.1;
+
+/**
+ * Rank group members by how well their stored name OR bank account holder
+ * name matches a transaction payer name. `bankAccountName` is the name as
+ * registered at the bank, so it frequently matches the CBE receipt payer
+ * exactly even when the equb profile name differs in transliteration.
+ */
 export function rankMembersByPayerName(
   payerName: string,
   members: Array<{
     userId: string;
     name: string;
+    bankAccountName?: string;
     phone?: string;
     photoUrl?: string;
     membershipStatus?: string;
   }>,
 ): MemberMatchCandidate[] {
   return members
-    .map((m) => ({ ...m, score: scoreNameMatch(payerName, m.name) }))
+    .map((m) => {
+      const nameScore = scoreNameMatch(payerName, m.name);
+      const bankScore = m.bankAccountName
+        ? scoreNameMatch(payerName, m.bankAccountName)
+        : 0;
+      const useBank = bankScore > nameScore;
+      return {
+        userId: m.userId,
+        name: m.name,
+        phone: m.phone,
+        photoUrl: m.photoUrl,
+        membershipStatus: m.membershipStatus,
+        score: Math.max(nameScore, bankScore),
+        matchedVia: (useBank ? 'bankAccountName' : 'name') as
+          | 'bankAccountName'
+          | 'name',
+      };
+    })
     .filter((m) => m.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);

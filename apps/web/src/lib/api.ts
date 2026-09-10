@@ -1123,6 +1123,7 @@ export interface MemberSuggestion {
   photoUrl?: string;
   membershipStatus?: string;
   score: number;
+  matchedVia?: 'name' | 'bankAccountName';
   autoPaired?: boolean;
 }
 

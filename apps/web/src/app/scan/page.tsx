@@ -32,6 +32,7 @@ import {
   suggestMembers,
   createDeposit,
   autoVerifyDepositCbe,
+  updateGroupCbeAccounts,
 } from '@/lib/api';
 import type {
   GroupListItem,
@@ -51,6 +52,7 @@ interface ScanItem {
   member: { id: string; name: string } | null;
   autoPaired: boolean;
   matchScore?: number;
+  matchVia?: 'name' | 'bankAccountName';
   suggestions: MemberSuggestion[];
   amount?: number;
   /** yyyy-mm-dd for the date input */
@@ -140,6 +142,7 @@ function ScanWorkflow() {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [loadingGroup, setLoadingGroup] = useState(false);
   const [accountNumber, setAccountNumber] = useState('');
+  const [addingAccount, setAddingAccount] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -229,6 +232,7 @@ function ScanWorkflow() {
       let member: ScanItem['member'] = null;
       let autoPaired = false;
       let matchScore: number | undefined;
+      let matchVia: ScanItem['matchVia'];
       let suggestions: MemberSuggestion[] = [];
       if (tx.payer) {
         try {
@@ -238,6 +242,7 @@ function ScanWorkflow() {
             member = { id: res.bestMatch.userId, name: res.bestMatch.name };
             autoPaired = true;
             matchScore = res.bestMatch.score;
+            matchVia = res.bestMatch.matchedVia;
           }
         } catch {
           /* suggestions are best-effort */
@@ -253,6 +258,7 @@ function ScanWorkflow() {
                 member,
                 autoPaired,
                 matchScore,
+                matchVia,
                 suggestions,
                 amount: it.amount ?? tx.amount,
                 depositDate: it.depositDate ?? toInputDate(parseCbeDate(tx.date || '')),
@@ -285,6 +291,25 @@ function ScanWorkflow() {
     } catch {
       /* duplicate pre-check is best-effort; server still rejects duplicates */
     }
+  };
+
+  /**
+   * Persist a manually typed receiver account onto the group the first time
+   * it's used, so it becomes a saved choice for every future scan. No-op when
+   * the account is already configured.
+   */
+  const ensureAccountSaved = async (): Promise<string> => {
+    if (!group || !ACCOUNT_REGEX.test(accountNumber)) return accountNumber;
+    if (group.cbeAccountNumbers?.includes(accountNumber)) return accountNumber;
+    const updated = [...(group.cbeAccountNumbers ?? []), accountNumber];
+    try {
+      await updateGroupCbeAccounts(group.id, updated);
+      setGroup({ ...group, cbeAccountNumbers: updated });
+      showToast('Receiver account saved to this group', 'success');
+    } catch {
+      showToast('Account used for this scan but could not be saved to the group', 'warning');
+    }
+    return accountNumber;
   };
 
   const startScanSession = async (file: File) => {
@@ -336,7 +361,8 @@ function ScanWorkflow() {
             isDuplicate: false,
           })),
         );
-        await lookupsForFts(fts, selectedGroupId, accountNumber);
+        const savedAccount = await ensureAccountSaved();
+        await lookupsForFts(fts, selectedGroupId, savedAccount);
       })
       .catch((err: unknown) => setScanNotice(axiosMessage(err)))
       .finally(() => setScanning(false));
@@ -366,7 +392,8 @@ function ScanWorkflow() {
       isDuplicate: existingFts.has(ft),
     };
     setItems((prev) => [...prev, newItem]);
-    await runLookup(ft, selectedGroupId, accountNumber);
+    const savedAccount = await ensureAccountSaved();
+    await runLookup(ft, selectedGroupId, savedAccount);
   };
 
   const removeItem = (ft: string) => {
@@ -517,6 +544,7 @@ function ScanWorkflow() {
                   onChange={(e) => {
                     setSelectedGroupId(e.target.value);
                     setAccountNumber('');
+                    setAddingAccount(false);
                   }}
                 >
                   <option value="">Select a group...</option>
@@ -531,18 +559,31 @@ function ScanWorkflow() {
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   CBE Receiver Account
                 </label>
-                {group?.cbeAccountNumbers?.length ? (
-                  <select
-                    className="input-field"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                  >
-                    {group.cbeAccountNumbers.map((acc) => (
-                      <option key={acc} value={acc}>
-                        {acc}
-                      </option>
-                    ))}
-                  </select>
+                {group?.cbeAccountNumbers?.length && !addingAccount ? (
+                  <div className="flex gap-2">
+                    <select
+                      className="input-field font-mono"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                    >
+                      {group.cbeAccountNumbers.map((acc) => (
+                        <option key={acc} value={acc}>
+                          {acc}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setAddingAccount(true);
+                        setAccountNumber('');
+                      }}
+                      className="flex-shrink-0"
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </div>
                 ) : (
                   <input
                     className="input-field font-mono"
@@ -551,11 +592,12 @@ function ScanWorkflow() {
                     onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
                     maxLength={13}
                     inputMode="numeric"
+                    autoFocus={addingAccount}
                   />
                 )}
-                {group && !group.cbeAccountNumbers?.length && (
+                {group && (addingAccount || !group.cbeAccountNumbers?.length) && (
                   <p className="text-xs text-gray-400 mt-1">
-                    Tip: save receiver accounts in Group Settings → CBE Accounts to skip this step.
+                    Entered once — it is saved to this group automatically on the next scan.
                   </p>
                 )}
               </div>
@@ -677,8 +719,11 @@ function ScanWorkflow() {
         {items.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white/90">
-              Review &amp; Pair Transactions
+              Review Transactions
             </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2 mb-1">
+              Members are auto-paired from the CBE payer name — only step in when a name can&apos;t be matched confidently.
+            </p>
 
             {items.map((it, idx) => {
               const ready = canCreateItem(it);
@@ -755,7 +800,7 @@ function ScanWorkflow() {
                           {it.member.name}
                           {it.autoPaired && typeof it.matchScore === 'number' && (
                             <span className="text-xs font-normal text-green-600 dark:text-success-500">
-                              auto-matched ({Math.round(it.matchScore * 100)}%)
+                              auto-paired{it.matchVia === 'bankAccountName' ? ' via bank account name' : ''} ({Math.round(it.matchScore * 100)}%)
                             </span>
                           )}
                         </span>

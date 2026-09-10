@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
 import {
+  AMBIGUITY_MARGIN,
   MEMBER_MATCH_THRESHOLD,
   rankMembersByPayerName,
 } from './member-matching';
@@ -359,7 +360,15 @@ export class DepositsService {
       where: { groupId, status: { not: 'REMOVED' } },
       select: {
         status: true,
-        user: { select: { id: true, name: true, phone: true, photoUrl: true } },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            photoUrl: true,
+            bankAccountName: true,
+          },
+        },
       },
     });
 
@@ -370,16 +379,26 @@ export class DepositsService {
         name: m.user.name,
         phone: m.user.phone,
         photoUrl: m.user.photoUrl ?? undefined,
+        bankAccountName: m.user.bankAccountName ?? undefined,
         membershipStatus: m.status,
       })),
     );
 
     const best = suggestions[0];
+    const second = suggestions[1];
+    // Never auto-pair when two members score within a whisker of each other
+    const ambiguous =
+      !!best &&
+      !!second &&
+      best.score >= MEMBER_MATCH_THRESHOLD &&
+      second.score >= MEMBER_MATCH_THRESHOLD &&
+      best.score - second.score < AMBIGUITY_MARGIN;
+
     return {
       payerName,
       suggestions,
       bestMatch:
-        best && best.score >= MEMBER_MATCH_THRESHOLD
+        best && best.score >= MEMBER_MATCH_THRESHOLD && !ambiguous
           ? { ...best, autoPaired: true }
           : null,
     };
