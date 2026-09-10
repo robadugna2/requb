@@ -32,8 +32,9 @@ export class CreateDepositDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^FT\w{10}$/i, {
-    message: 'FT number must be "FT" followed by 10 alphanumeric characters (e.g. FT24AB12345)',
+  @Matches(/^FT\w{10}([\\/|]\w{1,10})?$/i, {
+    message:
+      'FT number must be "FT" followed by 10 alphanumeric characters (e.g. FT24AB123456). An extended identifier after "\\", "/" or "|" is allowed and will be stripped.',
   })
   ftNumber?: string;
 

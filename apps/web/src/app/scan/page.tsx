@@ -34,6 +34,7 @@ import {
   createDeposit,
   autoVerifyDepositCbe,
   updateGroupCbeAccounts,
+  normalizeFtNumber,
 } from '@/lib/api';
 import type {
   GroupListItem,
@@ -377,7 +378,8 @@ function ScanWorkflow() {
   };
 
   const addManualFt = async () => {
-    const ft = manualFt.trim().toUpperCase();
+    // Accept extended identifiers ("FT24AB123456\BNK") — the suffix is dropped
+    const ft = (normalizeFtNumber(manualFt) ?? '').toUpperCase();
     if (!FT_REGEX.test(ft)) {
       showToast('Invalid FT format. Expected: FT followed by 10 alphanumeric characters', 'error');
       return;

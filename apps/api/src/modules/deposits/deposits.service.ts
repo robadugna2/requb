@@ -7,6 +7,7 @@ import { Prisma, VerificationStatus, PenaltyReason } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
+import { normalizeFtNumber } from '../../common/utils/ft-number';
 import {
   AMBIGUITY_MARGIN,
   MEMBER_MATCH_THRESHOLD,
@@ -251,6 +252,10 @@ export class DepositsService {
   }
 
   async create(data: CreateDepositData) {
+    // Strip extended identifiers ("FT24AB123456\BNK" -> "FT24AB123456") so
+    // every creator path (telegram OCR, admin scanner) stores clean references
+    const ftNumber = normalizeFtNumber(data.ftNumber);
+
     // Verify the cycle exists
     const cycle = await this.prisma.cycle.findUnique({
       where: { id: data.cycleId },
@@ -304,14 +309,14 @@ export class DepositsService {
     }
 
     // Check for duplicate FT number
-    if (data.ftNumber) {
+    if (ftNumber) {
       const existingDeposit = await this.prisma.deposit.findUnique({
-        where: { ftNumber: data.ftNumber },
+        where: { ftNumber },
       });
 
       if (existingDeposit) {
         throw new BadRequestException(
-          `A deposit with FT number ${data.ftNumber} already exists`,
+          `A deposit with FT number ${ftNumber} already exists`,
         );
       }
     }
@@ -322,7 +327,7 @@ export class DepositsService {
         userId: data.userId,
         imageUrl: data.imageUrl,
         ocrData: data.ocrData,
-        ftNumber: data.ftNumber,
+        ftNumber,
         amount: data.amount,
         bankName: data.bankName,
         depositDate: data.depositDate,

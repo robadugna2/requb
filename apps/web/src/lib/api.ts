@@ -1109,6 +1109,25 @@ export const cbeLookup = async (
 
 // ─── Camera FT Scanner ────────────────────────────────────────────────────────
 
+/**
+ * Strips extended identifiers printed on some statements:
+ * "FT24AB123456\BNK" -> "FT24AB123456". The suffix after the last "\",
+ * "/" or "|" is never part of a real FT reference.
+ */
+export const normalizeFtNumber = (ft?: string | null): string | undefined => {
+  if (!ft) return undefined;
+  const trimmed = String(ft).trim().toUpperCase();
+  if (!trimmed) return undefined;
+  const lastSeparator = Math.max(
+    trimmed.lastIndexOf('\\'),
+    trimmed.lastIndexOf('/'),
+    trimmed.lastIndexOf('|'),
+  );
+  const base = lastSeparator >= 0 ? trimmed.slice(0, lastSeparator) : trimmed;
+  const clean = base.trim();
+  return clean || undefined;
+};
+
 export interface FtScanResult {
   ftNumbers: string[];
   bankName?: string;

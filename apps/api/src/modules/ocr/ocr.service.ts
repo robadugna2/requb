@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { SettingsService } from '../settings/settings.service';
+import { normalizeFtNumber } from '../../common/utils/ft-number';
 
 export interface OcrResult {
   ftNumber?: string;
@@ -214,12 +215,13 @@ Return ONLY valid JSON in this exact shape:
 
       const parsed = JSON.parse(jsonMatch[0]);
 
-      // Normalize each candidate (strip punctuation/spaces the model may have
-      // read around the reference) then keep only valid CBE-format numbers.
+      // Normalize each candidate: strip extended identifiers
+      // ("FT24AB123456\BNK" -> "FT24AB123456"), then keep only valid
+      // CBE-format numbers.
       const ftNumbers: string[] = Array.from(
         new Set(
           (Array.isArray(parsed.ftNumbers) ? parsed.ftNumbers : [])
-            .map((ft: unknown) => String(ft ?? '').toUpperCase().replace(/[^A-Z0-9]/g, ''))
+            .map((ft: unknown) => normalizeFtNumber(String(ft ?? '')) ?? '')
             .filter((ft: string) => /^FT\w{10}$/.test(ft)),
         ),
       );

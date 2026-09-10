@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Zap, Search, X, CheckCircle, AlertTriangle, Info, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { normalizeFtNumber } from '@/lib/api';
 import type { CbeTransactionData, CbeAutoVerifyResult } from '@/lib/api';
 
 // ─── CBE Transaction Detail Card ─────────────────────────────────────────────
@@ -322,12 +323,14 @@ export function CbeLookupPanel({ defaultAccount = '', onLookupFn }: CbeLookupPan
   const [error, setError] = useState<string | null>(null);
 
   const handleLookup = async () => {
-    if (!ftNumber.trim() || !accountNumber.trim()) return;
+    // Extended identifiers ("FT24AB123456\BNK") are stripped before lookup
+    const cleanFt = normalizeFtNumber(ftNumber);
+    if (!cleanFt || !accountNumber.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const data = await onLookupFn(ftNumber.trim().toUpperCase(), accountNumber.trim());
+      const data = await onLookupFn(cleanFt, accountNumber.trim());
       setResult(data);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };

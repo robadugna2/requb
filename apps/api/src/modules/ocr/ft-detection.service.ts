@@ -11,7 +11,12 @@ import { join } from 'path';
 import { OcrService, FtScanResult } from './ocr.service';
 
 const STRICT_FT_REGEX = /\bFT[A-Z0-9]{10}\b/g;
-const NEAR_MISS_REGEX = /\bFT[A-Z0-9]{9,12}\b/g;
+const NEAR_MISS_REGEX = /\bFT[A-Z0-9]{9,15}\b/g;
+/** An FT fragment that can't be complete: "FT" + 2..9 chars */
+const FT_FRAGMENT_REGEX = /^FT[A-Z0-9]{2,9}$/;
+/** A plausible wrapped continuation: 1-4 alphanumerics, optionally starting
+ *  with a suffix separator ("\", "/" or "|") */
+const CONTINUATION_REGEX = /^[\\/|]?[A-Z0-9]{1,4}$/;
 
 function strictFts(text: string): string[] {
   return Array.from(new Set(text.toUpperCase().match(STRICT_FT_REGEX) ?? []));
@@ -29,20 +34,101 @@ function nearMissTokens(text: string, alreadyFound: Set<string>): string[] {
 }
 
 /**
- * Repair candidates for an OCR near-miss: an inserted character makes the
- * token 11 chars, so deleting any single character can recover the real FT.
+ * Rejoins FT references that a statement table wrapped across two lines
+ * inside one cell, e.g.:
+ *
+ *   "FT24AB12"          "FT1234567890\"
+ *   "3456"              "DX"
+ *
+ * When a line ends with an incomplete FT fragment (FT + 2..9 chars) and the
+ * next line starts with a short continuation token, the two are merged; the
+ * same merge is applied within a single line. If the fragment already
+ * contains a suffix separator, the FT part before it is complete and the
+ * continuation only extends the suffix — normalizeFtNumber strips that later,
+ * so merging is still correct. Wrong joins are harmless: they simply fail the
+ * CBE lookup and the admin fixes the chip manually.
+ */
+export function joinWrappedFtLines(text: string): string {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const mergeTokenPair = (firstRaw: string, secondRaw: string): string | null => {
+    const first = firstRaw.toUpperCase();
+    const second = secondRaw.toUpperCase();
+    const cont = second.replace(/[^A-Z0-9]/g, '');
+    if (!cont || !CONTINUATION_REGEX.test(second)) return null;
+    // A trailing separator ("\") marks the start of a suffix; the FT part is
+    // what precedes it.
+    const sepMatch = first.match(/[\\/|]+$/);
+    const base = sepMatch ? first.slice(0, -sepMatch[0].length) : first;
+    if (!FT_FRAGMENT_REGEX.test(base)) return null;
+    // Keep the separator after the rejoined FT: it still marks the suffix
+    // (which normalizeFtNumber strips), and an empty separator slot would
+    // instead glue the suffix into the FT itself.
+    const sep = sepMatch ? sepMatch[0] : '';
+    return base + cont + sep;
+  };
+
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let tokens = lines[i].split(/\s+/);
+
+    // Same-line wrap: "... FT24AB12 3456 ..." -> "... FT24AB123456 ..."
+    for (let j = 0; j < tokens.length - 1; j++) {
+      const merged = mergeTokenPair(tokens[j], tokens[j + 1]);
+      if (merged) {
+        tokens = [...tokens.slice(0, j), merged, ...tokens.slice(j + 2)];
+        break;
+      }
+    }
+
+    // Cross-line wrap: line ends with an FT fragment, next line continues it
+    const ftIdx = tokens.findIndex((t) =>
+      FT_FRAGMENT_REGEX.test(t.toUpperCase().replace(/[\\/|]+$/, '')),
+    );
+    if (ftIdx >= 0 && i + 1 < lines.length) {
+      const nextTokens = lines[i + 1].split(/\s+/);
+      const merged = mergeTokenPair(
+        tokens[ftIdx].toUpperCase(),
+        nextTokens[0] ?? '',
+      );
+      if (merged) {
+        tokens[ftIdx] = merged;
+        nextTokens.shift();
+        i++; // the continuation line is consumed
+        if (nextTokens.length) out.push(nextTokens.join(' '));
+        out.push(tokens.join(' '));
+        continue;
+      }
+    }
+
+    out.push(tokens.join(' '));
+  }
+  return out.join('\n');
+}
+
+/**
+ * Repair candidates for an OCR near-miss:
+ *  - Merged extended identifier (separator lost in OCR): "FT24AB123456BNK"
+ *    -> "FT24AB123456" (truncate to the first 10 chars after FT).
+ *  - Inserted character: "FT99Z27876543" -> delete any single position.
  * Only format-valid candidates are returned; existence is confirmed against
  * the free CBE API by the caller.
  */
 export function repairCandidates(token: string): string[] {
   const tail = token.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(2);
-  if (tail.length !== 11) return [];
   const candidates = new Set<string>();
-  for (let i = 0; i < tail.length; i++) {
-    const candidate = 'FT' + tail.slice(0, i) + tail.slice(i + 1);
-    if (/^FT[A-Z0-9]{10}$/.test(candidate)) candidates.add(candidate);
+  if (tail.length > 10) {
+    candidates.add('FT' + tail.slice(0, 10));
   }
-  return [...candidates];
+  if (tail.length === 11) {
+    for (let i = 0; i < tail.length; i++) {
+      candidates.add('FT' + tail.slice(0, i) + tail.slice(i + 1));
+    }
+  }
+  return [...candidates].filter((c) => /^FT[A-Z0-9]{10}$/.test(c));
 }
 
 /**
@@ -171,8 +257,10 @@ export class FtDetectionService implements OnApplicationShutdown {
       for (const psm of [PSM.AUTO, PSM.SINGLE_BLOCK] as PSM[]) {
         const { data } = await ocrPass(img, psm);
         bestConfidence = Math.max(bestConfidence, data.confidence ?? 0);
-        strictFts(data.text).forEach((ft) => ftSet.add(ft));
-        nearMissTokens(data.text, ftSet).forEach((t) => missSet.add(t));
+        // Rejoin table-wrapped FT references before extraction
+        const text = joinWrappedFtLines(data.text);
+        strictFts(text).forEach((ft) => ftSet.add(ft));
+        nearMissTokens(text, ftSet).forEach((t) => missSet.add(t));
       }
       if (ftSet.size === 0 && missSet.size === 0) return null;
       return { ftNumbers: [...ftSet], nearMisses: [...missSet], confidence: bestConfidence };
