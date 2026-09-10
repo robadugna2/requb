@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle, Sun, Moon, MonitorSmartphone, Palette, Bot } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { changePassword, getOpenAiSetting, setOpenAiKey, clearOpenAiKey, testOpenAiKey, OpenAiSettingStatus } from '@/lib/api';
+import { changePassword, getAiSettings, setGeminiKey, clearGeminiKey, testGeminiKey, setOpenAiKey, clearOpenAiKey, testOpenAiKey, OpenAiSettingStatus } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
 import { useLanguage, Language } from '@/components/layout/LanguageContext';
 import { useTheme, Theme } from '@/components/layout/ThemeContext';
@@ -37,25 +37,37 @@ function SettingsContent() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // AI Configuration (super admin only)
-  const [aiStatus, setAiStatus] = useState<OpenAiSettingStatus | null>(null);
+  // AI Configuration (super admin only) — status of both providers
+  const [aiSettings, setAiSettings] = useState<{
+    openai: OpenAiSettingStatus | null;
+    gemini: OpenAiSettingStatus | null;
+  }>({ openai: null, gemini: null });
   const [aiStatusLoading, setAiStatusLoading] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
-  const [testingKey, setTestingKey] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Gemini (recommended, free tier) — per-provider input/UI state
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [savingGemini, setSavingGemini] = useState(false);
+  const [testingGemini, setTestingGemini] = useState(false);
+  const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // OpenAI (optional fallback) — per-provider input/UI state
+  const [openaiKeyInput, setOpenaiKeyInput] = useState('');
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [savingOpenai, setSavingOpenai] = useState(false);
+  const [testingOpenai, setTestingOpenai] = useState(false);
+  const [openaiTestResult, setOpenaiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!isSuperAdmin) return;
     let cancelled = false;
     setAiStatusLoading(true);
-    getOpenAiSetting()
-      .then((status) => {
-        if (!cancelled) setAiStatus(status);
+    getAiSettings()
+      .then((settings) => {
+        if (!cancelled) setAiSettings({ openai: settings.openai ?? null, gemini: settings.gemini ?? null });
       })
       .catch(() => {
-        if (!cancelled) setAiStatus(null);
+        if (!cancelled) setAiSettings({ openai: null, gemini: null });
       })
       .finally(() => {
         if (!cancelled) setAiStatusLoading(false);
@@ -67,28 +79,71 @@ function SettingsContent() {
 
   const refreshAiStatus = async () => {
     try {
-      const status = await getOpenAiSetting();
-      setAiStatus(status);
+      const settings = await getAiSettings();
+      setAiSettings({ openai: settings.openai ?? null, gemini: settings.gemini ?? null });
     } catch {
-      setAiStatus(null);
+      setAiSettings({ openai: null, gemini: null });
     }
   };
 
-  const handleSaveApiKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!apiKeyInput.trim()) return;
+  /** Per-provider state + API handles so the handlers below stay shared. */
+  const providerSlice = (provider: AiProvider) =>
+    provider === 'gemini'
+      ? {
+          label: 'Gemini',
+          status: aiSettings.gemini,
+          keyValue: geminiKeyInput,
+          setKeyValue: setGeminiKeyInput,
+          showValue: showGeminiKey,
+          setShowValue: setShowGeminiKey,
+          saving: savingGemini,
+          setSaving: setSavingGemini,
+          testing: testingGemini,
+          setTesting: setTestingGemini,
+          testResult: geminiTestResult,
+          setTestResult: setGeminiTestResult,
+          save: setGeminiKey,
+          clear: clearGeminiKey,
+          test: testGeminiKey,
+          removeConfirm:
+            'Remove the saved Gemini API key? Camera FT scanning and receipt OCR will fall back to OpenAI or the environment key.',
+        }
+      : {
+          label: 'OpenAI',
+          status: aiSettings.openai,
+          keyValue: openaiKeyInput,
+          setKeyValue: setOpenaiKeyInput,
+          showValue: showOpenaiKey,
+          setShowValue: setShowOpenaiKey,
+          saving: savingOpenai,
+          setSaving: setSavingOpenai,
+          testing: testingOpenai,
+          setTesting: setTestingOpenai,
+          testResult: openaiTestResult,
+          setTestResult: setOpenaiTestResult,
+          save: setOpenAiKey,
+          clear: clearOpenAiKey,
+          test: testOpenAiKey,
+          removeConfirm:
+            'Remove the saved OpenAI API key? It will fall back to the environment key or become disabled.',
+        };
 
-    setSavingKey(true);
+  const handleSaveKey = async (provider: AiProvider, e: React.FormEvent) => {
+    e.preventDefault();
+    const p = providerSlice(provider);
+    if (!p.keyValue.trim()) return;
+
+    p.setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await setOpenAiKey(apiKeyInput.trim());
-      setApiKeyInput('');
-      setShowApiKey(false);
-      setTestResult(null);
+      await p.save(p.keyValue.trim());
+      p.setKeyValue('');
+      p.setShowValue(false);
+      p.setTestResult(null);
       await refreshAiStatus();
-      setSuccess('API key saved.');
+      setSuccess(`${p.label} API key saved.`);
       setTimeout(() => setSuccess(null), 4000);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
@@ -96,46 +151,44 @@ function SettingsContent() {
         axiosErr.response?.data?.message || 'Failed to save the API key. Please try again.'
       );
     } finally {
-      setSavingKey(false);
+      p.setSaving(false);
     }
   };
 
-  const handleTestApiKey = async () => {
-    setTestingKey(true);
-    setTestResult(null);
+  const handleTestKey = async (provider: AiProvider) => {
+    const p = providerSlice(provider);
+    p.setTesting(true);
+    p.setTestResult(null);
 
     try {
-      const result = await testOpenAiKey();
-      setTestResult(result);
+      const result = await p.test();
+      p.setTestResult(result);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      setTestResult({
+      p.setTestResult({
         ok: false,
         message: axiosErr.response?.data?.message || 'Test request failed. Please try again.',
       });
     } finally {
-      setTestingKey(false);
+      p.setTesting(false);
     }
   };
 
-  const handleRemoveApiKey = async () => {
-    if (
-      !window.confirm(
-        'Remove the saved OpenAI API key? OCR will fall back to the environment key or become disabled.'
-      )
-    ) {
+  const handleRemoveKey = async (provider: AiProvider) => {
+    const p = providerSlice(provider);
+    if (!window.confirm(p.removeConfirm)) {
       return;
     }
 
-    setSavingKey(true);
+    p.setSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      await clearOpenAiKey();
-      setTestResult(null);
+      await p.clear();
+      p.setTestResult(null);
       await refreshAiStatus();
-      setSuccess('API key removed.');
+      setSuccess(`${p.label} API key removed.`);
       setTimeout(() => setSuccess(null), 4000);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
@@ -143,7 +196,7 @@ function SettingsContent() {
         axiosErr.response?.data?.message || 'Failed to remove the API key. Please try again.'
       );
     } finally {
-      setSavingKey(false);
+      p.setSaving(false);
     }
   };
 
@@ -269,99 +322,52 @@ function SettingsContent() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90">AI Configuration</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Optional — camera FT scanning uses free QR &amp; text OCR first. OpenAI adds an AI fallback for hard-to-read photos and powers Telegram receipt OCR.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Gemini (free tier) powers camera FT scanning — no credit card needed. OpenAI is an optional fallback.
+                </p>
               </div>
             </div>
 
-            {/* Status */}
-            {aiStatusLoading ? (
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-3.5 w-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs text-gray-500 dark:text-gray-400">Checking AI configuration...</span>
-              </div>
-            ) : aiStatus?.configured ? (
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-4">
-                <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Configured via {aiStatus.source === 'database' ? 'Settings (database)' : 'environment variable'}
-                </span>
-                {aiStatus.keyHint && (
-                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{aiStatus.keyHint}</span>
-                )}
-                {aiStatus.source === 'database' && aiStatus.updatedAt && (
-                  <span className="text-xs text-gray-400 dark:text-gray-500">
-                    Updated {new Date(aiStatus.updatedAt).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-500/10 rounded-lg mb-4">
-                <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-orange-700 dark:text-orange-400">
-                  Not configured — OCR and FT scanning are disabled.
-                </p>
-              </div>
-            )}
+            {/* Gemini — recommended free-tier provider */}
+            <AiProviderSection
+              title="Google Gemini"
+              description="Reads FT numbers and receipt details. Free daily quota is plenty for scanning."
+              badge="Recommended — free tier"
+              placeholder="AIza..."
+              status={aiSettings.gemini}
+              statusLoading={aiStatusLoading}
+              keyValue={geminiKeyInput}
+              onKeyValueChange={setGeminiKeyInput}
+              showValue={showGeminiKey}
+              onToggleShow={() => setShowGeminiKey(!showGeminiKey)}
+              saving={savingGemini}
+              testing={testingGemini}
+              testResult={geminiTestResult}
+              onSave={(e) => handleSaveKey('gemini', e)}
+              onTest={() => handleTestKey('gemini')}
+              onRemove={() => handleRemoveKey('gemini')}
+            />
 
-            {/* Update API key form */}
-            <form onSubmit={handleSaveApiKey} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Update API key
-                </label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    className="input-field font-mono pr-10"
-                    placeholder="sk-..."
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
-                  >
-                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" loading={savingKey} disabled={!apiKeyInput.trim()}>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Save Key
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleTestApiKey}
-                  loading={testingKey}
-                  disabled={testingKey}
-                >
-                  Test Key
-                </Button>
-                {aiStatus?.source === 'database' && (
-                  <Button type="button" variant="danger" onClick={handleRemoveApiKey} disabled={savingKey}>
-                    Remove Saved Key
-                  </Button>
-                )}
-              </div>
-            </form>
-
-            {/* Test result (inline, inside card) */}
-            {testResult && (
-              <div
-                className={`mt-4 p-3 rounded-lg text-xs font-medium border ${
-                  testResult.ok
-                    ? 'bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 border-green-100'
-                    : 'bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 border-red-100'
-                }`}
-              >
-                {testResult.message}
-              </div>
-            )}
+            {/* OpenAI — optional fallback */}
+            <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mt-4">
+              <AiProviderSection
+                title="OpenAI"
+                description="Optional fallback if Gemini is not configured."
+                placeholder="sk-..."
+                status={aiSettings.openai}
+                statusLoading={aiStatusLoading}
+                keyValue={openaiKeyInput}
+                onKeyValueChange={setOpenaiKeyInput}
+                showValue={showOpenaiKey}
+                onToggleShow={() => setShowOpenaiKey(!showOpenaiKey)}
+                saving={savingOpenai}
+                testing={testingOpenai}
+                testResult={openaiTestResult}
+                onSave={(e) => handleSaveKey('openai', e)}
+                onTest={() => handleTestKey('openai')}
+                onRemove={() => handleRemoveKey('openai')}
+              />
+            </div>
 
             {/* Privacy note */}
             <p className="mt-4 text-xs text-gray-400">
@@ -510,5 +516,139 @@ function SettingsContent() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+type AiProvider = 'gemini' | 'openai';
+
+interface AiProviderSectionProps {
+  title: string;
+  description: string;
+  badge?: string;
+  placeholder: string;
+  status: OpenAiSettingStatus | null;
+  statusLoading: boolean;
+  keyValue: string;
+  onKeyValueChange: (value: string) => void;
+  showValue: boolean;
+  onToggleShow: () => void;
+  saving: boolean;
+  testing: boolean;
+  testResult: { ok: boolean; message: string } | null;
+  onSave: (e: React.FormEvent) => void;
+  onTest: () => void;
+  onRemove: () => void;
+}
+
+/** One provider (Gemini / OpenAI) inside the AI Configuration card. */
+function AiProviderSection({
+  title,
+  description,
+  badge,
+  placeholder,
+  status,
+  statusLoading,
+  keyValue,
+  onKeyValueChange,
+  showValue,
+  onToggleShow,
+  saving,
+  testing,
+  testResult,
+  onSave,
+  onTest,
+  onRemove,
+}: AiProviderSectionProps) {
+  return (
+    <div>
+      {/* Header row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white/90">{title}</h3>
+        {badge && (
+          <span className="bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-xs px-2 py-0.5 rounded-full">
+            {badge}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-3">{description}</p>
+
+      {/* Status */}
+      {statusLoading ? (
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-3.5 w-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-gray-500 dark:text-gray-400">Checking configuration...</span>
+        </div>
+      ) : status?.configured ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-4">
+          <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            Configured via {status.source === 'database' ? 'Settings (database)' : 'environment variable'}
+          </span>
+          {status.keyHint && (
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{status.keyHint}</span>
+          )}
+          {status.source === 'database' && status.updatedAt && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              Updated {new Date(status.updatedAt).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0" />
+          <span className="text-xs font-medium text-amber-700 dark:text-warning-400">Not configured</span>
+        </div>
+      )}
+
+      {/* Update API key form */}
+      <form onSubmit={onSave} className="space-y-3">
+        <div className="relative">
+          <input
+            type={showValue ? 'text' : 'password'}
+            value={keyValue}
+            onChange={(e) => onKeyValueChange(e.target.value)}
+            className="input-field font-mono pr-10"
+            placeholder={placeholder}
+            autoComplete="off"
+            aria-label={`${title} API key`}
+          />
+          <button
+            type="button"
+            onClick={onToggleShow}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
+          >
+            {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" loading={saving} disabled={!keyValue.trim()}>
+            <Lock className="h-4 w-4 mr-2" />
+            Save Key
+          </Button>
+          <Button type="button" variant="secondary" onClick={onTest} loading={testing} disabled={testing}>
+            Test Key
+          </Button>
+          {status?.source === 'database' && (
+            <Button type="button" variant="danger" onClick={onRemove} disabled={saving}>
+              Remove Saved Key
+            </Button>
+          )}
+        </div>
+      </form>
+
+      {/* Test result (inline, inside section) */}
+      {testResult && (
+        <div
+          className={`mt-3 p-3 rounded-lg text-xs font-medium border ${
+            testResult.ok
+              ? 'bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 border-green-100'
+              : 'bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 border-red-100'
+          }`}
+        >
+          {testResult.message}
+        </div>
+      )}
+    </div>
   );
 }

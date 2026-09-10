@@ -16,8 +16,8 @@ export interface MemberMatchCandidate {
   photoUrl?: string;
   membershipStatus?: string;
   score: number;
-  /** Which stored field produced the best score */
-  matchedVia: 'name' | 'bankAccountName';
+  /** Which source produced the best score */
+  matchedVia: 'name' | 'bankAccountName' | 'history';
 }
 
 const MIN_TOKEN_SIMILARITY = 0.75;
@@ -97,6 +97,13 @@ export function scoreNameMatch(payerName: string, memberName: string): number {
 
 /** Confidence threshold above which a suggestion is offered as auto-paired. */
 export const MEMBER_MATCH_THRESHOLD = 0.6;
+
+/**
+ * Below this a name match is considered too weak to auto-pair at all;
+ * between this and MEMBER_MATCH_THRESHOLD the pairing is still automatic but
+ * the scanner UI flags it for review (automation over manual picking).
+ */
+export const WEAK_MATCH_THRESHOLD = 0.35;
 
 /**
  * Margin between the top two candidates below which the match is considered

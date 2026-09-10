@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import axios from 'axios';
 import OpenAI from 'openai';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const OPENAI_KEY_SETTING = 'openai_api_key';
+const GEMINI_KEY_SETTING = 'gemini_api_key';
 
 interface CachedKey {
   key: string | null;
@@ -12,29 +14,23 @@ interface CachedKey {
 
 @Injectable()
 export class SettingsService {
-  private cache: CachedKey | null = null;
+  // Encrypted-key cache keyed by SystemSetting row key ('openai_api_key' |
+  // 'gemini_api_key'); a cached null means "checked, not present".
+  private cache: Record<string, CachedKey> = {};
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {}
 
+  // ---- OpenAI -----------------------------------------------------------
+
   /**
    * Returns the OpenAI API key stored in the database (decrypted),
    * or null when it is not set (or the stored value fails to decrypt).
    */
   async getOpenAiKey(): Promise<string | null> {
-    if (this.cache) {
-      return this.cache.key;
-    }
-
-    const row = await this.prisma.systemSetting.findUnique({
-      where: { key: OPENAI_KEY_SETTING },
-    });
-
-    const key = row ? this.decrypt(row.value) : null;
-    this.cache = { key };
-    return key;
+    return this.getRow(OPENAI_KEY_SETTING);
   }
 
   /**
@@ -42,17 +38,7 @@ export class SettingsService {
    * variable. Returns null when neither source has a key.
    */
   async resolveOpenAiKey(): Promise<{ key: string | null; source: 'database' | 'environment' | null }> {
-    const dbKey = await this.getOpenAiKey();
-    if (dbKey) {
-      return { key: dbKey, source: 'database' };
-    }
-
-    const envKey = this.configService.get<string>('OPENAI_API_KEY');
-    if (envKey) {
-      return { key: envKey, source: 'environment' };
-    }
-
-    return { key: null, source: null };
+    return this.resolveProviderKey(OPENAI_KEY_SETTING, 'OPENAI_API_KEY');
   }
 
   async getStatus(): Promise<{
@@ -61,47 +47,15 @@ export class SettingsService {
     keyHint: string | null;
     updatedAt: string | null;
   }> {
-    const { key, source } = await this.resolveOpenAiKey();
-
-    if (!key || !source) {
-      return { configured: false, source: null, keyHint: null, updatedAt: null };
-    }
-
-    let updatedAt: string | null = null;
-    if (source === 'database') {
-      const row = await this.prisma.systemSetting.findUnique({
-        where: { key: OPENAI_KEY_SETTING },
-        select: { updatedAt: true },
-      });
-      updatedAt = row ? row.updatedAt.toISOString() : null;
-    }
-
-    return {
-      configured: true,
-      source,
-      keyHint: this.maskKey(key),
-      updatedAt,
-    };
+    return this.getProviderStatus(OPENAI_KEY_SETTING, 'OPENAI_API_KEY', 'sk-…');
   }
 
   async setOpenAiKey(plainKey: string, adminId: string): Promise<void> {
-    const trimmed = plainKey.trim();
-    const encrypted = this.encrypt(trimmed);
-
-    await this.prisma.systemSetting.upsert({
-      where: { key: OPENAI_KEY_SETTING },
-      update: { value: encrypted, updatedById: adminId },
-      create: { key: OPENAI_KEY_SETTING, value: encrypted, updatedById: adminId },
-    });
-
-    this.cache = { key: trimmed };
+    return this.setRow(OPENAI_KEY_SETTING, plainKey, adminId);
   }
 
   async clearOpenAiKey(): Promise<void> {
-    await this.prisma.systemSetting.deleteMany({
-      where: { key: OPENAI_KEY_SETTING },
-    });
-    this.cache = { key: null };
+    return this.clearRow(OPENAI_KEY_SETTING);
   }
 
   async testOpenAiKey(): Promise<{ ok: boolean; message: string }> {
@@ -157,9 +111,196 @@ export class SettingsService {
     }
   }
 
-  private maskKey(key: string): string {
+  // ---- Gemini -----------------------------------------------------------
+
+  /**
+   * Returns the Gemini API key stored in the database (decrypted),
+   * or null when it is not set (or the stored value fails to decrypt).
+   */
+  async getGeminiKey(): Promise<string | null> {
+    return this.getRow(GEMINI_KEY_SETTING);
+  }
+
+  /**
+   * Database key first; falls back to the GEMINI_API_KEY environment
+   * variable. Returns null when neither source has a key.
+   */
+  async resolveGeminiKey(): Promise<{ key: string | null; source: 'database' | 'environment' | null }> {
+    return this.resolveProviderKey(GEMINI_KEY_SETTING, 'GEMINI_API_KEY');
+  }
+
+  async getStatusGemini(): Promise<{
+    configured: boolean;
+    source: 'database' | 'environment' | null;
+    keyHint: string | null;
+    updatedAt: string | null;
+  }> {
+    return this.getProviderStatus(GEMINI_KEY_SETTING, 'GEMINI_API_KEY', 'AIza…');
+  }
+
+  async setGeminiKey(plainKey: string, adminId: string): Promise<void> {
+    return this.setRow(GEMINI_KEY_SETTING, plainKey, adminId);
+  }
+
+  async clearGeminiKey(): Promise<void> {
+    return this.clearRow(GEMINI_KEY_SETTING);
+  }
+
+  /**
+   * Self-contained Gemini key check (the settings module cannot import the
+   * ocr module — it would be circular): a minimal generateContent call via
+   * plain axios. A quota-rejected key (429) is reported as valid-but-throttled
+   * so free-tier users aren't told their key is broken.
+   */
+  async testGeminiKey(): Promise<{ ok: boolean; message: string }> {
+    const { key } = await this.resolveGeminiKey();
+
+    if (!key) {
+      return {
+        ok: false,
+        message:
+          'No Gemini API key configured. A super admin can set it in Settings → AI Configuration.',
+      };
+    }
+
+    try {
+      await Promise.race([
+        axios.post(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+          { contents: [{ parts: [{ text: 'Reply with the single word OK' }] }] },
+          { headers: { 'x-goog-api-key': key } },
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request to Gemini timed out after 15s')), 15000),
+        ),
+      ]);
+      return { ok: true, message: 'Gemini API key is valid and working.' };
+    } catch (error: unknown) {
+      const response =
+        typeof error === 'object' && error !== null
+          ? (
+              error as {
+                response?: { status?: number; data?: { error?: { message?: string } } };
+              }
+            ).response
+          : undefined;
+      const status = response?.status;
+      const message =
+        response?.data?.error?.message ??
+        (error instanceof Error ? error.message : String(error));
+
+      if (status === 400 && /API key/i.test(message)) {
+        return { ok: false, message: 'Invalid Gemini API key — rejected by Google.' };
+      }
+
+      if (status === 429) {
+        return {
+          ok: false,
+          message: 'Key is valid but the Gemini free-tier quota is exhausted right now.',
+        };
+      }
+
+      return {
+        ok: false,
+        message: `Could not verify Gemini key: ${message}`,
+      };
+    }
+  }
+
+  // ---- Shared encrypted-row plumbing (both providers) --------------------
+
+  /** Decrypted value of a SystemSetting row, cached in memory after first read. */
+  private async getRow(settingKey: string): Promise<string | null> {
+    const cached = this.cache[settingKey];
+    if (cached) {
+      return cached.key;
+    }
+
+    const row = await this.prisma.systemSetting.findUnique({
+      where: { key: settingKey },
+    });
+
+    const key = row ? this.decrypt(row.value) : null;
+    this.cache[settingKey] = { key };
+    return key;
+  }
+
+  /** Upserts an encrypted SystemSetting row and warms the cache. */
+  private async setRow(settingKey: string, plainKey: string, adminId: string): Promise<void> {
+    const trimmed = plainKey.trim();
+    const encrypted = this.encrypt(trimmed);
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: settingKey },
+      update: { value: encrypted, updatedById: adminId },
+      create: { key: settingKey, value: encrypted, updatedById: adminId },
+    });
+
+    this.cache[settingKey] = { key: trimmed };
+  }
+
+  /** Deletes a SystemSetting row and caches the "not present" result. */
+  private async clearRow(settingKey: string): Promise<void> {
+    await this.prisma.systemSetting.deleteMany({
+      where: { key: settingKey },
+    });
+    this.cache[settingKey] = { key: null };
+  }
+
+  /** Database row first, then the provider's environment variable. */
+  private async resolveProviderKey(
+    settingKey: string,
+    envVar: string,
+  ): Promise<{ key: string | null; source: 'database' | 'environment' | null }> {
+    const dbKey = await this.getRow(settingKey);
+    if (dbKey) {
+      return { key: dbKey, source: 'database' };
+    }
+
+    const envKey = this.configService.get<string>(envVar);
+    if (envKey) {
+      return { key: envKey, source: 'environment' };
+    }
+
+    return { key: null, source: null };
+  }
+
+  private async getProviderStatus(
+    settingKey: string,
+    envVar: string,
+    keyPrefix: string,
+  ): Promise<{
+    configured: boolean;
+    source: 'database' | 'environment' | null;
+    keyHint: string | null;
+    updatedAt: string | null;
+  }> {
+    const { key, source } = await this.resolveProviderKey(settingKey, envVar);
+
+    if (!key || !source) {
+      return { configured: false, source: null, keyHint: null, updatedAt: null };
+    }
+
+    let updatedAt: string | null = null;
+    if (source === 'database') {
+      const row = await this.prisma.systemSetting.findUnique({
+        where: { key: settingKey },
+        select: { updatedAt: true },
+      });
+      updatedAt = row ? row.updatedAt.toISOString() : null;
+    }
+
+    return {
+      configured: true,
+      source,
+      keyHint: this.maskKey(key, keyPrefix),
+      updatedAt,
+    };
+  }
+
+  private maskKey(key: string, prefix = 'sk-…'): string {
     const last4 = key.slice(-4);
-    return `sk-…${last4}`;
+    return `${prefix}${last4}`;
   }
 
   private encryptionKey(): Buffer {

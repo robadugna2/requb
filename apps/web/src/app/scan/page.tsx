@@ -55,7 +55,7 @@ interface ScanItem {
   member: { id: string; name: string } | null;
   autoPaired: boolean;
   matchScore?: number;
-  matchVia?: 'name' | 'bankAccountName';
+  matchVia?: 'name' | 'bankAccountName' | 'history';
   suggestions: MemberSuggestion[];
   amount?: number;
   /** yyyy-mm-dd for the date input */
@@ -672,6 +672,11 @@ function ScanWorkflow() {
                         Detected via text OCR (free)
                       </span>
                     )}
+                    {scanVia === 'gemini' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
+                        Detected via Gemini AI
+                      </span>
+                    )}
                     {scanVia === 'ai' && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
                         Detected via OpenAI
@@ -826,7 +831,16 @@ function ScanWorkflow() {
                           {it.member.name}
                           {it.autoPaired && typeof it.matchScore === 'number' && (
                             <span className="text-xs font-normal text-green-600 dark:text-success-500">
-                              auto-paired{it.matchVia === 'bankAccountName' ? ' via bank account name' : ''} ({Math.round(it.matchScore * 100)}%)
+                              {it.matchVia === 'history'
+                                ? 'auto-paired from past deposits'
+                                : it.matchVia === 'bankAccountName'
+                                  ? `auto-paired via bank account name (${Math.round(it.matchScore * 100)}%)`
+                                  : `auto-paired (${Math.round(it.matchScore * 100)}%)`}
+                            </span>
+                          )}
+                          {it.autoPaired && typeof it.matchScore === 'number' && it.matchScore < 0.6 && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-warning-50 dark:bg-warning-500/10 text-warning-700 dark:text-warning-400">
+                              low confidence — verify member
                             </span>
                           )}
                         </span>

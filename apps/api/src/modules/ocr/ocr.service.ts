@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { SettingsService } from '../settings/settings.service';
+import { GeminiService } from './gemini.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 
 export interface OcrResult {
@@ -25,7 +26,7 @@ export interface FtScanResult {
   bankName?: string;
   confidence: number;
   /** Which detection layer produced the result (set by FtDetectionService) */
-  detectedVia?: 'qr' | 'ocr' | 'ai' | 'none';
+  detectedVia?: 'qr' | 'gemini' | 'ocr' | 'ai' | 'none';
   rawText?: string;
   errors?: string[];
 }
@@ -39,6 +40,7 @@ export class OcrService {
   constructor(
     private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
+    private readonly geminiService: GeminiService,
   ) {}
 
   private async getClient(): Promise<OpenAI | null> {
@@ -51,25 +53,50 @@ export class OcrService {
     return this.client;
   }
 
-  async processReceipt(imageUrl: string): Promise<OcrResult> {
-    const client = await this.getClient();
-    if (!client) {
-      this.logger.warn('OpenAI not configured, OCR processing is disabled');
-      return {
-        confidence: 0,
-        errors: [
-          'OpenAI API key is not configured. A super admin can set it in Settings → AI Configuration.',
-        ],
-      };
+  /**
+   * Provider-agnostic vision chat call: prefers the free Gemini key when one
+   * is configured, and falls back to OpenAI otherwise. Returns the model's
+   * text reply, or null when no provider can answer (Gemini failures are
+   * logged by GeminiService and surface as null).
+   */
+  private async chatJson(
+    systemPrompt: string,
+    userText: string,
+    imageDataUrl: string,
+  ): Promise<string | null> {
+    if (await this.geminiService.isConfigured()) {
+      return this.geminiService.processReceipt(imageDataUrl, systemPrompt, userText);
     }
 
-    try {
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an OCR specialist for Ethiopian bank transfer receipts. Extract the following information from the receipt image and return it as JSON:
+    const client = await this.getClient();
+    if (!client) return null;
+
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userText },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageDataUrl,
+                detail: 'high',
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 1000,
+      temperature: 0.1,
+    });
+    return response.choices[0]?.message?.content ?? null;
+  }
+
+  async processReceipt(imageUrl: string): Promise<OcrResult> {
+    const systemPrompt = `You are an OCR specialist for Ethiopian bank transfer receipts. Extract the following information from the receipt image and return it as JSON:
 - ftNumber: The FT/transaction reference number
 - amount: The transfer amount (number only, no currency symbol)
 - bankName: The bank name (e.g., CBE, Telebirr, Awash, BOA, Dashen)
@@ -80,35 +107,20 @@ export class OcrService {
 - branch: The bank branch name if visible
 - confidence: Your confidence score from 0 to 1 on the extraction accuracy
 
-Return ONLY valid JSON. If a field cannot be determined, omit it from the response. Always include the confidence field.`,
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Please extract the payment details from this Ethiopian bank transfer receipt:',
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl,
-                  detail: 'high',
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 1000,
-        temperature: 0.1,
-      });
+Return ONLY valid JSON. If a field cannot be determined, omit it from the response. Always include the confidence field.`;
+    const userText =
+      'Please extract the payment details from this Ethiopian bank transfer receipt:';
 
-      const content = response.choices[0]?.message?.content;
+    try {
+      const content = await this.chatJson(systemPrompt, userText, imageUrl);
 
       if (!content) {
+        this.logger.warn('No AI provider configured, OCR processing is disabled');
         return {
           confidence: 0,
-          errors: ['No response from OCR service'],
+          errors: [
+            'No AI provider configured. A super admin can set a Gemini (free) or OpenAI key in Settings → AI Configuration.',
+          ],
         };
       }
 
@@ -160,7 +172,7 @@ Return ONLY valid JSON. If a field cannot be determined, omit it from the respon
         ftNumbers: [],
         confidence: 0,
         errors: [
-          'OpenAI API key is not configured. A super admin can set it in Settings → AI Configuration.',
+          'No AI provider configured. A super admin can set a Gemini (free) or OpenAI key in Settings → AI Configuration.',
         ],
       };
     }

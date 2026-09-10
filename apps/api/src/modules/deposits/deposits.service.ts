@@ -9,8 +9,8 @@ import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 import {
-  AMBIGUITY_MARGIN,
-  MEMBER_MATCH_THRESHOLD,
+  WEAK_MATCH_THRESHOLD,
+  normalizeName,
   rankMembersByPayerName,
 } from './member-matching';
 
@@ -355,10 +355,14 @@ export class DepositsService {
   }
 
   /**
-   * Suggest group members whose names best match a bank-transaction payer
-   * name (from a CBE receipt lookup). Used by the camera FT scanner to
-   * auto-pair transactions to members; unmatched payers must be picked
-   * manually by the admin.
+   * Suggest group members for a bank-transaction payer name (from a CBE
+   * receipt lookup), fully automatic:
+   *   1. History — if this exact payer name was paired to a member before
+   *      (verified deposit in this group), reuse that pairing deterministically.
+   *   2. Fuzzy — rank members by name / bank-account-name similarity and
+   *      auto-pair the best candidate down to WEAK_MATCH_THRESHOLD; the
+   *      scanner UI flags weak pairs for review. Manual picking remains only
+   *      for payers with no plausible candidate at all.
    */
   async suggestMembersForPayer(groupId: string, payerName: string) {
     const memberships = await this.prisma.groupMembership.findMany({
@@ -377,6 +381,48 @@ export class DepositsService {
       },
     });
 
+    const memberByUserId = new Map(
+      memberships.map((m) => [m.user.id, m.user]),
+    );
+
+    // 1) History: the same payer name successfully paired before in this group
+    const payerKey = normalizeName(payerName);
+    if (payerKey) {
+      const recent = await this.prisma.deposit.findMany({
+        where: {
+          cycle: { groupId },
+          verificationStatus: 'VERIFIED',
+          senderName: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          senderName: true,
+          userId: true,
+          user: { select: { name: true } },
+        },
+      });
+      const hit = recent.find(
+        (d) =>
+          normalizeName(d.senderName ?? '') === payerKey &&
+          memberByUserId.has(d.userId),
+      );
+      if (hit) {
+        const user = memberByUserId.get(hit.userId)!;
+        const match = {
+          userId: hit.userId,
+          name: user.name,
+          phone: user.phone,
+          photoUrl: user.photoUrl ?? undefined,
+          score: 1,
+          matchedVia: 'history' as const,
+          autoPaired: true,
+        };
+        return { payerName, suggestions: [match], bestMatch: match };
+      }
+    }
+
+    // 2) Fuzzy name / bank-account-name matching
     const suggestions = rankMembersByPayerName(
       payerName,
       memberships.map((m) => ({
@@ -390,22 +436,13 @@ export class DepositsService {
     );
 
     const best = suggestions[0];
-    const second = suggestions[1];
-    // Never auto-pair when two members score within a whisker of each other
-    const ambiguous =
-      !!best &&
-      !!second &&
-      best.score >= MEMBER_MATCH_THRESHOLD &&
-      second.score >= MEMBER_MATCH_THRESHOLD &&
-      best.score - second.score < AMBIGUITY_MARGIN;
+    // Auto-pair anything at or above the weak threshold — the scanner UI
+    // flags weak (< 0.6) pairs for review instead of forcing manual picks.
+    const bestMatch =
+      best && best.score >= WEAK_MATCH_THRESHOLD
+        ? { ...best, autoPaired: true }
+        : null;
 
-    return {
-      payerName,
-      suggestions,
-      bestMatch:
-        best && best.score >= MEMBER_MATCH_THRESHOLD && !ambiguous
-          ? { ...best, autoPaired: true }
-          : null,
-    };
+    return { payerName, suggestions, bestMatch };
   }
 }

@@ -1133,7 +1133,7 @@ export interface FtScanResult {
   bankName?: string;
   confidence: number;
   /** Which free/AI detection layer produced the result */
-  detectedVia?: 'qr' | 'ocr' | 'ai' | 'none';
+  detectedVia?: 'qr' | 'gemini' | 'ocr' | 'ai' | 'none';
   errors?: string[];
 }
 
@@ -1144,7 +1144,7 @@ export interface MemberSuggestion {
   photoUrl?: string;
   membershipStatus?: string;
   score: number;
-  matchedVia?: 'name' | 'bankAccountName';
+  matchedVia?: 'name' | 'bankAccountName' | 'history';
   autoPaired?: boolean;
 }
 
@@ -1173,7 +1173,8 @@ export interface CreateDepositPayload {
 
 /**
  * Detect all CBE FT numbers visible on a bank statement / receipt photo
- * (multipart field "image"). Free pipeline: QR → text OCR → optional OpenAI.
+ * (multipart field "image"). Free pipeline: QR → text OCR → optional AI
+ * (Gemini when configured, else OpenAI).
  * When `accountNumber` is given, misread FT tokens are repaired and verified
  * against CBE. Does not create or modify deposits.
  */
@@ -1688,6 +1689,31 @@ export const clearOpenAiKey = async (): Promise<OpenAiSettingStatus & { success:
 
 export const testOpenAiKey = async (): Promise<{ ok: boolean; message: string }> => {
   const response = await api.post('/settings/openai/test', {});
+  return response.data as { ok: boolean; message: string };
+};
+
+export interface AiSettingsStatus {
+  openai: OpenAiSettingStatus;
+  gemini: OpenAiSettingStatus;
+}
+
+export const getAiSettings = async (): Promise<AiSettingsStatus> => {
+  const response = await api.get('/settings/ai');
+  return response.data as AiSettingsStatus;
+};
+
+export const setGeminiKey = async (apiKey: string): Promise<OpenAiSettingStatus & { success: boolean }> => {
+  const response = await api.put('/settings/gemini', { apiKey });
+  return response.data as OpenAiSettingStatus & { success: boolean };
+};
+
+export const clearGeminiKey = async (): Promise<OpenAiSettingStatus & { success: boolean }> => {
+  const response = await api.delete('/settings/gemini');
+  return response.data as OpenAiSettingStatus & { success: boolean };
+};
+
+export const testGeminiKey = async (): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/settings/gemini/test', {});
   return response.data as { ok: boolean; message: string };
 };
 

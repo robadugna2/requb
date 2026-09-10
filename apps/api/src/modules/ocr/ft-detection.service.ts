@@ -9,6 +9,7 @@ import jsQR from 'jsqr';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { OcrService, FtScanResult } from './ocr.service';
+import { GeminiService } from './gemini.service';
 
 const STRICT_FT_REGEX = /\bFT[A-Z0-9]{10}\b/g;
 const NEAR_MISS_REGEX = /\bFT[A-Z0-9]{9,15}\b/g;
@@ -135,11 +136,14 @@ export function repairCandidates(token: string): string[] {
  * Free, key-less FT-number detection pipeline for camera-scanned bank
  * statements/receipts:
  *   1. QR code — CBE receipts embed the FT in a QR code; exact and instant.
- *   2. Tesseract.js OCR — reads printed FT references off statement pages
+ *   2. Gemini (optional) — free-tier AI vision when a Gemini key is
+ *      configured, and only when the QR pass found nothing.
+ *   3. Tesseract.js OCR — reads printed FT references off statement pages
  *      (two segmentation passes merged for recall, plus rotated retries to
  *      survive EXIF-rotated gallery photos).
- *   3. OpenAI (optional) — only if a funded key is configured, and only when
- *      the free passes found nothing.
+ *   4. OpenAI (optional) — only if a funded key is configured, Gemini was
+ *      NOT configured (avoiding a duplicate paid call), and the free passes
+ *      found nothing.
  * CBE verification afterwards is a free public API.
  */
 @Injectable()
@@ -147,7 +151,10 @@ export class FtDetectionService implements OnApplicationShutdown {
   private readonly logger = new Logger(FtDetectionService.name);
   private workerPromise: ReturnType<typeof createWorker> | null = null;
 
-  constructor(private readonly ocrService: OcrService) {}
+  constructor(
+    private readonly ocrService: OcrService,
+    private readonly geminiService: GeminiService,
+  ) {}
 
   async detectAll(imageBuffer: Buffer): Promise<FtScanResult> {
     // 1) QR — exact, instant, works even on poor photos
@@ -162,7 +169,26 @@ export class FtDetectionService implements OnApplicationShutdown {
       );
     }
 
-    // 2) Free on-device OCR
+    const dataUrl = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
+    const geminiConfigured = await this.geminiService.isConfigured();
+
+    // Real failures worth surfacing; the "provider not configured / no AI
+    // provider configured" notice is not an error — the friendly no-hit
+    // message below takes its place.
+    const isRealError = (e: string) =>
+      !/not configured|No AI provider configured/.test(e);
+
+    // 2) Gemini — free-tier AI vision, only when a Gemini key is configured
+    let geminiError: string | undefined;
+    if (geminiConfigured) {
+      const gemini = await this.geminiService.extractFtNumbers(dataUrl);
+      if (gemini.ftNumbers.length) {
+        return { ...gemini, detectedVia: 'gemini' };
+      }
+      geminiError = gemini.errors?.find(isRealError);
+    }
+
+    // 3) Free on-device OCR
     try {
       const ocr = await this.detectFromImageText(imageBuffer);
       if (ocr.ftNumbers.length || ocr.nearMisses.length) {
@@ -179,21 +205,27 @@ export class FtDetectionService implements OnApplicationShutdown {
       );
     }
 
-    // 3) Optional OpenAI fallback (no-op error result when unconfigured)
-    const dataUrl = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
-    const ai = await this.ocrService.extractFtNumbers(dataUrl);
-    if (ai.ftNumbers.length) {
-      return { ...ai, detectedVia: 'ai' };
+    // 4) Optional OpenAI fallback (no-op error result when unconfigured) —
+    //    skipped when Gemini handled the AI layer, to avoid a duplicate
+    //    paid call for the same photo
+    let aiError: string | undefined;
+    if (!geminiConfigured) {
+      const ai = await this.ocrService.extractFtNumbers(dataUrl);
+      if (ai.ftNumbers.length) {
+        return { ...ai, detectedVia: 'ai' };
+      }
+
+      // Don't blame the optional AI layer when it simply isn't configured
+      aiError = ai.errors?.find(isRealError);
     }
 
-    // Don't blame the optional AI layer when it simply isn't configured
-    const aiError = ai.errors?.find((e) => !e.includes('not configured'));
     return {
       ftNumbers: [],
       confidence: 0,
       detectedVia: 'none',
       errors: [
         aiError ??
+          geminiError ??
           'No CBE FT numbers were detected. Try a closer, well-lit photo, or add the FT number manually below.',
       ],
     };
