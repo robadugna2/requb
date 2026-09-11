@@ -856,7 +856,7 @@ function GeminiWebSection({
             value={baseUrl}
             onChange={(e) => onBaseUrlChange(e.target.value)}
             className="input-field font-mono"
-            placeholder="http://localhost:8081/v1 or https://your-proxy/v1"
+            placeholder="http://localhost:8081 or https://your-proxy.example.com"
             autoComplete="off"
             aria-label="Gemini Web proxy base URL"
           />

@@ -35,12 +35,15 @@ export class FtDetectionService {
       (buf) => `data:image/jpeg;base64,${buf.toString('base64')}`,
     );
 
+    const allErrors: string[] = [];
+
     // 1) Gemini Web proxy (primary), all photos in one batched call
     if (await this.geminiWebService.isConfigured()) {
       const web = await this.geminiWebService.extractFtNumbers(dataUrls);
       if (web.ftNumbers.length > 0) {
         return this.toResult(web, 'gemini-web');
       }
+      if (web.errors?.length) allErrors.push(`[Gemini Web proxy] ${web.errors.join(' — ')}`);
       // Proxy reachable but found nothing / errored — fall through to official.
       this.logger.log('Gemini Web proxy returned no FTs — falling back to official Gemini');
     }
@@ -52,18 +55,22 @@ export class FtDetectionService {
       if (official.ftNumbers.length > 0) {
         return this.toResult(official, 'gemini');
       }
-      return this.toResult(official, 'none');
+      if (official.errors?.length) allErrors.push(`[Gemini API] ${official.errors.join(' — ')}`);
+      return this.toResult(official, 'none', allErrors);
     }
 
-    return {
-      ftNumbers: [],
-      senders: {},
-      confidence: 0,
-      detectedVia: 'none',
-      errors: [
-        'No AI provider configured. Set the Gemini Web proxy base URL or a Gemini key in Settings → AI Configuration.',
-      ],
-    };
+    return this.toResult(
+      {
+        ftNumbers: [],
+        senders: {},
+        confidence: 0,
+        errors: [
+          'No AI provider configured. Set the Gemini Web proxy base URL or a Gemini key in Settings → AI Configuration.',
+        ],
+      },
+      'none',
+      allErrors,
+    );
   }
 
   private toResult(
@@ -75,6 +82,7 @@ export class FtDetectionService {
       errors?: string[];
     },
     via: FtDetectionResult['detectedVia'],
+    extraErrors?: string[],
   ): FtDetectionResult {
     const senders: Record<string, string> = {};
     for (const [ft, name] of Object.entries(r.senders ?? {})) {
@@ -82,20 +90,21 @@ export class FtDetectionService {
       const cleanName = String(name ?? '').trim();
       if (clean && cleanName) senders[clean] = cleanName;
     }
+    const errors =
+      r.ftNumbers.length > 0
+        ? undefined
+        : [...(extraErrors ?? []), ...(r.errors ?? [])].filter(Boolean).length
+          ? [...(extraErrors ?? []), ...(r.errors ?? [])].filter(Boolean)
+          : [
+              'No CBE FT numbers were detected. Try a closer, well-lit photo, or add the FT number manually below.',
+            ];
     return {
       ftNumbers: r.ftNumbers,
       senders,
       bankName: r.bankName,
       confidence: r.confidence,
       detectedVia: r.ftNumbers.length > 0 ? via : 'none',
-      errors:
-        r.ftNumbers.length > 0
-          ? undefined
-          : r.errors && r.errors.length
-            ? r.errors
-            : [
-                'No CBE FT numbers were detected. Try a closer, well-lit photo, or add the FT number manually below.',
-              ],
+      errors,
     };
   }
 }

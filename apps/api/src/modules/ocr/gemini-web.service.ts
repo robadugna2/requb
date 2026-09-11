@@ -5,22 +5,28 @@ import { throttled } from '../../common/utils/ai-throttle';
 import type { FtScanResult } from './ocr.service';
 import { FT_SYSTEM_PROMPT, FT_USER_PROMPT, parseFtScanJson } from './gemini.service';
 
-interface ChatCompletionResponse {
-  choices?: Array<{ message?: { content?: string | null } }>;
+interface NativeGenerateResponse {
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: string }> };
+    finishReason?: string;
+  }>;
   error?: { message?: string };
 }
 
 /**
- * Client for a self-hosted, OpenAI-compatible Gemini Web proxy
- * (e.g. the "gemini-web2api" project) — the reverse-engineered web endpoint
- * with no API billing and a much higher effective quota than the official
- * free tier. Reached via POST {baseUrl}/chat/completions with standard
- * OpenAI message shapes (text + image_url parts), so multiple statement
- * photos can be sent in ONE call (batching).
+ * Client for a self-hosted, Google-NATIVE Gemini Web proxy
+ * (the "gemini-web2api" project) — the same integration pattern as the
+ * live tender agent: POST {proxyBase}/v1beta/models/{model}:generateContent
+ * with a Google-native body (contents/parts, camelCase generationConfig).
  *
- * NOTE: this is an unofficial integration and can rate-limit or break when
- * Google changes its web API. The official Gemini service is the automatic
- * fallback, so a proxy outage degrades rather than fails.
+ * This is the user's proven, production-working path: no API key or billing
+ * needed for Flash models (key query-param only when the proxy sets api_keys),
+ * and it accepts MULTIPLE inlineData images in one call (batching) — each is
+ * uploaded through Gemini Web's own upload endpoint by the proxy.
+ *
+ * NOTE: unofficial integration — when the proxy is unreachable the official
+ * Gemini service is the automatic fallback, so a proxy outage degrades rather
+ * than fails.
  */
 @Injectable()
 export class GeminiWebService {
@@ -42,61 +48,96 @@ export class GeminiWebService {
     return (await this.resolveConfig()) != null;
   }
 
-  /** Normalize a user-entered base URL to the OpenAI chat-completions endpoint. */
-  private chatEndpoint(baseUrl: string): string {
+  /** Base URL -> native generateContent endpoint (mirrors lib/gemini.ts). */
+  private generateUrl(baseUrl: string, model: string, apiKey: string | null): string {
     let base = baseUrl.trim().replace(/\/+$/, '');
-    if (/\/v1beta(\/models)?$/i.test(base)) {
-      // they pointed at the Gemini-style root; swap to the OpenAI path
-      base = base.replace(/\/v1beta(\/models)?$/i, '');
+    base = base.replace(/\/v1$/i, '').replace(/\/v1beta(\/models)?$/i, '');
+    const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    return apiKey ? `${url}?key=${encodeURIComponent(apiKey)}` : url;
+  }
+
+  /** Data-URL or http(s) URL -> { mimeType, base64 } (Gemini inline format). */
+  private async toInlineData(
+    imageRef: string,
+  ): Promise<{ mimeType: string; data: string }> {
+    const dataMatch = imageRef.match(/^data:([^;]+);base64,(.*)$/s);
+    if (dataMatch) {
+      return { mimeType: dataMatch[1], data: dataMatch[2] };
     }
-    if (!/\/v1$/i.test(base)) base = `${base}/v1`;
-    return `${base}/chat/completions`;
+    if (/^https?:\/\//i.test(imageRef)) {
+      const response = await axios.get<ArrayBuffer>(imageRef, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        maxContentLength: 12 * 1024 * 1024,
+      });
+      const contentType = response.headers['content-type'];
+      const mimeType =
+        typeof contentType === 'string' && contentType.startsWith('image/')
+          ? contentType.split(';')[0].trim()
+          : 'image/jpeg';
+      return { mimeType, data: Buffer.from(response.data).toString('base64') };
+    }
+    throw new Error('Image must be a base64 data-URL or an http(s) URL');
   }
 
   /**
-   * One chat/completions call carrying the prompt + any number of images.
-   * Returns the assistant text, or throws on transport/HTTP error.
+   * One native generateContent call carrying the prompt + any number of
+   * images (each uploaded through Gemini Web by the proxy). Returns the
+   * joined assistant text, or throws on transport/HTTP error.
    */
-  private async chat(
+  private async generateNative(
     cfg: { baseUrl: string; apiKey: string | null; model: string },
     text: string,
     imageDataUrls: string[],
   ): Promise<string> {
-    const content: Array<Record<string, unknown>> = [{ type: 'text', text }];
+    const parts: Array<Record<string, unknown>> = [{ text }];
     for (const url of imageDataUrls) {
-      content.push({ type: 'image_url', image_url: { url } });
+      const { mimeType, data } = await this.toInlineData(url);
+      parts.push({ inlineData: { mimeType, data } });
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
-
     const response = await throttled(() =>
-      axios.post<ChatCompletionResponse>(
-        this.chatEndpoint(cfg.baseUrl),
+      axios.post<NativeGenerateResponse>(
+        this.generateUrl(cfg.baseUrl, cfg.model, cfg.apiKey),
         {
-          model: cfg.model,
-          messages: [{ role: 'user', content }],
-          stream: false,
+          // camelCase so the proxy AND the official API parse it identically
+          contents: [{ role: 'user', parts }],
+          generationConfig: { temperature: 0 },
         },
-        { headers, timeout: 90000 },
+        { timeout: 120000 },
       ),
     );
 
-    const out = response.data?.choices?.[0]?.message?.content;
+    const candidate = response.data?.candidates?.[0];
+    const out = (candidate?.content?.parts ?? [])
+      .map((part) => part.text ?? '')
+      .join('')
+      .trim();
+
     if (!out) {
-      throw new Error(response.data?.error?.message || 'Gemini Web proxy returned an empty response');
+      const reason = candidate?.finishReason
+        ? ` (finishReason: ${candidate.finishReason})`
+        : '';
+      throw new Error(`Gemini Web proxy returned an empty generation${reason}`);
     }
     return out;
   }
 
-  /** FT extraction across one or more statement photos in a single call. */
+  /**
+   * FT extraction across one or more statement photos in a single call.
+   * Same prompt + JSON contract as the official Gemini service.
+   */
   async extractFtNumbers(imageDataUrls: string[]): Promise<FtScanResult> {
     const cfg = await this.resolveConfig();
     if (!cfg) {
       return { ftNumbers: [], senders: {}, confidence: 0, errors: ['Gemini Web proxy not configured'] };
     }
     try {
-      const content = await this.chat(cfg, `${FT_SYSTEM_PROMPT}\n\n${FT_USER_PROMPT}`, imageDataUrls);
+      const content = await this.generateNative(
+        cfg,
+        `${FT_SYSTEM_PROMPT}\n\n${FT_USER_PROMPT}`,
+        imageDataUrls,
+      );
       const parsed = parseFtScanJson(content);
       return {
         ftNumbers: parsed.ftNumbers,
@@ -127,7 +168,7 @@ export class GeminiWebService {
     const cfg = await this.resolveConfig();
     if (!cfg) return null;
     try {
-      return await this.chat(cfg, `${systemPrompt}\n\n${userText}`, [imageDataUrl]);
+      return await this.generateNative(cfg, `${systemPrompt}\n\n${userText}`, [imageDataUrl]);
     } catch (error: unknown) {
       this.logger.warn(
         `Gemini Web receipt OCR failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -136,7 +177,7 @@ export class GeminiWebService {
     }
   }
 
-  /** Reachability + auth check: a tiny chat call, no image. */
+  /** Reachability + model check: a tiny native call, no image. */
   async test(): Promise<{ ok: boolean; message: string }> {
     const cfg = await this.resolveConfig();
     if (!cfg) {
@@ -146,16 +187,16 @@ export class GeminiWebService {
       };
     }
     try {
-      const text = await this.chat(cfg, 'Reply with the single word OK', []);
+      const text = await this.generateNative(cfg, 'Reply with the single word OK', []);
       return {
         ok: true,
-        message: `Gemini Web proxy reachable — model "${cfg.model}" responded.`,
+        message: `Gemini Web proxy reachable — model "${cfg.model}" responded: ${text.slice(0, 20)}`,
       };
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;
       const message = error instanceof Error ? error.message : String(error);
-      if (status === 401) {
-        return { ok: false, message: 'Proxy rejected the API key (401). Check the key in Settings.' };
+      if (status === 400 && /api key/i.test(message)) {
+        return { ok: false, message: 'Proxy rejected the API key (400). Check the key in Settings.' };
       }
       if (!status) {
         return {
