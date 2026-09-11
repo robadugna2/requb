@@ -577,6 +577,18 @@ function ScanWorkflow() {
     !!(it.cycleId || activeCycle?.id) &&
     (it.status === 'found' ? it.amount !== undefined && it.amount > 0 : !!it.amount);
 
+  /** Human-readable list of what's missing before this item can be recorded. */
+  const itemBlockers = (it: ScanItem): string[] => {
+    const b: string[] = [];
+    if (it.isDuplicate) b.push('already recorded — duplicate');
+    if (it.status === 'verifying') b.push('verifying with CBE…');
+    if (it.status === 'error') b.push('CBE lookup failed');
+    if (!it.member) b.push('member not paired');
+    if (!it.cycleId && !activeCycle) b.push('no cycle selected');
+    if (it.amount === undefined || it.amount <= 0) b.push('amount missing');
+    return b;
+  };
+
   const eligibleCount = items.filter(canCreateItem).length;
 
   const confirmCreateAll = async () => {
@@ -771,11 +783,18 @@ function ScanWorkflow() {
             </div>
 
             {group && !activeCycle && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg bg-warning-50 dark:bg-warning-500/10 border border-warning-200 dark:border-warning-500/20 p-3">
-                <AlertTriangle className="h-4 w-4 text-warning-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-warning-800 dark:text-warning-400">
-                  This group has no ACTIVE cycle. Start a cycle in the group page before recording deposits.
-                </p>
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg bg-warning-50 dark:bg-warning-500/10 border border-warning-200 dark:border-warning-500/20 p-3">
+                <div className="flex items-start gap-2 flex-1">
+                  <AlertTriangle className="h-4 w-4 text-warning-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-warning-800 dark:text-warning-400">
+                    {group.cycles?.length
+                      ? 'No ACTIVE cycle — pick one of the existing cycles for each transaction below (deposits must belong to a cycle), or start a new cycle on the group page.'
+                      : 'This group has no cycles yet. Open the group page and start a cycle — deposits must belong to a cycle.'}
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => router.push('/groups/' + group.id)} className="flex-shrink-0">
+                  Open group page
+                </Button>
               </div>
             )}
 
@@ -999,6 +1018,22 @@ function ScanWorkflow() {
                     </div>
                   </div>
 
+                  {/* What's missing before this can be recorded */}
+                  {!ready && !it.outcome && itemBlockers(it).length > 0 && (
+                    <p className="text-xs text-warning-800 dark:text-warning-400 mb-3 flex flex-wrap items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span className="font-medium mr-1">To record:</span>
+                      {itemBlockers(it).map((b) => (
+                        <span
+                          key={b}
+                          className="px-1.5 py-0.5 rounded bg-warning-50 dark:bg-warning-500/10 border border-warning-200 dark:border-warning-500/20"
+                        >
+                          {b}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+
                   {it.status === 'error' && (
                     <p className="text-xs text-error-600 dark:text-error-400 mb-3 flex items-start gap-1.5">
                       <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
@@ -1215,6 +1250,19 @@ function ScanWorkflow() {
                   {eligibleCount > 0 && (
                     <span className="text-gray-500 dark:text-gray-400">
                       {' '}· Total ETB {totalAmount.toLocaleString()}
+                    </span>
+                  )}
+                  {eligibleCount === 0 && (
+                    <span className="block text-xs text-warning-700 dark:text-warning-400 mt-1">
+                      {uploadingEvidence
+                        ? 'Statement photo still uploading…'
+                        : !evidenceUrl
+                          ? evidenceError || 'Statement photo upload failed — retake or re-upload (the evidence image is required).'
+                          : !group?.cycles?.length
+                            ? 'This group has no cycles yet — open the group page and start a cycle first.'
+                            : !activeCycle
+                              ? 'No ACTIVE cycle — pick a cycle for each transaction below, or start a new one on the group page.'
+                              : 'Fix the highlighted items above — each needs member, cycle and amount.'}
                     </span>
                   )}
                 </div>
