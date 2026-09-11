@@ -113,16 +113,16 @@ function SettingsContent() {
       p.setKeyValue('');
       p.setShowValue(false);
       await refreshAiStatus();
-      setSuccess(`${p.label} API key saved.`);
-      setTimeout(() => setSuccess(null), 4000);
+      setSuccess(`${p.label} API key saved and active.`);
+      setTimeout(() => setSuccess(null), 5000);
 
-      // Validate immediately so a broken key never sits unnoticed — the
-      // just-saved key is now the configured one.
+      // Validate the just-saved key, but never present a test hiccup as a
+      // save failure — the save succeeded and the status row above already
+      // reflects it. The inline test banner carries the test result.
       p.setTesting(true);
       try {
         const result = await p.test();
         p.setTestResult(result);
-        if (!result.ok) setError(`${p.label}: ${result.message}`);
       } catch (err: unknown) {
         const axiosErr = err as { response?: { data?: { message?: string } } };
         p.setTestResult({ ok: false, message: axiosErr?.response?.data?.message || 'Test failed' });
