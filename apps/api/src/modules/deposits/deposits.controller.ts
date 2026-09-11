@@ -8,12 +8,12 @@ import {
   Body,
   UseGuards,
   UseInterceptors,
-  UploadedFile,
+  UploadedFiles,
   Request,
   BadRequestException,
   HttpCode,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GroupPermissionsGuard } from '../../common/guards/group-permissions.guard';
@@ -69,7 +69,7 @@ export class DepositsController {
    */
   @Post('ft-scan')
   @UseInterceptors(
-    FileInterceptor('image', {
+    FilesInterceptor('images', 8, {
       storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
@@ -78,14 +78,15 @@ export class DepositsController {
           cb(new BadRequestException('Only image files (JPEG, PNG, WebP, GIF) are allowed'), false);
         }
       },
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB each
     }),
   )
-  async scanFtNumbers(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
+  async scanFtNumbers(@UploadedFiles() files: Express.Multer.File[]) {
+    if (!files || files.length === 0) {
       throw new BadRequestException('No image uploaded');
     }
-    return this.ftDetectionService.detectAll(file.buffer);
+    // All photos are sent together in a single (batched) provider call.
+    return this.ftDetectionService.detectAll(files.map((f) => f.buffer));
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import axios from 'axios';
@@ -6,6 +6,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 
 const GEMINI_KEY_SETTING = 'gemini_api_key';
+const GEMINI_WEB_BASE_URL = 'gemini_web_base_url';
+const GEMINI_WEB_API_KEY = 'gemini_web_api_key';
+const GEMINI_WEB_MODEL = 'gemini_web_model';
+const GEMINI_WEB_ENABLED = 'gemini_web_enabled';
+const DEFAULT_GEMINI_WEB_MODEL = 'gemini-3.6-flash';
 
 interface CachedKey {
   key: string | null;
@@ -280,6 +285,125 @@ export class SettingsService {
     } catch {
       // Auth tag validation failed (tampered data or wrong encryption key).
       return null;
+    }
+  }
+
+  // ---- Gemini Web proxy (self-hosted OpenAI-compatible endpoint) -----------
+
+  /** Raw (non-encrypted) SystemSetting value. */
+  private async getPlain(settingKey: string): Promise<string | null> {
+    const row = await this.prisma.systemSetting.findUnique({ where: { key: settingKey } });
+    return row?.value ?? null;
+  }
+
+  private async setPlain(settingKey: string, value: string, adminId: string): Promise<void> {
+    await this.prisma.systemSetting.upsert({
+      where: { key: settingKey },
+      update: { value, updatedById: adminId },
+      create: { key: settingKey, value, updatedById: adminId },
+    });
+  }
+
+  /** Full web-proxy config for internal use (decrypts the optional key). */
+  async getGeminiWebConfig(): Promise<{
+    baseUrl: string;
+    apiKey: string | null;
+    model: string;
+    enabled: boolean;
+  } | null> {
+    const baseUrl = await this.getPlain(GEMINI_WEB_BASE_URL);
+    if (!baseUrl) return null;
+    const model = (await this.getPlain(GEMINI_WEB_MODEL)) || DEFAULT_GEMINI_WEB_MODEL;
+    const enabled = (await this.getPlain(GEMINI_WEB_ENABLED)) !== 'false';
+    const apiKey = await this.getRow(GEMINI_WEB_API_KEY);
+    return { baseUrl, apiKey, model, enabled };
+  }
+
+  /** Safe status for the UI (never returns the key). */
+  async getGeminiWebStatus(): Promise<{
+    configured: boolean;
+    baseUrl: string | null;
+    model: string;
+    enabled: boolean;
+    hasKey: boolean;
+  }> {
+    const baseUrl = await this.getPlain(GEMINI_WEB_BASE_URL);
+    const model = (await this.getPlain(GEMINI_WEB_MODEL)) || DEFAULT_GEMINI_WEB_MODEL;
+    const enabled = (await this.getPlain(GEMINI_WEB_ENABLED)) !== 'false';
+    const apiKey = baseUrl ? await this.getRow(GEMINI_WEB_API_KEY) : null;
+    return {
+      configured: !!baseUrl,
+      baseUrl: baseUrl || null,
+      model,
+      enabled,
+      hasKey: !!apiKey,
+    };
+  }
+
+  async setGeminiWeb(
+    input: { baseUrl: string; apiKey?: string; model?: string; enabled?: boolean },
+    adminId: string,
+  ): Promise<void> {
+    const baseUrl = (input.baseUrl || '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      throw new BadRequestException('Base URL must start with http:// or https://');
+    }
+    await this.setPlain(GEMINI_WEB_BASE_URL, baseUrl, adminId);
+    await this.setPlain(GEMINI_WEB_MODEL, (input.model || '').trim() || DEFAULT_GEMINI_WEB_MODEL, adminId);
+    await this.setPlain(GEMINI_WEB_ENABLED, input.enabled === false ? 'false' : 'true', adminId);
+    if (input.apiKey && input.apiKey.trim()) {
+      await this.setRow(GEMINI_WEB_API_KEY, input.apiKey.trim(), adminId);
+    }
+  }
+
+  async clearGeminiWeb(): Promise<void> {
+    await this.prisma.systemSetting.deleteMany({
+      where: { key: { in: [GEMINI_WEB_BASE_URL, GEMINI_WEB_MODEL, GEMINI_WEB_ENABLED] } },
+    });
+    await this.clearRow(GEMINI_WEB_API_KEY);
+  }
+
+  /** Self-contained reachability/auth check (no ocr-module import). */
+  async testGeminiWeb(): Promise<{ ok: boolean; message: string }> {
+    const cfg = await this.getGeminiWebConfig();
+    if (!cfg) {
+      return { ok: false, message: 'Gemini Web proxy is not configured. Set the base URL first.' };
+    }
+    if (!cfg.enabled) {
+      return { ok: false, message: 'Gemini Web proxy is configured but disabled — enable it to use.' };
+    }
+    let base = cfg.baseUrl.replace(/\/+$/, '');
+    if (/\/v1beta(\/models)?$/i.test(base)) base = base.replace(/\/v1beta(\/models)?$/i, '');
+    if (!/\/v1$/i.test(base)) base = `${base}/v1`;
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
+
+    try {
+      await Promise.race([
+        axios.post(
+          `${base}/chat/completions`,
+          { model: cfg.model, messages: [{ role: 'user', content: 'Reply with the single word OK' }], stream: false },
+          { headers, timeout: 30000 },
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request to the proxy timed out after 30s')), 30000),
+        ),
+      ]);
+      return { ok: true, message: `Gemini Web proxy reachable — model "${cfg.model}" responded.` };
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = error instanceof Error ? error.message : String(error);
+      if (status === 401) {
+        return { ok: false, message: 'Proxy rejected the API key (401). Check the key.' };
+      }
+      if (!status) {
+        return {
+          ok: false,
+          message: `Cannot reach the proxy at ${cfg.baseUrl}. Is it running and reachable from the API host? (${message})`,
+        };
+      }
+      return { ok: false, message: `Proxy error (${status}): ${message}` };
     }
   }
 }

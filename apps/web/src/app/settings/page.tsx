@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle, Sun, Moon, MonitorSmartphone, Palette, Bot } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { changePassword, getAiSettings, setGeminiKey, clearGeminiKey, testGeminiKey, GeminiSettingStatus } from '@/lib/api';
+import { changePassword, getAiSettings, setGeminiKey, clearGeminiKey, testGeminiKey, GeminiSettingStatus, setGeminiWeb, clearGeminiWeb, testGeminiWeb, GeminiWebStatus } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
 import { useLanguage, Language } from '@/components/layout/LanguageContext';
 import { useTheme, Theme } from '@/components/layout/ThemeContext';
@@ -40,7 +40,8 @@ function SettingsContent() {
   // AI Configuration (super admin only) — status of both providers
   const [aiSettings, setAiSettings] = useState<{
     gemini: GeminiSettingStatus | null;
-  }>({ gemini: null });
+    geminiWeb: GeminiWebStatus | null;
+  }>({ gemini: null, geminiWeb: null });
   const [aiStatusLoading, setAiStatusLoading] = useState(false);
 
   // Gemini (recommended, free tier) — per-provider input/UI state
@@ -50,16 +51,34 @@ function SettingsContent() {
   const [testingGemini, setTestingGemini] = useState(false);
   const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // Gemini Web proxy (primary, self-hosted) — input/UI state
+  const [webBaseUrl, setWebBaseUrl] = useState('');
+  const [webModel, setWebModel] = useState('');
+  const [webApiKey, setWebApiKey] = useState('');
+  const [showWebApiKey, setShowWebApiKey] = useState(false);
+  const [webEnabled, setWebEnabled] = useState(true);
+  const [savingWeb, setSavingWeb] = useState(false);
+  const [testingWeb, setTestingWeb] = useState(false);
+  const [webTestResult, setWebTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
   useEffect(() => {
     if (!isSuperAdmin) return;
     let cancelled = false;
     setAiStatusLoading(true);
     getAiSettings()
       .then((settings) => {
-        if (!cancelled) setAiSettings({ gemini: settings.gemini ?? null });
+        if (cancelled) return;
+        setAiSettings({ gemini: settings.gemini ?? null, geminiWeb: settings.geminiWeb ?? null });
+        // Seed the proxy form from the saved status
+        const web = settings.geminiWeb;
+        if (web) {
+          setWebBaseUrl(web.baseUrl ?? '');
+          setWebModel(web.model ?? '');
+          setWebEnabled(web.enabled);
+        }
       })
       .catch(() => {
-        if (!cancelled) setAiSettings({ gemini: null });
+        if (!cancelled) setAiSettings({ gemini: null, geminiWeb: null });
       })
       .finally(() => {
         if (!cancelled) setAiStatusLoading(false);
@@ -72,9 +91,9 @@ function SettingsContent() {
   const refreshAiStatus = async () => {
     try {
       const settings = await getAiSettings();
-      setAiSettings({ gemini: settings.gemini ?? null });
+      setAiSettings({ gemini: settings.gemini ?? null, geminiWeb: settings.geminiWeb ?? null });
     } catch {
-      setAiSettings({ gemini: null });
+      setAiSettings({ gemini: null, geminiWeb: null });
     }
   };
 
@@ -209,6 +228,88 @@ function SettingsContent() {
     }
   };
 
+  // ─── Gemini Web proxy handlers ──────────────────────────────────────────────
+
+  const handleSaveGeminiWeb = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!webBaseUrl.trim()) return;
+
+    setSavingWeb(true);
+    setError(null);
+    setSuccess(null);
+    setWebTestResult(null);
+
+    try {
+      await setGeminiWeb({
+        baseUrl: webBaseUrl.trim(),
+        apiKey: webApiKey.trim() || undefined,
+        model: webModel.trim() || undefined,
+        enabled: webEnabled,
+      });
+      setWebApiKey('');
+      setShowWebApiKey(false);
+      await refreshAiStatus();
+      setSuccess('Gemini Web proxy saved.');
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      const msg = axiosErr.response?.data?.message || 'Failed to save the Gemini Web proxy settings.';
+      setError(msg);
+      setWebTestResult({ ok: false, message: `Save failed: ${msg}` });
+    } finally {
+      setSavingWeb(false);
+    }
+  };
+
+  const handleTestGeminiWeb = async () => {
+    setTestingWeb(true);
+    setWebTestResult(null);
+    try {
+      const result = await testGeminiWeb();
+      setWebTestResult(result);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setWebTestResult({
+        ok: false,
+        message: axiosErr.response?.data?.message || 'Test request failed. Please try again.',
+      });
+    } finally {
+      setTestingWeb(false);
+    }
+  };
+
+  const handleRemoveGeminiWeb = async () => {
+    if (
+      !window.confirm(
+        'Remove the saved Gemini Web proxy configuration? Camera FT scanning will fall back to the official Gemini key until the proxy is set up again.',
+      )
+    ) {
+      return;
+    }
+
+    setSavingWeb(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await clearGeminiWeb();
+      setWebBaseUrl('');
+      setWebModel('');
+      setWebApiKey('');
+      setWebTestResult(null);
+      await refreshAiStatus();
+      setSuccess('Gemini Web proxy removed.');
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(
+        axiosErr.response?.data?.message || 'Failed to remove the Gemini Web proxy configuration.'
+      );
+    } finally {
+      setSavingWeb(false);
+    }
+  };
+
   const isValid =
     currentPassword.length > 0 &&
     newPassword.length >= 6 &&
@@ -332,10 +433,34 @@ function SettingsContent() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90">AI Configuration</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Google Gemini (free tier) powers camera FT scanning and receipt OCR — no credit card needed.
+                  A self-hosted Gemini Web proxy (primary) or Google Gemini (free tier) powers camera FT scanning and receipt OCR.
                 </p>
               </div>
             </div>
+
+            {/* Gemini Web proxy — primary self-hosted provider */}
+            <GeminiWebSection
+              status={aiSettings.geminiWeb}
+              statusLoading={aiStatusLoading}
+              baseUrl={webBaseUrl}
+              onBaseUrlChange={setWebBaseUrl}
+              model={webModel}
+              onModelChange={setWebModel}
+              apiKey={webApiKey}
+              onApiKeyChange={setWebApiKey}
+              showApiKey={showWebApiKey}
+              onToggleShowApiKey={() => setShowWebApiKey(!showWebApiKey)}
+              enabled={webEnabled}
+              onEnabledChange={setWebEnabled}
+              saving={savingWeb}
+              testing={testingWeb}
+              testResult={webTestResult}
+              onSave={handleSaveGeminiWeb}
+              onTest={handleTestGeminiWeb}
+              onRemove={handleRemoveGeminiWeb}
+            />
+
+            <hr className="my-6 border-gray-200 dark:border-gray-800" />
 
             {/* Gemini — recommended free-tier provider */}
             <AiProviderSection
@@ -620,6 +745,184 @@ function AiProviderSection({
           {status?.source === 'database' && (
             <Button type="button" variant="danger" onClick={onRemove} disabled={saving}>
               Remove Saved Key
+            </Button>
+          )}
+        </div>
+      </form>
+
+      {/* Test result (inline, inside section) */}
+      {testResult && (
+        <div
+          className={`mt-3 p-3 rounded-lg text-xs font-medium border ${
+            testResult.ok
+              ? 'bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 border-green-100'
+              : 'bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 border-red-100'
+          }`}
+        >
+          {testResult.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface GeminiWebSectionProps {
+  status: GeminiWebStatus | null;
+  statusLoading: boolean;
+  baseUrl: string;
+  onBaseUrlChange: (value: string) => void;
+  model: string;
+  onModelChange: (value: string) => void;
+  apiKey: string;
+  onApiKeyChange: (value: string) => void;
+  showApiKey: boolean;
+  onToggleShowApiKey: () => void;
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  saving: boolean;
+  testing: boolean;
+  testResult: { ok: boolean; message: string } | null;
+  onSave: (e: React.FormEvent) => void;
+  onTest: () => void;
+  onRemove: () => void;
+}
+
+/** The self-hosted Gemini Web proxy provider section (primary, no billing). */
+function GeminiWebSection({
+  status,
+  statusLoading,
+  baseUrl,
+  onBaseUrlChange,
+  model,
+  onModelChange,
+  apiKey,
+  onApiKeyChange,
+  showApiKey,
+  onToggleShowApiKey,
+  enabled,
+  onEnabledChange,
+  saving,
+  testing,
+  testResult,
+  onSave,
+  onTest,
+  onRemove,
+}: GeminiWebSectionProps) {
+  return (
+    <div>
+      {/* Header row */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white/90">Gemini Web (proxy)</h3>
+        <span className="bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-xs px-2 py-0.5 rounded-full">
+          Primary — no billing
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-3">
+        Point the app at your own self-hosted OpenAI-compatible Gemini proxy (e.g. gemini-web2api).
+        No API key or billing; highest quota.
+      </p>
+
+      {/* Status */}
+      {statusLoading ? (
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-3.5 w-3.5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-gray-500 dark:text-gray-400">Checking configuration...</span>
+        </div>
+      ) : status?.configured ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-4">
+          <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+            Configured — {status.baseUrl} · {status.model}
+          </span>
+          {!status.enabled && (
+            <span className="text-xs font-medium text-amber-700 dark:text-warning-400">disabled</span>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mb-4">
+          <span className="h-2 w-2 rounded-full bg-amber-500 flex-shrink-0" />
+          <span className="text-xs font-medium text-amber-700 dark:text-warning-400">Not configured</span>
+        </div>
+      )}
+
+      {/* Proxy configuration form */}
+      <form onSubmit={onSave} className="space-y-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            Base URL
+          </label>
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => onBaseUrlChange(e.target.value)}
+            className="input-field font-mono"
+            placeholder="http://localhost:8081/v1 or https://your-proxy/v1"
+            autoComplete="off"
+            aria-label="Gemini Web proxy base URL"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            Model
+          </label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => onModelChange(e.target.value)}
+            className="input-field font-mono"
+            placeholder="gemini-3.6-flash"
+            autoComplete="off"
+            aria-label="Gemini Web proxy model"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            API key (optional)
+          </label>
+          <div className="relative">
+            <input
+              type={showApiKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => onApiKeyChange(e.target.value)}
+              className="input-field font-mono pr-10"
+              placeholder={status?.hasKey ? 'optional — leave blank to keep current' : 'not set'}
+              autoComplete="off"
+              aria-label="Gemini Web proxy API key"
+            />
+            <button
+              type="button"
+              onClick={onToggleShowApiKey}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            >
+              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => onEnabledChange(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-brand-500 focus:ring-brand-500"
+            aria-label="Enable Gemini Web proxy"
+          />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Enabled</span>
+        </label>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" loading={saving} disabled={!baseUrl.trim()}>
+            <Lock className="h-4 w-4 mr-2" />
+            Save
+          </Button>
+          <Button type="button" variant="secondary" onClick={onTest} loading={testing} disabled={testing}>
+            Test
+          </Button>
+          {status?.configured && (
+            <Button type="button" variant="danger" onClick={onRemove} disabled={saving}>
+              Remove
             </Button>
           )}
         </div>

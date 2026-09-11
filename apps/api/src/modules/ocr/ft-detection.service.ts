@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { GeminiService } from '../ocr/gemini.service';
+import { GeminiWebService } from '../ocr/gemini-web.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 
 export interface FtDetectionResult {
@@ -8,47 +9,92 @@ export interface FtDetectionResult {
   senders: Record<string, string>;
   bankName?: string;
   confidence: number;
-  detectedVia: 'gemini' | 'none';
+  detectedVia: 'gemini-web' | 'gemini' | 'none';
   errors?: string[];
 }
 
 /**
- * Gemini-only FT detection: the vision model reads the statement photo
- * (camera shot or uploaded image) and returns every CBE FT reference plus
- * the payer / sender name printed beside it, which drives automatic member
- * pairing. There is deliberately no fallback OCR — when Gemini is not
- * configured or fails, the error surfaces verbatim so the admin can act
- * (add the free key in Settings) instead of getting silently bad results.
+ * FT detection for camera-scanned bank statements, in priority order:
+ *   1. Gemini Web proxy (self-hosted, no billing, high quota) — PRIMARY
+ *   2. Official Gemini API — automatic fallback when the proxy is off/unreachable
+ * Multiple statement photos are sent in a SINGLE call (batching) to conserve
+ * quota. There is no legacy OCR fallback: when both providers fail, the error
+ * surfaces verbatim so the admin can act.
  */
 @Injectable()
 export class FtDetectionService {
-  constructor(private readonly geminiService: GeminiService) {}
+  private readonly logger = new Logger(FtDetectionService.name);
 
-  async detectAll(imageBuffer: Buffer): Promise<FtDetectionResult> {
-    const imageDataUrl = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
-    const result = await this.geminiService.extractFtNumbers(imageDataUrl);
+  constructor(
+    private readonly geminiWebService: GeminiWebService,
+    private readonly geminiService: GeminiService,
+  ) {}
 
-    // Clean the sender map: valid FT keys only, trimmed names
+  async detectAll(imageBuffers: Buffer[]): Promise<FtDetectionResult> {
+    const dataUrls = imageBuffers.map(
+      (buf) => `data:image/jpeg;base64,${buf.toString('base64')}`,
+    );
+
+    // 1) Gemini Web proxy (primary), all photos in one batched call
+    if (await this.geminiWebService.isConfigured()) {
+      const web = await this.geminiWebService.extractFtNumbers(dataUrls);
+      if (web.ftNumbers.length > 0) {
+        return this.toResult(web, 'gemini-web');
+      }
+      // Proxy reachable but found nothing / errored — fall through to official.
+      this.logger.log('Gemini Web proxy returned no FTs — falling back to official Gemini');
+    }
+
+    // 2) Official Gemini (fallback). It accepts one image per call; use the
+    //    first photo (the proxy already handled true multi-image batching).
+    if (await this.geminiService.isConfigured()) {
+      const official = await this.geminiService.extractFtNumbers(dataUrls[0]);
+      if (official.ftNumbers.length > 0) {
+        return this.toResult(official, 'gemini');
+      }
+      return this.toResult(official, 'none');
+    }
+
+    return {
+      ftNumbers: [],
+      senders: {},
+      confidence: 0,
+      detectedVia: 'none',
+      errors: [
+        'No AI provider configured. Set the Gemini Web proxy base URL or a Gemini key in Settings → AI Configuration.',
+      ],
+    };
+  }
+
+  private toResult(
+    r: {
+      ftNumbers: string[];
+      senders?: Record<string, string>;
+      bankName?: string;
+      confidence: number;
+      errors?: string[];
+    },
+    via: FtDetectionResult['detectedVia'],
+  ): FtDetectionResult {
     const senders: Record<string, string> = {};
-    for (const [ft, name] of Object.entries(result.senders ?? {})) {
+    for (const [ft, name] of Object.entries(r.senders ?? {})) {
       const clean = normalizeFtNumber(ft);
       const cleanName = String(name ?? '').trim();
       if (clean && cleanName) senders[clean] = cleanName;
     }
-
     return {
-      ftNumbers: result.ftNumbers,
+      ftNumbers: r.ftNumbers,
       senders,
-      bankName: result.bankName,
-      confidence: result.confidence,
-      detectedVia: result.ftNumbers.length > 0 ? 'gemini' : 'none',
+      bankName: r.bankName,
+      confidence: r.confidence,
+      detectedVia: r.ftNumbers.length > 0 ? via : 'none',
       errors:
-        result.ftNumbers.length > 0
+        r.ftNumbers.length > 0
           ? undefined
-          : result.errors && result.errors.length
-            ? result.errors
+          : r.errors && r.errors.length
+            ? r.errors
             : [
-                'No CBE FT numbers were detected in the image. Try a closer, well-lit photo, or add the FT number manually below.',
+                'No CBE FT numbers were detected. Try a closer, well-lit photo, or add the FT number manually below.',
               ],
     };
   }

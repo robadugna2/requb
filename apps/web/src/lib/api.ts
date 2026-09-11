@@ -1181,7 +1181,7 @@ export interface FtScanResult {
   senders?: Record<string, string>;
   bankName?: string;
   confidence: number;
-  detectedVia?: 'gemini' | 'none';
+  detectedVia?: 'gemini-web' | 'gemini' | 'none';
   errors?: string[];
 }
 
@@ -1226,13 +1226,21 @@ export interface CreateDepositPayload {
  * When `accountNumber` is given, misread FT tokens are repaired and verified
  * against CBE. Does not create or modify deposits.
  */
-export const scanFtNumbers = async (file: File, accountNumber?: string): Promise<FtScanResult> => {
+/**
+ * Detect FT numbers + payer names from one or more statement photos. Multiple
+ * photos are sent together and read in a single (batched) provider call.
+ */
+export const scanFtNumbers = async (
+  files: File | File[],
+  accountNumber?: string,
+): Promise<FtScanResult> => {
+  const list = Array.isArray(files) ? files : [files];
   const formData = new FormData();
-  formData.append('image', file);
+  for (const file of list) formData.append('images', file);
   if (accountNumber) formData.append('account', accountNumber);
   const response = await api.post('/deposits/ft-scan', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000, // first run downloads OCR language data; rotations take time
+    timeout: 120000,
   });
   return response.data as FtScanResult;
 };
@@ -1720,8 +1728,17 @@ export interface GeminiSettingStatus {
   updatedAt: string | null; // ISO string
 }
 
+export interface GeminiWebStatus {
+  configured: boolean;
+  baseUrl: string | null;
+  model: string;
+  enabled: boolean;
+  hasKey: boolean;
+}
+
 export interface AiSettingsStatus {
   gemini: GeminiSettingStatus;
+  geminiWeb: GeminiWebStatus;
 }
 
 export const getAiSettings = async (): Promise<AiSettingsStatus> => {
@@ -1742,6 +1759,32 @@ export const clearGeminiKey = async (): Promise<GeminiSettingStatus & { success:
 /** Tests the typed key when given (before saving), otherwise the saved one. */
 export const testGeminiKey = async (apiKey?: string): Promise<{ ok: boolean; message: string }> => {
   const response = await api.post('/settings/gemini/test', { apiKey });
+  return response.data as { ok: boolean; message: string };
+};
+
+// ---- Gemini Web proxy (self-hosted OpenAI-compatible endpoint) --------------
+
+export interface GeminiWebConfig {
+  baseUrl: string;
+  apiKey?: string;
+  model?: string;
+  enabled?: boolean;
+}
+
+export const setGeminiWeb = async (
+  cfg: GeminiWebConfig,
+): Promise<{ success: boolean; geminiWeb: GeminiWebStatus }> => {
+  const response = await api.put('/settings/gemini-web', cfg);
+  return response.data as { success: boolean; geminiWeb: GeminiWebStatus };
+};
+
+export const clearGeminiWeb = async (): Promise<{ success: boolean; geminiWeb: GeminiWebStatus }> => {
+  const response = await api.delete('/settings/gemini-web');
+  return response.data as { success: boolean; geminiWeb: GeminiWebStatus };
+};
+
+export const testGeminiWeb = async (): Promise<{ ok: boolean; message: string }> => {
+  const response = await api.post('/settings/gemini-web/test', {});
   return response.data as { ok: boolean; message: string };
 };
 

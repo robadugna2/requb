@@ -113,6 +113,45 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+interface AttachedPhoto {
+  file: File;
+  /** Object URL for the thumbnail preview */
+  url: string;
+}
+
+/** Thumbnail strip of the extra attached statement pages, each removable. */
+function AttachedPhotoThumbs({
+  photos,
+  onRemove,
+}: {
+  photos: AttachedPhoto[];
+  onRemove: (index: number) => void;
+}) {
+  if (photos.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {photos.map((p, i) => (
+        <div key={p.url} className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={p.url}
+            alt={`Attached statement page ${i + 2}`}
+            className="h-12 w-12 rounded-lg object-cover border border-gray-200 dark:border-gray-800"
+          />
+          <button
+            type="button"
+            onClick={() => onRemove(i)}
+            aria-label={`Remove attached photo ${i + 1}`}
+            className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gray-900 text-[10px] leading-none text-white hover:bg-red-600"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ScanPage() {
@@ -156,9 +195,12 @@ function ScanWorkflow() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<File | null>(null);
-  const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
+  /** Extra statement pages attached to the batched scan (beyond the first) */
+  const [attached, setAttached] = useState<AttachedPhoto[]>([]);
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const extraGalleryRef = useRef<HTMLInputElement>(null);
 
   // Capture state
   const [capturePreview, setCapturePreview] = useState('');
@@ -191,11 +233,13 @@ function ScanWorkflow() {
   const accountReady =
     (group?.cbeAccountNumbers?.length ?? 0) > 0 || ACCOUNT_REGEX.test(accountNumber);
 
-  // Gemini is the only detection engine — surface a missing key up front
+  // AI detection needs at least one provider (Gemini Web proxy or Gemini key)
   useEffect(() => {
     getAiSettings()
-      .then((s) => setGeminiConfigured(s.gemini?.configured ?? false))
-      .catch(() => setGeminiConfigured(null));
+      .then((s) =>
+        setAiConfigured(Boolean(s.geminiWeb?.configured || s.gemini?.configured)),
+      )
+      .catch(() => setAiConfigured(null));
   }, []);
 
   // Fetch groups on mount
@@ -349,6 +393,41 @@ function ScanWorkflow() {
     return accountNumber;
   };
 
+  /** Attach image files as-is (no crop) to the current/next batched scan. */
+  const attachFiles = (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (images.length === 0) return;
+    setAttached((prev) => [
+      ...prev,
+      ...images.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    ]);
+  };
+
+  const removeAttached = (index: number) => {
+    setAttached((prev) => {
+      const target = prev[index];
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  /**
+   * Gallery selection: with no first photo yet, the first picked file goes
+   * through the crop step and any extra pages are attached to the same
+   * batch. Once a session (or a pending crop) exists, everything picked is
+   * attached as-is.
+   */
+  const handleGalleryFiles = (fileList: FileList | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (files.length === 0) return;
+    if (sessionActive || pendingCrop) {
+      attachFiles(files);
+    } else {
+      attachFiles(files.slice(1));
+      setPendingCrop(files[0]);
+    }
+  };
+
   const startScanSession = async (file: File) => {
     setCameraOpen(false);
     setShowResults(false);
@@ -369,6 +448,10 @@ function ScanWorkflow() {
 
     if (!group) return;
 
+    // The cropped first page plus any attached pages are read in ONE batched
+    // request.
+    const batch: File[] = [file, ...attached.map((a) => a.file)];
+
     // Upload evidence image and run FT detection in parallel
     setUploadingEvidence(true);
     setScanning(true);
@@ -382,12 +465,12 @@ function ScanWorkflow() {
       // deploy, or a brief Gemini 503) before surfacing an error.
       let result: FtScanResult;
       try {
-        result = await scanFtNumbers(file, accountNumber || undefined);
+        result = await scanFtNumbers(batch, accountNumber || undefined);
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 503 || status === 502 || status === 504 || !status) {
           await new Promise((r) => setTimeout(r, 3000));
-          result = await scanFtNumbers(file, accountNumber || undefined);
+          result = await scanFtNumbers(batch, accountNumber || undefined);
         } else {
           throw err;
         }
@@ -565,6 +648,8 @@ function ScanWorkflow() {
 
   const resetSession = () => {
     if (capturePreview) URL.revokeObjectURL(capturePreview);
+    attached.forEach((a) => URL.revokeObjectURL(a.url));
+    setAttached([]);
     setCapturePreview('');
     setEvidenceUrl('');
     setEvidenceError('');
@@ -694,11 +779,11 @@ function ScanWorkflow() {
               </div>
             )}
 
-            {geminiConfigured === false && (
+            {aiConfigured === false && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-warning-50 dark:bg-warning-500/10 border border-warning-200 dark:border-warning-500/20 p-3">
                 <AlertTriangle className="h-4 w-4 text-warning-600 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-warning-800 dark:text-warning-400 flex-1">
-                  Gemini is not configured — FT scanning is disabled. Add the free Gemini key in Settings → AI Configuration.
+                  No AI provider is configured — FT scanning is disabled. Set up the Gemini Web proxy or add the free Gemini key in Settings → AI Configuration.
                 </p>
                 <Button variant="secondary" size="sm" onClick={() => router.push('/settings')} className="flex-shrink-0">
                   Open Settings
@@ -713,7 +798,19 @@ function ScanWorkflow() {
               <Button variant="secondary" onClick={() => galleryRef.current?.click()} disabled={!selectedGroupId || loadingGroup || !accountReady}>
                 <ImageIcon className="h-4 w-4 mr-1" /> Upload Statement Photo
               </Button>
+              <Button variant="secondary" onClick={() => extraGalleryRef.current?.click()}>
+                <Plus className="h-4 w-4 mr-1" /> Add Another Photo
+              </Button>
             </div>
+
+            {attached.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                  {attached.length} extra page(s) attached — they are read together with the first photo in one scan.
+                </p>
+                <AttachedPhotoThumbs photos={attached} onRemove={removeAttached} />
+              </div>
+            )}
           </div>
         )}
 
@@ -731,14 +828,25 @@ function ScanWorkflow() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   <Button variant="secondary" size="sm" onClick={() => setCameraOpen(true)}>
                     <Camera className="h-3.5 w-3.5 mr-1" /> Retake
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => extraGalleryRef.current?.click()}>
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Photo
                   </Button>
                   <Button variant="secondary" size="sm" onClick={resetSession}>
                     <Trash2 className="h-3.5 w-3.5 mr-1" /> Discard
                   </Button>
                 </div>
+                {attached.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+                      +{attached.length} extra page(s) · included in Retake scans
+                    </p>
+                    <AttachedPhotoThumbs photos={attached} onRemove={removeAttached} />
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -747,6 +855,11 @@ function ScanWorkflow() {
                     Detected FT Numbers
                   </h3>
                   <div className="flex items-center gap-2">
+                    {scanVia === 'gemini-web' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
+                        Detected via Gemini Web proxy
+                      </span>
+                    )}
                     {scanVia === 'gemini' && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
                         Detected via Gemini AI
@@ -1185,9 +1298,14 @@ function ScanWorkflow() {
           />
         )}
 
-        <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) setPendingCrop(file);
+        <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+          handleGalleryFiles(e.target.files);
+          e.target.value = '';
+        }} />
+
+        {/* Extra statement pages — attached as-is (no crop) to the batched scan */}
+        <input ref={extraGalleryRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+          handleGalleryFiles(e.target.files);
           e.target.value = '';
         }} />
       </div>

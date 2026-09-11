@@ -3,14 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SettingsService } from '../settings/settings.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
+import { throttled } from '../../common/utils/ai-throttle';
 import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 import type { FtScanResult } from './ocr.service';
 
 /**
  * Exact same FT-extraction prompt as OcrService.extractFtNumbers, so both
- * providers produce comparable JSON replies.
+ * providers produce comparable JSON replies. Exported for reuse by the
+ * OpenAI-compatible Gemini Web proxy service.
  */
-const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank documents. Read this bank statement / transfer receipt photo and extract every transaction reference number AND the payer (sender) name printed with it.
+export const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank documents. Read this bank statement / transfer receipt photo and extract every transaction reference number AND the payer (sender) name printed with it.
 
 Rules:
 - CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. They appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows. References may be wrapped across two lines inside one table cell — read them as one. Some have extended identifiers after "\\", "/", or "|" (e.g. FT24AB123456\\BNK) — return only the FT part.
@@ -20,7 +22,56 @@ Rules:
 Return ONLY valid JSON in this exact shape:
 { "ftNumbers": ["FT...", "..."], "senders": { "FT...": "Payer Full Name" }, "bankName": "CBE", "confidence": 0.9 }`;
 
-const FT_USER_PROMPT = 'Find all transaction / FT reference numbers in this bank document photo:';
+export const FT_USER_PROMPT = 'Find all transaction / FT reference numbers in this bank document photo:';
+
+/**
+ * Parses a model's JSON reply into normalized FT numbers + per-FT sender
+ * names. Shared by the official Gemini service and the web proxy so both
+ * providers behave identically.
+ */
+export function parseFtScanJson(content: string): {
+  ftNumbers: string[];
+  senders: Record<string, string>;
+  bankName?: string;
+  confidence: number;
+} {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { ftNumbers: [], senders: {}, confidence: 0 };
+
+  let parsed: {
+    ftNumbers?: unknown;
+    senders?: Record<string, unknown>;
+    bankName?: string;
+    confidence?: number;
+  };
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return { ftNumbers: [], senders: {}, confidence: 0 };
+  }
+
+  const ftNumbers: string[] = Array.from(
+    new Set(
+      (Array.isArray(parsed.ftNumbers) ? parsed.ftNumbers : [])
+        .map((ft: unknown) => normalizeFtNumber(String(ft ?? '')) ?? '')
+        .filter((ft: string) => /^FT\w{10}$/.test(ft)),
+    ),
+  );
+
+  const senders: Record<string, string> = {};
+  for (const [ft, name] of Object.entries(parsed.senders ?? {})) {
+    const clean = normalizeFtNumber(String(ft ?? ''));
+    const cleanName = String(name ?? '').trim();
+    if (clean && cleanName && /^FT\w{10}$/.test(clean)) senders[clean] = cleanName;
+  }
+
+  return {
+    ftNumbers,
+    senders,
+    bankName: parsed.bankName || undefined,
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+  };
+}
 
 interface GeminiApiResponse {
   candidates?: Array<{
@@ -84,56 +135,26 @@ export class GeminiService {
 
   /**
    * FT-number extraction with the exact same prompt, JSON parsing and
-   * normalization as OcrService.extractFtNumbers (Gemini flavor).
+   * normalization as the Gemini Web proxy service (shared parseFtScanJson).
    */
   async extractFtNumbers(imageDataUrl: string): Promise<FtScanResult> {
     try {
       const content = await this.generateContent(imageDataUrl, FT_SYSTEM_PROMPT, FT_USER_PROMPT);
-
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      const parsed = parseFtScanJson(content);
+      if (parsed.ftNumbers.length === 0 && !content.includes('{')) {
         return {
           ftNumbers: [],
+          senders: {},
           confidence: 0,
           rawText: content,
           errors: ['Could not parse Gemini response as JSON'],
         };
       }
-
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        ftNumbers?: unknown;
-        senders?: Record<string, unknown>;
-        bankName?: string;
-        confidence?: number;
-      };
-
-      // Normalize each candidate: strip extended identifiers
-      // ("FT24AB123456\BNK" -> "FT24AB123456"), then keep only valid
-      // CBE-format numbers.
-      const ftNumbers: string[] = Array.from(
-        new Set(
-          (Array.isArray(parsed.ftNumbers) ? parsed.ftNumbers : [])
-            .map((ft: unknown) => normalizeFtNumber(String(ft ?? '')) ?? '')
-            .filter((ft: string) => /^FT\w{10}$/.test(ft)),
-        ),
-      );
-
-      // Payer / sender names per FT (used for automatic member pairing when
-      // the CBE lookup doesn't return a payer)
-      const senders: Record<string, string> = {};
-      for (const [ft, name] of Object.entries(parsed.senders ?? {})) {
-        const clean = normalizeFtNumber(String(ft ?? ''));
-        const cleanName = String(name ?? '').trim();
-        if (clean && cleanName && /^FT\w{10}$/.test(clean)) {
-          senders[clean] = cleanName;
-        }
-      }
-
       return {
-        ftNumbers,
-        senders,
-        bankName: parsed.bankName || undefined,
-        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+        ftNumbers: parsed.ftNumbers,
+        senders: parsed.senders,
+        bankName: parsed.bankName,
+        confidence: parsed.confidence,
         rawText: content,
       };
     } catch (error: unknown) {
@@ -324,23 +345,25 @@ export class GeminiService {
     systemPrompt: string,
     userText: string,
   ): Promise<string> {
-    const response = await axios.post<GeminiApiResponse>(
-      `${GEMINI_MODELS_URL}/${model}:generateContent`,
-      {
-        contents: [
-          {
-            parts: [
-              { text: `${systemPrompt}\n\n${userText}` },
-              { inline_data: { mime_type: mimeType, data } },
-            ],
-          },
-        ],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
-      },
-      {
-        headers: { 'x-goog-api-key': key },
-        timeout: 60000, // vision calls on larger statements can be slow
-      },
+    const response = await throttled(() =>
+      axios.post<GeminiApiResponse>(
+        `${GEMINI_MODELS_URL}/${model}:generateContent`,
+        {
+          contents: [
+            {
+              parts: [
+                { text: `${systemPrompt}\n\n${userText}` },
+                { inline_data: { mime_type: mimeType, data } },
+              ],
+            },
+          ],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+        },
+        {
+          headers: { 'x-goog-api-key': key },
+          timeout: 60000, // vision calls on larger statements can be slow
+        },
+      ),
     );
 
     const text = (response.data.candidates?.[0]?.content?.parts ?? [])
