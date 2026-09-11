@@ -3,9 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SettingsService } from '../settings/settings.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
+import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 import type { FtScanResult } from './ocr.service';
-
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
  * Exact same FT-extraction prompt as OcrService.extractFtNumbers, so both
@@ -39,6 +38,9 @@ interface GeminiApiResponse {
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
+  /** Auto-detected model per key, refreshed hourly or on model-not-found */
+  private modelCache: { key: string; model: string; at: number } | null = null;
+  private static MODEL_CACHE_TTL = 60 * 60 * 1000;
 
   constructor(
     private readonly configService: ConfigService,
@@ -134,8 +136,11 @@ export class GeminiService {
   }
 
   /**
-   * Core generateContent call. Throws on any failure so extractFtNumbers can
-   * surface the real error message; processReceipt wraps it into null.
+   * Core generateContent call. Auto-detects the best available model from
+   * Google's live /models list (Google retires models regularly — nothing is
+   * hardcoded), and re-detects once if the chosen model 404s mid-flight.
+   * Throws on failure so extractFtNumbers can surface the real error;
+   * processReceipt wraps it into null.
    */
   private async generateContent(
     imageDataUrl: string,
@@ -153,10 +158,68 @@ export class GeminiService {
     }
     const [, mimeType, data] = match;
 
-    const model = this.configService.get<string>('GEMINI_MODEL') || 'gemini-2.0-flash';
+    const model = await this.getBestModel(key);
 
+    try {
+      return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const message = error instanceof Error ? error.message : String(error);
+      const isModelGone =
+        status === 404 || /not found|not supported|does not (?:exist|have)/i.test(message);
+      const usingOverride = !!this.configService.get<string>('GEMINI_MODEL');
+
+      // Retired/renamed model: refresh the auto-detection and retry once
+      if (isModelGone && !usingOverride) {
+        this.logger.warn(`Gemini model ${model} unavailable — re-detecting from /models list`);
+        this.invalidateModelCache();
+        const fresh = await this.getBestModel(key);
+        return await this.callGenerateContent(key, fresh, mimeType, data, systemPrompt, userText);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Auto-detects the best available Gemini model for this key. GEMINI_MODEL
+   * env overrides the detection. Cached per key for an hour.
+   */
+  private async getBestModel(key: string): Promise<string> {
+    const envModel = this.configService.get<string>('GEMINI_MODEL');
+    if (envModel) return envModel;
+
+    const cached = this.modelCache;
+    if (cached && cached.key === key && Date.now() - cached.at < GeminiService.MODEL_CACHE_TTL) {
+      return cached.model;
+    }
+
+    const response = await axios.get(GEMINI_MODELS_URL, {
+      headers: { 'x-goog-api-key': key },
+      timeout: 15000,
+    });
+    const best = pickBestGeminiModel(response.data?.models ?? []);
+    if (!best) {
+      throw new Error('No Gemini models with generateContent support are available to this API key');
+    }
+    this.modelCache = { key, model: best, at: Date.now() };
+    this.logger.log(`Auto-detected Gemini model: ${best}`);
+    return best;
+  }
+
+  private invalidateModelCache() {
+    this.modelCache = null;
+  }
+
+  private async callGenerateContent(
+    key: string,
+    model: string,
+    mimeType: string,
+    data: string,
+    systemPrompt: string,
+    userText: string,
+  ): Promise<string> {
     const response = await axios.post<GeminiApiResponse>(
-      `${GEMINI_BASE_URL}/${model}:generateContent`,
+      `${GEMINI_MODELS_URL}/${model}:generateContent`,
       {
         contents: [
           {

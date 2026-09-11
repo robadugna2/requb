@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import axios from 'axios';
 import OpenAI from 'openai';
 import { PrismaService } from '../../prisma/prisma.service';
+import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 
 const OPENAI_KEY_SETTING = 'openai_api_key';
 const GEMINI_KEY_SETTING = 'gemini_api_key';
@@ -171,10 +172,30 @@ export class SettingsService {
       };
     }
 
+    // Model auto-detection: list what this key can actually use (Google
+    // retires models regularly — never assume one exists), then prove the
+    // key works end-to-end with a real generateContent call on that model.
+    const envModel = this.configService.get<string>('GEMINI_MODEL');
     try {
+      const listResponse = await Promise.race([
+        axios.get(GEMINI_MODELS_URL, { headers: { 'x-goog-api-key': key } }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request to Gemini timed out after 15s')), 15000),
+        ),
+      ]);
+      const model =
+        envModel ?? pickBestGeminiModel(listResponse.data?.models ?? []);
+
+      if (!model) {
+        return {
+          ok: false,
+          message: 'Key is valid but no Gemini models are available to it.',
+        };
+      }
+
       await Promise.race([
         axios.post(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+          `${GEMINI_MODELS_URL}/${model}:generateContent`,
           { contents: [{ parts: [{ text: 'Reply with the single word OK' }] }] },
           { headers: { 'x-goog-api-key': key } },
         ),
@@ -182,7 +203,10 @@ export class SettingsService {
           setTimeout(() => reject(new Error('Request to Gemini timed out after 15s')), 15000),
         ),
       ]);
-      return { ok: true, message: 'Gemini API key is valid and working.' };
+      return {
+        ok: true,
+        message: `Gemini API key is valid — auto-selected model ${model}.`,
+      };
     } catch (error: unknown) {
       const response =
         typeof error === 'object' && error !== null
@@ -199,6 +223,13 @@ export class SettingsService {
 
       if (status === 400 && /API key/i.test(message)) {
         return { ok: false, message: 'Invalid Gemini API key — rejected by Google.' };
+      }
+
+      if (status === 403) {
+        return {
+          ok: false,
+          message: 'This key is not allowed to use the Gemini API (check restrictions in Google AI Studio).',
+        };
       }
 
       if (status === 429) {
