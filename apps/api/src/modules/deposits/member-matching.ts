@@ -17,7 +17,9 @@ export interface MemberMatchCandidate {
   membershipStatus?: string;
   score: number;
   /** Which source produced the best score */
-  matchedVia: 'name' | 'bankAccountName' | 'history';
+  matchedVia: 'name' | 'bankAccountName' | 'history' | 'payerAlias';
+  /** When matchedVia is 'payerAlias', the registered alias that matched */
+  matchedAlias?: string;
 }
 
 const MIN_TOKEN_SIMILARITY = 0.75;
@@ -113,10 +115,14 @@ export const WEAK_MATCH_THRESHOLD = 0.35;
 export const AMBIGUITY_MARGIN = 0.1;
 
 /**
- * Rank group members by how well their stored name OR bank account holder
- * name matches a transaction payer name. `bankAccountName` is the name as
- * registered at the bank, so it frequently matches the CBE receipt payer
- * exactly even when the equb profile name differs in transliteration.
+ * Rank group members by how well a transaction payer name matches their
+ * stored name, their bank-account-holder name, OR any of their registered
+ * AUTHORIZED PAYER aliases (people who pay on the member's behalf — spouse,
+ * sibling, relative). `bankAccountName` is the name as registered at the
+ * bank, so it frequently matches the CBE receipt payer exactly even when the
+ * equb profile name differs in transliteration. An alias match is treated as
+ * a strong signal (the admin explicitly registered that person as paying for
+ * this member).
  */
 export function rankMembersByPayerName(
   payerName: string,
@@ -124,6 +130,7 @@ export function rankMembersByPayerName(
     userId: string;
     name: string;
     bankAccountName?: string;
+    aliases?: string[];
     phone?: string;
     photoUrl?: string;
     membershipStatus?: string;
@@ -135,17 +142,39 @@ export function rankMembersByPayerName(
       const bankScore = m.bankAccountName
         ? scoreNameMatch(payerName, m.bankAccountName)
         : 0;
-      const useBank = bankScore > nameScore;
+      // Best match against any authorized-payer alias, slightly boosted so a
+      // registered proxy payer wins over a coincidental partial name match.
+      let aliasScore = 0;
+      let aliasName: string | undefined;
+      for (const alias of m.aliases ?? []) {
+        const s = scoreNameMatch(payerName, alias);
+        if (s > aliasScore) {
+          aliasScore = s;
+          aliasName = alias;
+        }
+      }
+      const aliasBoosted = aliasScore > 0 ? Math.min(1, aliasScore + 0.1) : 0;
+
+      let matchedVia: MemberMatchCandidate['matchedVia'] = 'name';
+      let score = nameScore;
+      if (bankScore > score) {
+        score = bankScore;
+        matchedVia = 'bankAccountName';
+      }
+      if (aliasBoosted > score) {
+        score = aliasBoosted;
+        matchedVia = 'payerAlias';
+      }
+
       return {
         userId: m.userId,
         name: m.name,
         phone: m.phone,
         photoUrl: m.photoUrl,
         membershipStatus: m.membershipStatus,
-        score: Math.max(nameScore, bankScore),
-        matchedVia: (useBank ? 'bankAccountName' : 'name') as
-          | 'bankAccountName'
-          | 'name',
+        score: Math.round(Math.min(score, 1) * 1000) / 1000,
+        matchedVia,
+        matchedAlias: aliasName,
       };
     })
     .filter((m) => m.score > 0)

@@ -36,6 +36,7 @@ import {
   updateGroupCbeAccounts,
   normalizeFtNumber,
   getAiSettings,
+  addPayerAlias,
 } from '@/lib/api';
 import type {
   GroupListItem,
@@ -59,7 +60,7 @@ interface ScanItem {
   member: { id: string; name: string } | null;
   autoPaired: boolean;
   matchScore?: number;
-  matchVia?: 'name' | 'bankAccountName' | 'history';
+  matchVia?: 'name' | 'bankAccountName' | 'history' | 'payerAlias';
   suggestions: MemberSuggestion[];
   amount?: number;
   /** yyyy-mm-dd for the date input */
@@ -70,6 +71,9 @@ interface ScanItem {
   creating?: boolean;
   outcome?: 'verified' | 'pending' | 'failed';
   outcomeMsg?: string;
+  /** Whether the detected payer name was registered as an authorized payer */
+  aliasRegistered?: boolean;
+  registeringAlias?: boolean;
 }
 
 const FT_REGEX = /^FT\w{10}$/i;
@@ -464,6 +468,20 @@ function ScanWorkflow() {
 
   const retryItem = async (ft: string) => {
     await runLookup(ft, selectedGroupId, accountNumber, scanSenders[ft]);
+  };
+
+  // Self-learning: register the detected payer name as an authorized payer
+  // for the paired member, so future scans auto-pair without a manual pick.
+  const registerPayerAlias = async (ft: string, memberId: string, payerName: string) => {
+    patchItem(ft, { registeringAlias: true });
+    try {
+      await addPayerAlias(memberId, payerName, 'registered from FT scan');
+      patchItem(ft, { registeringAlias: false, aliasRegistered: true });
+      showToast(`"${payerName}" registered as an authorized payer`, 'success');
+    } catch (err: unknown) {
+      patchItem(ft, { registeringAlias: false });
+      showToast(axiosMessage(err), 'error');
+    }
   };
 
   // ─── Confirm & create ───────────────────────────────────────────────────────
@@ -906,7 +924,9 @@ function ScanWorkflow() {
                                 ? 'auto-paired from past deposits'
                                 : it.matchVia === 'bankAccountName'
                                   ? `auto-paired via bank account name (${Math.round(it.matchScore * 100)}%)`
-                                  : `auto-paired (${Math.round(it.matchScore * 100)}%)`}
+                                  : it.matchVia === 'payerAlias'
+                                    ? 'auto-paired via authorized payer'
+                                    : `auto-paired (${Math.round(it.matchScore * 100)}%)`}
                             </span>
                           )}
                           {it.autoPaired && typeof it.matchScore === 'number' && it.matchScore < 0.6 && (
@@ -953,6 +973,30 @@ function ScanWorkflow() {
                         </Button>
                       </div>
                     )}
+                    {/* Self-learning: register an unmatched proxy payer name */}
+                    {it.member &&
+                      (it.tx?.payer || it.geminiSender) &&
+                      it.matchVia !== 'payerAlias' &&
+                      (it.aliasRegistered ? (
+                        <p className="mt-1.5 text-xs text-green-700 dark:text-success-400 flex items-center gap-1">
+                          <CheckCircle className="h-3.5 w-3.5" /> Registered as an authorized payer for {it.member.name}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={it.registeringAlias}
+                          onClick={() =>
+                            registerPayerAlias(
+                              it.ftNumber,
+                              it.member!.id,
+                              (it.tx?.payer || it.geminiSender)!,
+                            )
+                          }
+                          className="mt-1.5 text-xs text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-50"
+                        >
+                          {it.registeringAlias ? 'Registering...' : `Register "${it.tx?.payer || it.geminiSender}" as an authorized payer for ${it.member.name} — future scans pair automatically`}
+                        </button>
+                      ))}
                   </div>
 
                   {/* Editable deposit fields */}

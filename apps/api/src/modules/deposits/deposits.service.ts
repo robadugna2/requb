@@ -376,6 +376,7 @@ export class DepositsService {
             phone: true,
             photoUrl: true,
             bankAccountName: true,
+            payerAliases: { select: { name: true } },
           },
         },
       },
@@ -422,7 +423,7 @@ export class DepositsService {
       }
     }
 
-    // 2) Fuzzy name / bank-account-name matching
+    // 2) Fuzzy name / bank-account-name / authorized-payer-alias matching
     const suggestions = rankMembersByPayerName(
       payerName,
       memberships.map((m) => ({
@@ -431,6 +432,7 @@ export class DepositsService {
         phone: m.user.phone,
         photoUrl: m.user.photoUrl ?? undefined,
         bankAccountName: m.user.bankAccountName ?? undefined,
+        aliases: (m.user.payerAliases ?? []).map((a) => a.name),
         membershipStatus: m.status,
       })),
     );

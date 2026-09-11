@@ -157,6 +157,13 @@ export interface UserGroupMembership {
   contributionAmount: number;
 }
 
+export interface PayerAlias {
+  id: string;
+  name: string;
+  note?: string | null;
+  createdAt: string;
+}
+
 export interface UserDetail {
   id: string;
   name: string;
@@ -179,6 +186,7 @@ export interface UserDetail {
   deposits: UserDepositRecord[];
   lotteryWins: UserLotteryWin[];
   totalDeposits: number;
+  payerAliases?: PayerAlias[];
 }
 
 export interface GroupRules {
@@ -608,6 +616,14 @@ function mapUserDetail(raw: Record<string, unknown>): UserDetail {
     deposits: depositRecords,
     lotteryWins: lotteryWinRecords,
     totalDeposits,
+    payerAliases: ((raw.payerAliases as Array<Record<string, unknown>> | undefined) ?? []).map(
+      (a) => ({
+        id: a.id as string,
+        name: a.name as string,
+        note: (a.note as string | null | undefined) ?? null,
+        createdAt: a.createdAt ? new Date(a.createdAt as string).toISOString() : '',
+      }),
+    ),
   };
 }
 
@@ -1031,6 +1047,37 @@ export const getMember = async (id: string): Promise<UserDetail> => {
   return mapUserDetail(response.data as Record<string, unknown>);
 };
 
+// ─── Authorized payer aliases (proxy payers: spouse, sibling, relative) ──────
+
+export const getPayerAliases = async (userId: string): Promise<PayerAlias[]> => {
+  const response = await api.get(`/users/${userId}/payer-aliases`);
+  return (response.data as Array<Record<string, unknown>>).map((a) => ({
+    id: a.id as string,
+    name: a.name as string,
+    note: (a.note as string | null | undefined) ?? null,
+    createdAt: a.createdAt ? new Date(a.createdAt as string).toISOString() : '',
+  }));
+};
+
+export const addPayerAlias = async (
+  userId: string,
+  name: string,
+  note?: string,
+): Promise<PayerAlias> => {
+  const response = await api.post(`/users/${userId}/payer-aliases`, { name, note });
+  const a = response.data as Record<string, unknown>;
+  return {
+    id: a.id as string,
+    name: a.name as string,
+    note: (a.note as string | null | undefined) ?? null,
+    createdAt: a.createdAt ? new Date(a.createdAt as string).toISOString() : '',
+  };
+};
+
+export const removePayerAlias = async (userId: string, aliasId: string): Promise<void> => {
+  await api.delete(`/users/${userId}/payer-aliases/${aliasId}`);
+};
+
 export const updateMember = async (id: string, data: Record<string, unknown>) => {
   const response = await api.patch(`/users/${id}`, data);
   return response.data;
@@ -1145,7 +1192,7 @@ export interface MemberSuggestion {
   photoUrl?: string;
   membershipStatus?: string;
   score: number;
-  matchedVia?: 'name' | 'bankAccountName' | 'history';
+  matchedVia?: 'name' | 'bankAccountName' | 'history' | 'payerAlias';
   autoPaired?: boolean;
 }
 

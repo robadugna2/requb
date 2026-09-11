@@ -143,8 +143,28 @@ model User {
   disputesAgainst   Dispute[]         @relation("DisputeTarget")
   mergedSlots       MergedMemberSlot[]
   adminFeeWaivers   AdminFeeWaiver[]
+  payerAliases      MemberPayerAlias[]
 
   @@map("users")
+}
+
+/// Alternate bank-account holder names that are authorized to pay on a
+/// member's behalf (spouse, sibling, relative). When the FT scanner reads a
+/// payer name matching one of these, the transaction auto-pairs to this
+/// member instead of requiring a manual pick.
+model MemberPayerAlias {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([name])
+  @@map("member_payer_aliases")
 }
 
 model EqubGroup {

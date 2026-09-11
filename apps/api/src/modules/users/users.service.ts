@@ -84,6 +84,9 @@ export class UsersService {
         memberships: {
           include: { group: true },
         },
+        payerAliases: {
+          orderBy: { createdAt: 'asc' },
+        },
         deposits: {
           orderBy: { cycle: { cycleNumber: 'asc' } },
           include: {
@@ -194,5 +197,45 @@ export class UsersService {
     return this.prisma.user.findUnique({
       where: { phone },
     });
+  }
+
+  // ---- Authorized payer aliases (people who pay on a member's behalf) ------
+
+  async listPayerAliases(userId: string) {
+    await this.findOne(userId);
+    return this.prisma.memberPayerAlias.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addPayerAlias(userId: string, name: string, note?: string) {
+    await this.findOne(userId);
+    const clean = (name ?? '').trim();
+    if (!clean) {
+      throw new ConflictException('Payer name is required');
+    }
+
+    const existing = await this.prisma.memberPayerAlias.findFirst({
+      where: { userId, name: clean },
+    });
+    if (existing) {
+      throw new ConflictException(`"${clean}" is already registered for this member`);
+    }
+
+    return this.prisma.memberPayerAlias.create({
+      data: { userId, name: clean, note: note?.trim() || null },
+    });
+  }
+
+  async removePayerAlias(userId: string, aliasId: string) {
+    const alias = await this.prisma.memberPayerAlias.findFirst({
+      where: { id: aliasId, userId },
+    });
+    if (!alias) {
+      throw new NotFoundException('Payer alias not found');
+    }
+    await this.prisma.memberPayerAlias.delete({ where: { id: aliasId } });
+    return { success: true };
   }
 }

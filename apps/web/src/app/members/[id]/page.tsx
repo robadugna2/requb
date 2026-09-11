@@ -16,13 +16,15 @@ import {
   AlertCircle,
   Eye,
   Pencil,
+  UserPlus,
+  X,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
-import { getMember, deleteUserWithPassword, updateMember, getMediaUrl, updateMemberShares } from '@/lib/api';
+import { getMember, deleteUserWithPassword, updateMember, getMediaUrl, updateMemberShares, addPayerAlias, removePayerAlias } from '@/lib/api';
 import type { UserDetail } from '@/lib/api';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 
@@ -64,6 +66,12 @@ export default function MemberDetailPage() {
   const [shareValue, setShareValue] = useState<number>(1);
   const [savingShares, setSavingShares] = useState(false);
 
+  // Authorized payers (proxy payers who contribute on this member's behalf)
+  const [aliasName, setAliasName] = useState('');
+  const [aliasNote, setAliasNote] = useState('');
+  const [addingAlias, setAddingAlias] = useState(false);
+  const [removingAliasId, setRemovingAliasId] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchUser = async () => {
       setLoading(true);
@@ -80,6 +88,46 @@ export default function MemberDetailPage() {
     };
     fetchUser();
   }, [memberId]);
+
+  const refreshMember = async () => {
+    try {
+      const data = await getMember(memberId);
+      setUser(data);
+    } catch {
+      /* ignore — next interaction retries */
+    }
+  };
+
+  const handleAddAlias = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aliasName.trim()) return;
+    setAddingAlias(true);
+    setError(null);
+    try {
+      await addPayerAlias(memberId, aliasName.trim(), aliasNote.trim() || undefined);
+      setAliasName('');
+      setAliasNote('');
+      await refreshMember();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to add authorized payer.');
+    } finally {
+      setAddingAlias(false);
+    }
+  };
+
+  const handleRemoveAlias = async (aliasId: string) => {
+    setRemovingAliasId(aliasId);
+    try {
+      await removePayerAlias(memberId, aliasId);
+      await refreshMember();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr.response?.data?.message || 'Failed to remove authorized payer.');
+    } finally {
+      setRemovingAliasId(null);
+    }
+  };
 
   const EMPLOYMENT_TYPES = [
     { value: '', label: 'Select...' },
@@ -442,6 +490,75 @@ export default function MemberDetailPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Authorized payers — people who contribute on this member's behalf */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-1 flex items-center gap-2">
+          <UserPlus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+          Authorized Payers
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Bank account holder names that are allowed to pay this member's Equb
+          contributions (spouse, sibling, relative). Scanned transactions from
+          these names auto-pair to <span className="font-medium text-gray-700 dark:text-gray-200">{user.name}</span>.
+        </p>
+
+        {/* Existing aliases */}
+        {(user.payerAliases?.length ?? 0) > 0 ? (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {user.payerAliases!.map((a) => (
+              <span
+                key={a.id}
+                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-brand-50 dark:bg-brand-500/10 border border-brand-100 dark:border-brand-500/20 text-sm text-gray-800 dark:text-gray-100"
+                title={a.note || undefined}
+              >
+                {a.name}
+                {a.note && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">· {a.note}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAlias(a.id)}
+                  disabled={removingAliasId === a.id}
+                  className="p-0.5 rounded-full hover:bg-brand-100 dark:hover:bg-brand-500/20 disabled:opacity-40"
+                  aria-label={`Remove ${a.name}`}
+                >
+                  {removingAliasId === a.id ? (
+                    <span className="block w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
+                  )}
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+            No authorized payers registered yet.
+          </p>
+        )}
+
+        {/* Add alias */}
+        <form onSubmit={handleAddAlias} className="flex flex-col sm:flex-row gap-2">
+          <input
+            className="input-field flex-1"
+            placeholder="Payer account holder name (e.g. Walelign Kebede)"
+            value={aliasName}
+            onChange={(e) => setAliasName(e.target.value)}
+            maxLength={100}
+          />
+          <input
+            className="input-field sm:w-40"
+            placeholder="Relation (optional)"
+            value={aliasNote}
+            onChange={(e) => setAliasNote(e.target.value)}
+            maxLength={100}
+          />
+          <Button type="submit" loading={addingAlias} disabled={!aliasName.trim()} className="flex-shrink-0">
+            <UserPlus className="h-4 w-4 mr-1" /> Add
+          </Button>
+        </form>
       </div>
 
       {/* Tabs */}
