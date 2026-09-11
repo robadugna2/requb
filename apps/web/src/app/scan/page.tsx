@@ -363,14 +363,15 @@ function ScanWorkflow() {
 
   // ─── Capture & scan ─────────────────────────────────────────────────────────
 
-  const loadExistingFts = async (grpId: string) => {
+  const loadExistingFts = async (grpId: string): Promise<Set<string>> => {
     try {
       const deposits = await getDeposits({ groupId: grpId });
-      setExistingFts(
-        new Set(deposits.map((d) => (d.ftNumber || '').toUpperCase()).filter(Boolean)),
-      );
+      const set = new Set(deposits.map((d) => (d.ftNumber || '').toUpperCase()).filter(Boolean));
+      setExistingFts(set);
+      return set;
     } catch {
       /* duplicate pre-check is best-effort; server still rejects duplicates */
+      return existingFts;
     }
   };
 
@@ -518,31 +519,60 @@ function ScanWorkflow() {
     await Promise.all([uploadPromise, scanPromise]);
   };
 
-  const addManualFt = async () => {
+  /**
+   * Adds one manually typed FT to the session — identical verification and
+   * pairing pipeline as scanned FTs (CBE lookup → auto-pairing). Works with
+   * or without a statement photo: typing the first FT from the setup section
+   * starts a manual session (no evidence image needed — the CBE verification
+   * IS the evidence). Duplicates are warned and rejected/flagged by reason.
+   */
+  const addManualFt = async (): Promise<boolean> => {
     // Accept extended identifiers ("FT24AB123456\BNK") — the suffix is dropped
     const ft = (normalizeFtNumber(manualFt) ?? '').toUpperCase();
     if (!FT_REGEX.test(ft)) {
       showToast('Invalid FT format. Expected: FT followed by 10 alphanumeric characters', 'error');
-      return;
+      return false;
     }
     if (items.some((it) => it.ftNumber === ft)) {
-      showToast('This FT number is already in the list', 'warning');
-      return;
+      showToast(`FT ${ft} is already in this scan — flagged as duplicate`, 'warning');
+      return false;
     }
+    if (!selectedGroupId) {
+      showToast('Select the equb group first', 'error');
+      return false;
+    }
+    if (!accountReady) {
+      showToast('Select or enter the CBE receiver account first', 'error');
+      return false;
+    }
+
+    const fresh = sessionActive ? existingFts : await loadExistingFts(selectedGroupId);
+    const isDuplicate = fresh.has(ft);
+
     setManualFt('');
     setScanNotice('');
-    const newItem: ScanItem = {
-      ftNumber: ft,
-      status: 'verifying',
-      member: null,
-      autoPaired: false,
-      suggestions: [],
-      cycleId: activeCycle?.id,
-      isDuplicate: existingFts.has(ft),
-    };
-    setItems((prev) => [...prev, newItem]);
+    if (!sessionActive) {
+      setSessionActive(true);
+      setShowResults(false);
+    }
+    setItems((prev) => [
+      ...prev,
+      {
+        ftNumber: ft,
+        status: 'verifying' as const,
+        member: null,
+        autoPaired: false,
+        suggestions: [],
+        cycleId: activeCycle?.id,
+        isDuplicate,
+      },
+    ]);
+    if (isDuplicate) {
+      showToast(`FT ${ft} is already recorded in this group — flagged as duplicate, it will not be created`, 'warning');
+    }
     const savedAccount = await ensureAccountSaved();
     await runLookup(ft, selectedGroupId, savedAccount);
+    return true;
   };
 
   const removeItem = (ft: string) => {
@@ -605,7 +635,7 @@ function ScanWorkflow() {
           cycleId: it.cycleId || activeCycle?.id || '',
           userId: it.member!.id,
           groupId: group.id,
-          imageUrl: evidenceUrl,
+          imageUrl: evidenceUrl || undefined,
           ftNumber: it.ftNumber,
           amount: it.amount,
           bankName: 'CBE',
@@ -822,6 +852,40 @@ function ScanWorkflow() {
               </Button>
             </div>
 
+            {/* Manual FT entry — same CBE verification + pairing pipeline, no photo needed */}
+            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Or enter FT numbers manually — same CBE verification and member pairing, no photo needed
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className="input-field font-mono flex-1"
+                  placeholder="FT + 10 characters (e.g. FT253126QXMJ)"
+                  value={manualFt}
+                  onChange={(e) => setManualFt(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addManualFt();
+                    }
+                  }}
+                  disabled={!selectedGroupId || !accountReady || loadingGroup}
+                  maxLength={40}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => addManualFt()}
+                  disabled={!selectedGroupId || !accountReady || loadingGroup || !manualFt.trim()}
+                  className="flex-shrink-0"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add FT
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Each FT is verified against CBE and auto-paired instantly. Duplicates are flagged and never recorded twice.
+              </p>
+            </div>
+
             {attached.length > 0 && (
               <div className="mt-4">
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
@@ -833,10 +897,11 @@ function ScanWorkflow() {
           </div>
         )}
 
-        {/* Statement photo + detected FTs */}
-        {sessionActive && capturePreview && (
+        {/* Detected FTs (with statement photo when one was captured) */}
+        {sessionActive && (
           <div className="card">
             <div className="flex flex-col md:flex-row gap-5">
+              {capturePreview && (
               <div className="md:w-56 flex-shrink-0">
                 <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -867,6 +932,7 @@ function ScanWorkflow() {
                   </div>
                 )}
               </div>
+              )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1256,7 +1322,7 @@ function ScanWorkflow() {
                     <span className="block text-xs text-warning-700 dark:text-warning-400 mt-1">
                       {uploadingEvidence
                         ? 'Statement photo still uploading…'
-                        : !evidenceUrl
+                        : !evidenceUrl && capturePreview
                           ? evidenceError || 'Statement photo upload failed — retake or re-upload (the evidence image is required).'
                           : !group?.cycles?.length
                             ? 'This group has no cycles yet — open the group page and start a cycle first.'
@@ -1266,7 +1332,7 @@ function ScanWorkflow() {
                     </span>
                   )}
                 </div>
-                <Button onClick={confirmCreateAll} loading={creating} disabled={eligibleCount === 0 || !evidenceUrl}>
+                <Button onClick={confirmCreateAll} loading={creating} disabled={eligibleCount === 0 || (!evidenceUrl && !!capturePreview)}>
                   <CheckCircle className="h-4 w-4 mr-1" />
                   Create {eligibleCount > 0 ? eligibleCount : ''} Deposit{eligibleCount === 1 ? '' : 's'}
                 </Button>

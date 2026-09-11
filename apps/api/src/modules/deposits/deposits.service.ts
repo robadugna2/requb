@@ -17,7 +17,8 @@ import {
 export interface CreateDepositData {
   cycleId: string;
   userId: string;
-  imageUrl: string;
+  /** Receipt photo — absent for manual FT entries verified against CBE */
+  imageUrl?: string;
   ocrData?: Prisma.InputJsonValue;
   ftNumber?: string;
   amount?: number;
@@ -325,7 +326,7 @@ export class DepositsService {
       data: {
         cycleId: data.cycleId,
         userId: data.userId,
-        imageUrl: data.imageUrl,
+        imageUrl: data.imageUrl ?? null,
         ocrData: data.ocrData,
         ftNumber,
         amount: data.amount,

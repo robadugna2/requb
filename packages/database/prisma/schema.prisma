@@ -248,7 +248,7 @@ model Deposit {
   id                 String             @id @default(cuid())
   cycleId            String             @map("cycle_id")
   userId             String             @map("user_id")
-  imageUrl           String             @map("image_url")
+  imageUrl           String?            @map("image_url") // optional: manual FT entries have no receipt photo
   ocrData            Json?              @map("ocr_data")
   ftNumber           String?            @map("ft_number")
   amount             Float?

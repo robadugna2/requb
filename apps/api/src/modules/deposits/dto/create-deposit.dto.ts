@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
 } from 'class-validator';
 
 /**
@@ -26,9 +27,11 @@ export class CreateDepositDto {
   @IsNotEmpty()
   groupId!: string;
 
+  // Optional: manual FT entries verified against CBE have no receipt photo
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  imageUrl!: string;
+  @MaxLength(500)
+  imageUrl?: string;
 
   @IsOptional()
   @IsString()

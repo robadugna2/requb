@@ -1206,7 +1206,8 @@ export interface CreateDepositPayload {
   cycleId: string;
   userId: string;
   groupId: string;
-  imageUrl: string;
+  /** Optional: manually-entered FTs verified against CBE have no photo */
+  imageUrl?: string;
   ftNumber?: string;
   amount?: number;
   bankName?: string;
