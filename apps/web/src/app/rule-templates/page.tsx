@@ -61,6 +61,8 @@ interface TemplateForm {
   gracePeriodDays: number;
   maxMissedPayments: number;
   requireExactAmount: boolean;
+  allowPartialPayments: boolean;
+  allowOverpayment: boolean;
   depositDeadlineDay: number | undefined;
   minVerificationHours: number;
   allowSkipRound: boolean;
@@ -84,6 +86,8 @@ const DEFAULT_FORM: TemplateForm = {
   gracePeriodDays: 0,
   maxMissedPayments: 3,
   requireExactAmount: true,
+  allowPartialPayments: true,
+  allowOverpayment: true,
   depositDeadlineDay: undefined,
   minVerificationHours: 0,
   allowSkipRound: false,
@@ -108,6 +112,8 @@ function templateToForm(t: RuleTemplate): TemplateForm {
     gracePeriodDays: t.gracePeriodDays,
     maxMissedPayments: t.maxMissedPayments,
     requireExactAmount: t.requireExactAmount,
+    allowPartialPayments: t.allowPartialPayments,
+    allowOverpayment: t.allowOverpayment,
     depositDeadlineDay: t.depositDeadlineDay,
     minVerificationHours: t.minVerificationHours,
     allowSkipRound: t.allowSkipRound,
@@ -533,6 +539,36 @@ export default function RuleTemplatesPage() {
                     type="checkbox"
                     checked={form.requireExactAmount}
                     onChange={(e) => setForm({ ...form, requireExactAmount: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600" />
+                </label>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
+                <div>
+                  <p className="text-xs font-medium text-gray-900 dark:text-white/90">Allow Partial Payments</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Members may pay less than expected — shortfall tracked, catch-up later</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.allowPartialPayments}
+                    onChange={(e) => setForm({ ...form, allowPartialPayments: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600" />
+                </label>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/[0.04] rounded-lg">
+                <div>
+                  <p className="text-xs font-medium text-gray-900 dark:text-white/90">Allow Overpayments</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Members may double-pay (cover skipped cycles) — surplus carries forward</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.allowOverpayment}
+                    onChange={(e) => setForm({ ...form, allowOverpayment: e.target.checked })}
                     className="sr-only peer"
                   />
                   <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600" />

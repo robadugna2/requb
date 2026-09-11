@@ -430,8 +430,20 @@ export default function SettingsTab({
           <Toggle
             checked={rules.requireExactAmount}
             onChange={(v) => setRules({ ...rules, requireExactAmount: v })}
-            title="Require Exact Amount"
-            description="Deposits must match the expected share amount"
+            title="Require Expected Contribution"
+            description="Base rule: deposits should match the member's expected amount (shares × contribution)"
+          />
+          <Toggle
+            checked={rules.allowPartialPayments}
+            onChange={(v) => setRules({ ...rules, allowPartialPayments: v })}
+            title="Allow Partial Payments"
+            description="Members may pay less than expected — recorded with the shortfall, catchable up later"
+          />
+          <Toggle
+            checked={rules.allowOverpayment}
+            onChange={(v) => setRules({ ...rules, allowOverpayment: v })}
+            title="Allow Overpayments"
+            description="Members may pay extra (double-pay, cover skipped cycles) — surplus carries forward"
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Deposit Deadline Day</label>

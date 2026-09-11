@@ -37,6 +37,7 @@ import {
   normalizeFtNumber,
   getAiSettings,
   addPayerAlias,
+  getGroupRules,
 } from '@/lib/api';
 import type {
   GroupListItem,
@@ -45,6 +46,7 @@ import type {
   CbeTransactionData,
   MemberSuggestion,
   FtScanResult,
+  GroupRules,
 } from '@/lib/api';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -198,6 +200,7 @@ function ScanWorkflow() {
   /** Extra statement pages attached to the batched scan (beyond the first) */
   const [attached, setAttached] = useState<AttachedPhoto[]>([]);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  const [rules, setRules] = useState<GroupRules | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
   const extraGalleryRef = useRef<HTMLInputElement>(null);
@@ -267,11 +270,18 @@ function ScanWorkflow() {
     let cancelled = false;
     setLoadingGroup(true);
     getGroup(selectedGroupId)
-      .then((detail) => {
+      .then(async (detail) => {
         if (cancelled) return;
         setGroup(detail);
         // Preselect first configured CBE receiver account
         if (detail.cbeAccountNumbers?.length) setAccountNumber(detail.cbeAccountNumbers[0]);
+        // Load the group's amount policy (strict vs partial/over allowed)
+        try {
+          const r = await getGroupRules(detail.id);
+          if (!cancelled) setRules(r);
+        } catch {
+          if (!cancelled) setRules(null);
+        }
       })
       .catch(() => {
         if (!cancelled) showToast('Failed to load group details', 'error');
@@ -1275,12 +1285,27 @@ function ScanWorkflow() {
                     </div>
                   </div>
 
-                  {group && it.member && it.amount !== undefined && Math.abs(it.amount - group.contributionAmount) > 1 && (
-                    <p className="text-xs text-warning-700 dark:text-warning-400 mt-2 flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                      Amount differs from the standard contribution of ETB {group.contributionAmount.toLocaleString()} — creation may be blocked by group rules.
-                    </p>
-                  )}
+                  {group && it.member && it.amount !== undefined && (() => {
+                    const strict = rules ? rules.requireExactAmount && !rules.allowPartialPayments && !rules.allowOverpayment : true;
+                    if (Math.abs(it.amount - group.contributionAmount) <= 1) return null;
+                    if (strict) {
+                      return (
+                        <p className="text-xs text-warning-700 dark:text-warning-400 mt-2 flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                          Amount differs from the expected contribution of ETB {group.contributionAmount.toLocaleString()} — the strict amount rule may block this deposit.
+                        </p>
+                      );
+                    }
+                    const under = it.amount < group.contributionAmount;
+                    return (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-1.5">
+                        <CheckCircle className="h-3.5 w-3.5 flex-shrink-0 text-green-600" />
+                        {under
+                          ? `Partial payment — shortfall of ETB ${(group.contributionAmount - it.amount).toLocaleString()} recorded for this cycle (group rules allow catch-up later).`
+                          : `Overpayment — surplus of ETB ${(it.amount - group.contributionAmount).toLocaleString()} recorded (carries toward upcoming cycles).`}
+                      </p>
+                    );
+                  })()}
 
                   {/* Outcome after creation */}
                   {it.outcome && (

@@ -198,6 +198,8 @@ export interface GroupRules {
   gracePeriodDays: number;
   maxMissedPayments: number;
   requireExactAmount: boolean;
+  allowPartialPayments: boolean;
+  allowOverpayment: boolean;
   depositDeadlineDay?: number;
   minVerificationHours: number;
   allowSkipRound: boolean;
@@ -229,6 +231,8 @@ export interface RuleTemplate {
   gracePeriodDays: number;
   maxMissedPayments: number;
   requireExactAmount: boolean;
+  allowPartialPayments: boolean;
+  allowOverpayment: boolean;
   depositDeadlineDay?: number;
   minVerificationHours: number;
   allowSkipRound: boolean;

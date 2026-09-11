@@ -587,6 +587,8 @@ model GroupRules {
 
   // Deposit Rules
   requireExactAmount    Boolean              @default(true) @map("require_exact_amount")
+  allowPartialPayments  Boolean              @default(true) @map("allow_partial_payments")
+  allowOverpayment      Boolean              @default(true) @map("allow_overpayment")
   depositDeadlineDay    Int?                 @map("deposit_deadline_day")
   minVerificationHours  Int                  @default(24) @map("min_verification_hours")
 
@@ -648,6 +650,8 @@ model RuleTemplate {
 
   // Deposit Rules
   requireExactAmount    Boolean              @default(true) @map("require_exact_amount")
+  allowPartialPayments  Boolean              @default(true) @map("allow_partial_payments")
+  allowOverpayment      Boolean              @default(true) @map("allow_overpayment")
   depositDeadlineDay    Int?                 @map("deposit_deadline_day")
   minVerificationHours  Int                  @default(24) @map("min_verification_hours")
 

@@ -191,15 +191,38 @@ export class RulesEnforcementService {
     const shares = membership?.shares ?? 1;
     const expectedAmount = group.contributionAmount * shares;
 
-    // Check exact amount requirement
+    // Check amount expectation. requireExactAmount is the base rule; the
+    // allowPartialPayments / allowOverpayment policy toggles are deliberate
+    // exceptions that downgrade a mismatch to a recorded warning so real
+    // payments are never silently dropped (partial catch-ups, proxy
+    // double-pays, cycle jumps).
     if (rules.requireExactAmount && amount !== null && amount !== undefined) {
       // Allow a small tolerance (1 ETB) for rounding
-      if (Math.abs(amount - expectedAmount) > 1) {
-        violations.push({
-          rule: 'EXACT_AMOUNT_REQUIRED',
-          message: `Deposit amount (${amount} ETB) does not match the required contribution of ${expectedAmount} ETB${shares > 1 ? ` (${shares} shares × ${group.contributionAmount} ETB)` : ''}.`,
-          severity: 'ERROR',
-        });
+      const diff = amount - expectedAmount;
+      if (Math.abs(diff) > 1) {
+        const isUnder = diff < 0;
+        const gap = Math.abs(diff);
+        const detail = `Deposit amount (${amount} ETB) vs expected contribution of ${expectedAmount} ETB${shares > 1 ? ` (${shares} shares × ${group.contributionAmount} ETB)` : ''}`;
+
+        if (isUnder && rules.allowPartialPayments) {
+          violations.push({
+            rule: 'PARTIAL_PAYMENT',
+            message: `Partial payment: ${amount} ETB of ${expectedAmount} ETB — shortfall of ${gap} ETB for this cycle (can be caught up later).`,
+            severity: 'WARNING',
+          });
+        } else if (!isUnder && rules.allowOverpayment) {
+          violations.push({
+            rule: 'OVERPAYMENT',
+            message: `Overpayment: ${amount} ETB vs ${expectedAmount} ETB — surplus of ${gap} ETB carries toward upcoming cycles.`,
+            severity: 'WARNING',
+          });
+        } else {
+          violations.push({
+            rule: 'EXACT_AMOUNT_REQUIRED',
+            message: `Deposit violates rules: Deposit amount (${amount} ETB) does not match the required contribution of ${expectedAmount} ETB${shares > 1 ? ` (${shares} shares × ${group.contributionAmount} ETB)` : ''}.`,
+            severity: 'ERROR',
+          });
+        }
       }
     }
 

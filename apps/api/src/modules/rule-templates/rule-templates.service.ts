@@ -12,6 +12,8 @@ const RULE_FIELDS = [
   'gracePeriodDays',
   'maxMissedPayments',
   'requireExactAmount',
+  'allowPartialPayments',
+  'allowOverpayment',
   'depositDeadlineDay',
   'minVerificationHours',
   'allowSkipRound',

@@ -80,6 +80,14 @@ export class CreateRuleTemplateDto {
   requireExactAmount?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  allowPartialPayments?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowOverpayment?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(31)
