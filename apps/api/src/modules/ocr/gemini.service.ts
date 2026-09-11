@@ -156,7 +156,7 @@ export class GeminiService {
    * processReceipt wraps it into null.
    */
   private async generateContent(
-    imageDataUrl: string,
+    imageRef: string,
     systemPrompt: string,
     userText: string,
   ): Promise<string> {
@@ -165,11 +165,10 @@ export class GeminiService {
       throw new Error('Gemini API key is not configured');
     }
 
-    const match = imageDataUrl.match(/^data:([^;]+);base64,(.*)$/s);
-    if (!match) {
-      throw new Error('imageDataUrl is not a base64 data-URL');
-    }
-    const [, mimeType, data] = match;
+    // Gemini's REST API only accepts inline base64 image data (unlike OpenAI,
+    // it cannot fetch a remote URL), so a Telegram CDN / http image is
+    // downloaded server-side first.
+    const { mimeType, data } = await this.toInlineData(imageRef);
 
     const model = await this.getBestModel(key);
 
@@ -200,6 +199,36 @@ export class GeminiService {
 
       throw error;
     }
+  }
+
+  /**
+   * Normalizes an image reference to Gemini's inline_data form. Accepts a
+   * base64 data-URL (camera scans) or a remote http(s) URL (Telegram CDN) —
+   * remote images are fetched server-side because Gemini cannot pull URLs.
+   */
+  private async toInlineData(
+    imageRef: string,
+  ): Promise<{ mimeType: string; data: string }> {
+    const dataMatch = imageRef.match(/^data:([^;]+);base64,(.*)$/s);
+    if (dataMatch) {
+      return { mimeType: dataMatch[1], data: dataMatch[2] };
+    }
+
+    if (/^https?:\/\//i.test(imageRef)) {
+      const response = await axios.get<ArrayBuffer>(imageRef, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        maxContentLength: 12 * 1024 * 1024,
+      });
+      const contentType = response.headers['content-type'];
+      const mimeType =
+        typeof contentType === 'string' && contentType.startsWith('image/')
+          ? contentType.split(';')[0].trim()
+          : 'image/jpeg';
+      return { mimeType, data: Buffer.from(response.data).toString('base64') };
+    }
+
+    throw new Error('Image must be a base64 data-URL or an http(s) URL');
   }
 
   /**
