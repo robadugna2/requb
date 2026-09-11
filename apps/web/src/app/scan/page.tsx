@@ -35,6 +35,7 @@ import {
   autoVerifyDepositCbe,
   updateGroupCbeAccounts,
   normalizeFtNumber,
+  getAiSettings,
 } from '@/lib/api';
 import type {
   GroupListItem,
@@ -52,6 +53,9 @@ interface ScanItem {
   status: 'verifying' | 'found' | 'error';
   error?: string;
   tx?: CbeTransactionData;
+  /** Payer name Gemini read from the statement (fallback when the CBE
+   *  lookup has no payer field) */
+  geminiSender?: string;
   member: { id: string; name: string } | null;
   autoPaired: boolean;
   matchScore?: number;
@@ -148,6 +152,7 @@ function ScanWorkflow() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [pendingCrop, setPendingCrop] = useState<File | null>(null);
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
 
@@ -161,6 +166,7 @@ function ScanWorkflow() {
   const [scanning, setScanning] = useState(false);
   const [scanBank, setScanBank] = useState('');
   const [scanVia, setScanVia] = useState<FtScanResult['detectedVia']>('none');
+  const [scanSenders, setScanSenders] = useState<Record<string, string>>({});
   const [scanNotice, setScanNotice] = useState('');
   const [manualFt, setManualFt] = useState('');
 
@@ -180,6 +186,13 @@ function ScanWorkflow() {
   );
   const accountReady =
     (group?.cbeAccountNumbers?.length ?? 0) > 0 || ACCOUNT_REGEX.test(accountNumber);
+
+  // Gemini is the only detection engine — surface a missing key up front
+  useEffect(() => {
+    getAiSettings()
+      .then((s) => setGeminiConfigured(s.gemini?.configured ?? false))
+      .catch(() => setGeminiConfigured(null));
+  }, []);
 
   // Fetch groups on mount
   useEffect(() => {
@@ -230,18 +243,26 @@ function ScanWorkflow() {
 
   // ─── Lookup pipeline ────────────────────────────────────────────────────────
 
-  const runLookup = async (ft: string, grpId: string, account: string) => {
+  const runLookup = async (
+    ft: string,
+    grpId: string,
+    account: string,
+    senderFallback?: string,
+  ) => {
     patchItem(ft, { status: 'verifying', error: undefined });
     try {
       const tx = await cbeLookup(ft, account);
+      // CBE receipt payer is authoritative; the name Gemini read from the
+      // statement is the fallback when the lookup has no payer field.
+      const payerName = tx.payer || senderFallback;
       let member: ScanItem['member'] = null;
       let autoPaired = false;
       let matchScore: number | undefined;
       let matchVia: ScanItem['matchVia'];
       let suggestions: MemberSuggestion[] = [];
-      if (tx.payer) {
+      if (payerName) {
         try {
-          const res = await suggestMembers(grpId, tx.payer);
+          const res = await suggestMembers(grpId, payerName);
           suggestions = res.suggestions;
           if (res.bestMatch) {
             member = { id: res.bestMatch.userId, name: res.bestMatch.name };
@@ -278,10 +299,17 @@ function ScanWorkflow() {
     }
   };
 
-  const lookupsForFts = async (fts: string[], grpId: string, account: string) => {
+  const lookupsForFts = async (
+    fts: string[],
+    grpId: string,
+    account: string,
+    senders?: Record<string, string>,
+  ) => {
     // Two lookups at a time — CBE and the suggestion endpoint are both IO bound
     for (let i = 0; i < fts.length; i += 2) {
-      await Promise.all(fts.slice(i, i + 2).map((ft) => runLookup(ft, grpId, account)));
+      await Promise.all(
+        fts.slice(i, i + 2).map((ft) => runLookup(ft, grpId, account, senders?.[ft])),
+      );
     }
   };
 
@@ -326,6 +354,7 @@ function ScanWorkflow() {
     setItems([]);
     setScanBank('');
     setScanVia('none');
+    setScanSenders({});
     setScanNotice('');
     setEvidenceError('');
     if (capturePreview) URL.revokeObjectURL(capturePreview);
@@ -348,6 +377,7 @@ function ScanWorkflow() {
       .then(async (result) => {
         setScanBank(result.bankName || '');
         setScanVia(result.detectedVia ?? 'none');
+        setScanSenders(result.senders ?? {});
         const fts = Array.from(new Set(result.ftNumbers.map((f) => f.toUpperCase())));
         if (fts.length === 0) {
           setScanNotice(
@@ -369,7 +399,7 @@ function ScanWorkflow() {
           })),
         );
         const savedAccount = await ensureAccountSaved();
-        await lookupsForFts(fts, selectedGroupId, savedAccount);
+        await lookupsForFts(fts, selectedGroupId, savedAccount, result.senders);
       })
       .catch((err: unknown) => setScanNotice(axiosMessage(err)))
       .finally(() => setScanning(false));
@@ -409,7 +439,7 @@ function ScanWorkflow() {
   };
 
   const retryItem = async (ft: string) => {
-    await runLookup(ft, selectedGroupId, accountNumber);
+    await runLookup(ft, selectedGroupId, accountNumber, scanSenders[ft]);
   };
 
   // ─── Confirm & create ───────────────────────────────────────────────────────
@@ -499,6 +529,7 @@ function ScanWorkflow() {
     setItems([]);
     setScanBank('');
     setScanVia('none');
+    setScanSenders({});
     setScanNotice('');
     setShowResults(false);
     setSessionActive(false);
@@ -621,6 +652,18 @@ function ScanWorkflow() {
               </div>
             )}
 
+            {geminiConfigured === false && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg bg-warning-50 dark:bg-warning-500/10 border border-warning-200 dark:border-warning-500/20 p-3">
+                <AlertTriangle className="h-4 w-4 text-warning-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-warning-800 dark:text-warning-400 flex-1">
+                  Gemini is not configured — FT scanning is disabled. Add the free Gemini key in Settings → AI Configuration.
+                </p>
+                <Button variant="secondary" size="sm" onClick={() => router.push('/settings')} className="flex-shrink-0">
+                  Open Settings
+                </Button>
+              </div>
+            )}
+
             <div className="mt-5 flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setCameraOpen(true)} disabled={!selectedGroupId || loadingGroup || !accountReady}>
                 <Camera className="h-4 w-4 mr-1" /> Open Camera
@@ -662,24 +705,9 @@ function ScanWorkflow() {
                     Detected FT Numbers
                   </h3>
                   <div className="flex items-center gap-2">
-                    {scanVia === 'qr' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400">
-                        Detected via QR code
-                      </span>
-                    )}
-                    {scanVia === 'ocr' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-gray-300">
-                        Detected via text OCR (free)
-                      </span>
-                    )}
                     {scanVia === 'gemini' && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
                         Detected via Gemini AI
-                      </span>
-                    )}
-                    {scanVia === 'ai' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-theme-purple-500/10 text-purple-700 dark:text-purple-400">
-                        Detected via OpenAI
                       </span>
                     )}
                     {scanBank && (
@@ -695,9 +723,20 @@ function ScanWorkflow() {
                     <Loader2 className="h-4 w-4 animate-spin" /> Reading the statement for FT numbers...
                   </p>
                 ) : items.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
-                    {scanNotice || 'No FT numbers detected yet.'}
-                  </p>
+                  <div className="mt-3">
+                    {/not configured/i.test(scanNotice) ? (
+                      <div className="rounded-lg border border-warning-200 dark:border-warning-500/20 bg-warning-50 dark:bg-warning-500/10 p-3 flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
+                        <p className="text-xs text-warning-800 dark:text-warning-400">{scanNotice}</p>
+                        <Button variant="secondary" size="sm" onClick={() => router.push('/settings')} className="flex-shrink-0">
+                          Open AI Settings
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {scanNotice || 'No FT numbers detected yet.'}
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {items.map((it) => (

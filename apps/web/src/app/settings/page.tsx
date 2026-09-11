@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Lock, Eye, EyeOff, Shield, Globe, AlertTriangle, Sun, Moon, MonitorSmartphone, Palette, Bot } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { changePassword, getAiSettings, setGeminiKey, clearGeminiKey, testGeminiKey, setOpenAiKey, clearOpenAiKey, testOpenAiKey, OpenAiSettingStatus } from '@/lib/api';
+import { changePassword, getAiSettings, setGeminiKey, clearGeminiKey, testGeminiKey, GeminiSettingStatus } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
 import { useLanguage, Language } from '@/components/layout/LanguageContext';
 import { useTheme, Theme } from '@/components/layout/ThemeContext';
@@ -39,9 +39,8 @@ function SettingsContent() {
 
   // AI Configuration (super admin only) — status of both providers
   const [aiSettings, setAiSettings] = useState<{
-    openai: OpenAiSettingStatus | null;
-    gemini: OpenAiSettingStatus | null;
-  }>({ openai: null, gemini: null });
+    gemini: GeminiSettingStatus | null;
+  }>({ gemini: null });
   const [aiStatusLoading, setAiStatusLoading] = useState(false);
 
   // Gemini (recommended, free tier) — per-provider input/UI state
@@ -51,23 +50,16 @@ function SettingsContent() {
   const [testingGemini, setTestingGemini] = useState(false);
   const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // OpenAI (optional fallback) — per-provider input/UI state
-  const [openaiKeyInput, setOpenaiKeyInput] = useState('');
-  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
-  const [savingOpenai, setSavingOpenai] = useState(false);
-  const [testingOpenai, setTestingOpenai] = useState(false);
-  const [openaiTestResult, setOpenaiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-
   useEffect(() => {
     if (!isSuperAdmin) return;
     let cancelled = false;
     setAiStatusLoading(true);
     getAiSettings()
       .then((settings) => {
-        if (!cancelled) setAiSettings({ openai: settings.openai ?? null, gemini: settings.gemini ?? null });
+        if (!cancelled) setAiSettings({ gemini: settings.gemini ?? null });
       })
       .catch(() => {
-        if (!cancelled) setAiSettings({ openai: null, gemini: null });
+        if (!cancelled) setAiSettings({ gemini: null });
       })
       .finally(() => {
         if (!cancelled) setAiStatusLoading(false);
@@ -80,53 +72,32 @@ function SettingsContent() {
   const refreshAiStatus = async () => {
     try {
       const settings = await getAiSettings();
-      setAiSettings({ openai: settings.openai ?? null, gemini: settings.gemini ?? null });
+      setAiSettings({ gemini: settings.gemini ?? null });
     } catch {
-      setAiSettings({ openai: null, gemini: null });
+      setAiSettings({ gemini: null });
     }
   };
 
   /** Per-provider state + API handles so the handlers below stay shared. */
-  const providerSlice = (provider: AiProvider) =>
-    provider === 'gemini'
-      ? {
-          label: 'Gemini',
-          status: aiSettings.gemini,
-          keyValue: geminiKeyInput,
-          setKeyValue: setGeminiKeyInput,
-          showValue: showGeminiKey,
-          setShowValue: setShowGeminiKey,
-          saving: savingGemini,
-          setSaving: setSavingGemini,
-          testing: testingGemini,
-          setTesting: setTestingGemini,
-          testResult: geminiTestResult,
-          setTestResult: setGeminiTestResult,
-          save: setGeminiKey,
-          clear: clearGeminiKey,
-          test: testGeminiKey,
-          removeConfirm:
-            'Remove the saved Gemini API key? Camera FT scanning and receipt OCR will fall back to OpenAI or the environment key.',
-        }
-      : {
-          label: 'OpenAI',
-          status: aiSettings.openai,
-          keyValue: openaiKeyInput,
-          setKeyValue: setOpenaiKeyInput,
-          showValue: showOpenaiKey,
-          setShowValue: setShowOpenaiKey,
-          saving: savingOpenai,
-          setSaving: setSavingOpenai,
-          testing: testingOpenai,
-          setTesting: setTestingOpenai,
-          testResult: openaiTestResult,
-          setTestResult: setOpenaiTestResult,
-          save: setOpenAiKey,
-          clear: clearOpenAiKey,
-          test: testOpenAiKey,
-          removeConfirm:
-            'Remove the saved OpenAI API key? It will fall back to the environment key or become disabled.',
-        };
+  const providerSlice = (_provider: AiProvider) => ({
+      label: 'Gemini',
+      status: aiSettings.gemini,
+      keyValue: geminiKeyInput,
+      setKeyValue: setGeminiKeyInput,
+      showValue: showGeminiKey,
+      setShowValue: setShowGeminiKey,
+      saving: savingGemini,
+      setSaving: setSavingGemini,
+      testing: testingGemini,
+      setTesting: setTestingGemini,
+      testResult: geminiTestResult,
+      setTestResult: setGeminiTestResult,
+      save: setGeminiKey,
+      clear: clearGeminiKey,
+      test: testGeminiKey,
+      removeConfirm:
+        'Remove the saved Gemini API key? Camera FT scanning and receipt OCR will stop working until a key is added again.',
+  });
 
   const handleSaveKey = async (provider: AiProvider, e: React.FormEvent) => {
     e.preventDefault();
@@ -355,7 +326,7 @@ function SettingsContent() {
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90">AI Configuration</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Gemini (free tier) powers camera FT scanning — no credit card needed. OpenAI is an optional fallback.
+                  Google Gemini (free tier) powers camera FT scanning and receipt OCR — no credit card needed.
                 </p>
               </div>
             </div>
@@ -379,27 +350,6 @@ function SettingsContent() {
               onTest={() => handleTestKey('gemini')}
               onRemove={() => handleRemoveKey('gemini')}
             />
-
-            {/* OpenAI — optional fallback */}
-            <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mt-4">
-              <AiProviderSection
-                title="OpenAI"
-                description="Optional fallback if Gemini is not configured."
-                placeholder="sk-..."
-                status={aiSettings.openai}
-                statusLoading={aiStatusLoading}
-                keyValue={openaiKeyInput}
-                onKeyValueChange={setOpenaiKeyInput}
-                showValue={showOpenaiKey}
-                onToggleShow={() => setShowOpenaiKey(!showOpenaiKey)}
-                saving={savingOpenai}
-                testing={testingOpenai}
-                testResult={openaiTestResult}
-                onSave={(e) => handleSaveKey('openai', e)}
-                onTest={() => handleTestKey('openai')}
-                onRemove={() => handleRemoveKey('openai')}
-              />
-            </div>
 
             {/* Privacy note */}
             <p className="mt-4 text-xs text-gray-400">
@@ -551,14 +501,14 @@ function SettingsContent() {
   );
 }
 
-type AiProvider = 'gemini' | 'openai';
+type AiProvider = 'gemini';
 
 interface AiProviderSectionProps {
   title: string;
   description: string;
   badge?: string;
   placeholder: string;
-  status: OpenAiSettingStatus | null;
+  status: GeminiSettingStatus | null;
   statusLoading: boolean;
   keyValue: string;
   onKeyValueChange: (value: string) => void;
@@ -572,7 +522,7 @@ interface AiProviderSectionProps {
   onRemove: () => void;
 }
 
-/** One provider (Gemini / OpenAI) inside the AI Configuration card. */
+/** The Gemini provider inside the AI Configuration card. */
 function AiProviderSection({
   title,
   description,

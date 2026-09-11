@@ -10,15 +10,15 @@ import type { FtScanResult } from './ocr.service';
  * Exact same FT-extraction prompt as OcrService.extractFtNumbers, so both
  * providers produce comparable JSON replies.
  */
-const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank documents. Find ALL transaction reference numbers visible in this image. A single receipt contains one reference number; a bank statement page may contain many rows, each with its own reference number.
+const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank documents. Read this bank statement / transfer receipt photo and extract every transaction reference number AND the payer (sender) name printed with it.
 
 Rules:
-- CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB12345. They usually appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows.
-- Return every reference number you can read, including unclear ones (make your best reading of each).
-- Also report which bank the document is from (e.g., CBE, Telebirr, Awash, BOA, Dashen).
+- CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. They appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows. References may be wrapped across two lines inside one table cell — read them as one. Some have extended identifiers after "\\", "/", or "|" (e.g. FT24AB123456\\BNK) — return only the FT part.
+- For each FT number, also read the payer / sender / account-holder name printed nearest to it (same row or adjacent cell), if visible. Map it as senders: { "FT...": "PAYER FULL NAME" }.
+- Also report which bank the document is from.
 
 Return ONLY valid JSON in this exact shape:
-{ "ftNumbers": ["FT...", "..."], "bankName": "CBE", "confidence": 0.85 }`;
+{ "ftNumbers": ["FT...", "..."], "senders": { "FT...": "Payer Full Name" }, "bankName": "CBE", "confidence": 0.9 }`;
 
 const FT_USER_PROMPT = 'Find all transaction / FT reference numbers in this bank document photo:';
 
@@ -102,6 +102,7 @@ export class GeminiService {
 
       const parsed = JSON.parse(jsonMatch[0]) as {
         ftNumbers?: unknown;
+        senders?: Record<string, unknown>;
         bankName?: string;
         confidence?: number;
       };
@@ -117,8 +118,20 @@ export class GeminiService {
         ),
       );
 
+      // Payer / sender names per FT (used for automatic member pairing when
+      // the CBE lookup doesn't return a payer)
+      const senders: Record<string, string> = {};
+      for (const [ft, name] of Object.entries(parsed.senders ?? {})) {
+        const clean = normalizeFtNumber(String(ft ?? ''));
+        const cleanName = String(name ?? '').trim();
+        if (clean && cleanName && /^FT\w{10}$/.test(clean)) {
+          senders[clean] = cleanName;
+        }
+      }
+
       return {
         ftNumbers,
+        senders,
         bankName: parsed.bankName || undefined,
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
         rawText: content,
@@ -167,6 +180,7 @@ export class GeminiService {
       const message = error instanceof Error ? error.message : String(error);
       const isModelGone =
         status === 404 || /not found|not supported|does not (?:exist|have)/i.test(message);
+      const isTransient = status === 429 || status === 500 || status === 503;
       const usingOverride = !!this.configService.get<string>('GEMINI_MODEL');
 
       // Retired/renamed model: refresh the auto-detection and retry once
@@ -176,6 +190,14 @@ export class GeminiService {
         const fresh = await this.getBestModel(key);
         return await this.callGenerateContent(key, fresh, mimeType, data, systemPrompt, userText);
       }
+
+      // Free-tier rate limits / transient server errors: back off and retry once
+      if (isTransient) {
+        this.logger.warn(`Gemini transient error (${status}) — retrying once after backoff`);
+        await new Promise((r) => setTimeout(r, 2500));
+        return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
+      }
+
       throw error;
     }
   }
@@ -233,7 +255,7 @@ export class GeminiService {
       },
       {
         headers: { 'x-goog-api-key': key },
-        timeout: 30000,
+        timeout: 60000, // vision calls on larger statements can be slow
       },
     );
 

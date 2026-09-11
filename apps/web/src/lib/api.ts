@@ -1130,10 +1130,11 @@ export const normalizeFtNumber = (ft?: string | null): string | undefined => {
 
 export interface FtScanResult {
   ftNumbers: string[];
+  /** Payer / sender name per FT, read from the statement (pairing input) */
+  senders?: Record<string, string>;
   bankName?: string;
   confidence: number;
-  /** Which free/AI detection layer produced the result */
-  detectedVia?: 'qr' | 'gemini' | 'ocr' | 'ai' | 'none';
+  detectedVia?: 'gemini' | 'none';
   errors?: string[];
 }
 
@@ -1174,7 +1175,7 @@ export interface CreateDepositPayload {
 /**
  * Detect all CBE FT numbers visible on a bank statement / receipt photo
  * (multipart field "image"). Free pipeline: QR → text OCR → optional AI
- * (Gemini when configured, else OpenAI).
+ * (Gemini vision model).
  * When `accountNumber` is given, misread FT tokens are repaired and verified
  * against CBE. Does not create or modify deposits.
  */
@@ -1665,37 +1666,15 @@ export const getAdminUsers = async (): Promise<AdminUserItem[]> => {
 
 // ─── System Settings (super admin) ────────────────────────────────────────────
 
-export interface OpenAiSettingStatus {
+export interface GeminiSettingStatus {
   configured: boolean;
   source: 'database' | 'environment' | null;
   keyHint: string | null;   // masked, e.g. "sk-…abc4"
   updatedAt: string | null; // ISO string
 }
 
-export const getOpenAiSetting = async (): Promise<OpenAiSettingStatus> => {
-  const response = await api.get('/settings/openai');
-  return response.data as OpenAiSettingStatus;
-};
-
-export const setOpenAiKey = async (apiKey: string): Promise<OpenAiSettingStatus & { success: boolean }> => {
-  const response = await api.put('/settings/openai', { apiKey });
-  return response.data as OpenAiSettingStatus & { success: boolean };
-};
-
-export const clearOpenAiKey = async (): Promise<OpenAiSettingStatus & { success: boolean }> => {
-  const response = await api.delete('/settings/openai');
-  return response.data as OpenAiSettingStatus & { success: boolean };
-};
-
-/** Tests the typed key when given (before saving), otherwise the saved one. */
-export const testOpenAiKey = async (apiKey?: string): Promise<{ ok: boolean; message: string }> => {
-  const response = await api.post('/settings/openai/test', { apiKey });
-  return response.data as { ok: boolean; message: string };
-};
-
 export interface AiSettingsStatus {
-  openai: OpenAiSettingStatus;
-  gemini: OpenAiSettingStatus;
+  gemini: GeminiSettingStatus;
 }
 
 export const getAiSettings = async (): Promise<AiSettingsStatus> => {
@@ -1703,14 +1682,14 @@ export const getAiSettings = async (): Promise<AiSettingsStatus> => {
   return response.data as AiSettingsStatus;
 };
 
-export const setGeminiKey = async (apiKey: string): Promise<OpenAiSettingStatus & { success: boolean }> => {
+export const setGeminiKey = async (apiKey: string): Promise<GeminiSettingStatus & { success: boolean }> => {
   const response = await api.put('/settings/gemini', { apiKey });
-  return response.data as OpenAiSettingStatus & { success: boolean };
+  return response.data as GeminiSettingStatus & { success: boolean };
 };
 
-export const clearGeminiKey = async (): Promise<OpenAiSettingStatus & { success: boolean }> => {
+export const clearGeminiKey = async (): Promise<GeminiSettingStatus & { success: boolean }> => {
   const response = await api.delete('/settings/gemini');
-  return response.data as OpenAiSettingStatus & { success: boolean };
+  return response.data as GeminiSettingStatus & { success: boolean };
 };
 
 /** Tests the typed key when given (before saving), otherwise the saved one. */

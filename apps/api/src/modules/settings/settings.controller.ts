@@ -4,7 +4,6 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { SettingsService } from './settings.service';
-import { SetOpenAiKeyDto } from './dto/set-openai-key.dto';
 import { SetGeminiKeyDto } from './dto/set-gemini-key.dto';
 
 @Controller('settings')
@@ -15,37 +14,7 @@ export class SettingsController {
   @Get('ai')
   @Roles(Role.SUPER_ADMIN)
   async getAiStatus() {
-    return {
-      openai: await this.settingsService.getStatus(),
-      gemini: await this.settingsService.getStatusGemini(),
-    };
-  }
-
-  @Get('openai')
-  @Roles(Role.SUPER_ADMIN)
-  async getStatus() {
-    return this.settingsService.getStatus();
-  }
-
-  @Put('openai')
-  @Roles(Role.SUPER_ADMIN)
-  async setOpenAiKey(@Request() req: any, @Body() dto: SetOpenAiKeyDto) {
-    await this.settingsService.setOpenAiKey(dto.apiKey, req.user.id);
-    return { success: true, ...(await this.settingsService.getStatus()) };
-  }
-
-  @Delete('openai')
-  @Roles(Role.SUPER_ADMIN)
-  async clearOpenAiKey() {
-    await this.settingsService.clearOpenAiKey();
-    return { success: true, ...(await this.settingsService.getStatus()) };
-  }
-
-  @Post('openai/test')
-  @Roles(Role.SUPER_ADMIN)
-  async testOpenAiKey(@Body('apiKey') apiKey?: string) {
-    // Tests the typed (not yet saved) key when provided, else the saved one
-    return this.settingsService.testOpenAiKey(apiKey);
+    return { gemini: await this.settingsService.getStatusGemini() };
   }
 
   @Put('gemini')

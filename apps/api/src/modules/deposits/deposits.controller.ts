@@ -20,7 +20,7 @@ import { GroupPermissionsGuard } from '../../common/guards/group-permissions.gua
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { DepositsService } from './deposits.service';
 import { CbeVerificationService } from './cbe-verification.service';
-import { FtDetectionService, repairCandidates } from '../ocr/ft-detection.service';
+import { FtDetectionService } from '../ocr/ft-detection.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -63,9 +63,9 @@ export class DepositsController {
 
   /**
    * POST /deposits/ft-scan
-   * Detects all CBE FT numbers visible on an uploaded bank statement /
-   * receipt photo (multipart field "image"). Free pipeline: QR code →
-   * Tesseract OCR → optional OpenAI fallback. Touches no deposit records.
+   * Detects all CBE FT numbers (and their payer names) visible on an
+   * uploaded bank statement / receipt photo (multipart field "image") via
+   * Gemini. Touches no deposit records.
    */
   @Post('ft-scan')
   @UseInterceptors(
@@ -81,35 +81,11 @@ export class DepositsController {
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     }),
   )
-  async scanFtNumbers(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('account') account?: string,
-  ) {
+  async scanFtNumbers(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No image uploaded');
     }
-    const result = await this.ftDetectionService.detectAll(file.buffer);
-
-    // CBE-verified repair of OCR near-misses: an inserted/dropped character
-    // breaks the strict FT format; deleting one character of the misread
-    // token recovers candidates, and the free CBE API confirms which (if any)
-    // is a real transaction.
-    if (result.nearMisses?.length && account && /^1000\d{9}$/.test(account)) {
-      for (const token of result.nearMisses.slice(0, 3)) {
-        for (const candidate of repairCandidates(token).slice(0, 6)) {
-          try {
-            await this.cbeVerificationService.verifyByFtNumber(candidate, account);
-            result.ftNumbers.push(candidate);
-            break;
-          } catch {
-            // candidate doesn't exist at CBE — try the next one
-          }
-        }
-      }
-      result.ftNumbers = Array.from(new Set(result.ftNumbers));
-    }
-    delete result.nearMisses;
-    return result;
+    return this.ftDetectionService.detectAll(file.buffer);
   }
 
   /**
