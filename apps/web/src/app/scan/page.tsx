@@ -863,6 +863,14 @@ function ScanWorkflow() {
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                       Equb Member
                     </label>
+                    {(it.tx?.payer || it.geminiSender) && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                        Payer on transaction:{' '}
+                        <span className="font-medium text-gray-700 dark:text-gray-200">
+                          {it.tx?.payer || it.geminiSender}
+                        </span>
+                      </p>
+                    )}
                     {it.member ? (
                       <div className="flex items-center justify-between flex-wrap gap-2 rounded-lg border border-green-200 dark:border-success-500/20 bg-green-50 dark:bg-success-500/10 px-3 py-2">
                         <span className="flex items-center gap-2 text-sm font-medium text-green-800 dark:text-success-400">

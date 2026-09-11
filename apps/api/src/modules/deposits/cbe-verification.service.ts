@@ -81,6 +81,24 @@ export class CbeVerificationService {
       return m && m.groups ? m.groups['value'].trim() : undefined;
     };
 
+    // A party name between a "Payer/Sender" (or "Receiver") label and the
+    // following account marker. Tolerates colons, commas and non-Latin /
+    // punctuation in names — the previous Latin-only + whitespace regex
+    // silently returned nothing on real receipts, which broke auto-pairing.
+    const party = (label: string): string | undefined => {
+      const raw =
+        extract(
+          new RegExp(`${label}\\s*:?\\s*(?<value>.+?)\\s*(?:Account|A\\/C)`, 'i'),
+          normalizedText,
+        ) ||
+        // Fallback: 2-4 capitalized/word tokens right after the label.
+        extract(
+          new RegExp(`${label}\\s*:?\\s+(?<value>[\\p{L}][\\p{L}.,'\\/ -]{1,60}?)\\s+(?:Transferred|Payment|Reference|Date|Amount|VSC|\\d)`, 'iu'),
+          normalizedText,
+        );
+      return raw ? raw.replace(/[.,:;\/-]+$/, '').trim() : undefined;
+    };
+
     const amountStr =
       extract(/Transferred Amount\s+(?<value>[\d,]+\.\d{2})\s*ETB/i, normalizedText) ||
       extract(/Amount[:\s]*(?<value>[\d,]+\.\d{2})\s*ETB/i, normalizedText);
@@ -89,10 +107,10 @@ export class CbeVerificationService {
       ftNumber,
       rawText: text,
       amount: amountStr ? parseFloat(amountStr.replace(/,/g, '')) : undefined,
-      payer: extract(/Payer\s+(?<value>[A-Za-z\s]+?)\s+Account/i, normalizedText),
-      payerAccount: extract(/Payer\s+[A-Za-z\s]+?\s+Account\s+(?<value>[\d*]+)/i, normalizedText),
-      receiver: extract(/Receiver\s+(?<value>[A-Za-z\s]+?)\s+Account/i, normalizedText),
-      receiverAccount: extract(/Receiver\s+[A-Za-z\s]+?\s+Account\s+(?<value>[\d*]+)/i, normalizedText),
+      payer: party('Payer') || party('Sender'),
+      payerAccount: extract(/(?:Payer|Sender)\s+:?.*?(?:Account|A\/C)\s*:?\s*(?<value>[\d*]+)/i, normalizedText),
+      receiver: party('Receiver') || party('Beneficiary'),
+      receiverAccount: extract(/(?:Receiver|Beneficiary)\s+:?.*?(?:Account|A\/C)\s*:?\s*(?<value>[\d*]+)/i, normalizedText),
       date: extract(
         /Payment Date(?:\s*&\s*Time)?[:\s]+(?<value>[\d\/,\s:APMapm]+?)(?=\s*Reference)/i,
         normalizedText,
