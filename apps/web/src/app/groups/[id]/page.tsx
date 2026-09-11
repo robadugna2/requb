@@ -9,6 +9,7 @@ import {
   Users,
   Inbox,
   Settings,
+  FileBarChart,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -17,14 +18,16 @@ import type { GroupDetail } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
 import GroupHeader from '@/components/groups/GroupHeader';
 import DepositsTab from '@/components/groups/DepositsTab';
+import ReportsTab from '@/components/groups/ReportsTab';
 import MembersTab from '@/components/groups/MembersTab';
 import RequestsTab from '@/components/groups/RequestsTab';
 import SettingsTab from '@/components/groups/SettingsTab';
 
-type TabKey = 'deposits' | 'members' | 'requests' | 'settings';
+type TabKey = 'deposits' | 'members' | 'reports' | 'requests' | 'settings';
 
 const TAB_DEFS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { key: 'deposits', label: 'Deposits', icon: CircleDollarSign },
+  { key: 'reports', label: 'Reports', icon: FileBarChart },
   { key: 'members', label: 'Members', icon: Users },
   { key: 'requests', label: 'Requests', icon: Inbox },
   { key: 'settings', label: 'Settings', icon: Settings },
@@ -65,9 +68,9 @@ export default function GroupDetailPage() {
 
   const visibleTabs: TabKey[] = (() => {
     if (permissions.loading || !group) return [];
-    if (isOwnerOrSuper || permissions.isFullAccess) return ['deposits', 'members', 'requests', 'settings'];
+    if (isOwnerOrSuper || permissions.isFullAccess) return ['deposits', 'reports', 'members', 'requests', 'settings'];
     const tabs: TabKey[] = [];
-    if (canManageDeposits) tabs.push('deposits');
+    if (canManageDeposits) tabs.push('deposits', 'reports');
     if (canManageMembers) tabs.push('members', 'requests');
     if (canManageRules) tabs.push('settings');
     return tabs;
@@ -238,6 +241,10 @@ export default function GroupDetailPage() {
               notifySuccess={notifySuccess}
               notifyError={notifyError}
             />
+          )}
+
+          {activeTab === 'reports' && visibleTabs.includes('reports') && (
+            <ReportsTab groupId={groupId} group={group} />
           )}
 
           {activeTab === 'members' && visibleTabs.includes('members') && (

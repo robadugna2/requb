@@ -88,10 +88,14 @@ function axiosMessage(err: unknown): string {
 
 /** Parses CBE receipt date strings like "07/04/2026, 10:45:30 AM". */
 function parseCbeDate(dateStr: string): Date | undefined {
+  if (!dateStr) return undefined;
   try {
     const d = new Date(dateStr);
     if (!isNaN(d.getTime())) return d;
-    const parts = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const cleaned = dateStr.replace(/,/g, ' ').trim();
+    const d2 = new Date(cleaned);
+    if (!isNaN(d2.getTime())) return d2;
+    const parts = cleaned.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (parts) {
       return new Date(`${parts[3]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`);
     }

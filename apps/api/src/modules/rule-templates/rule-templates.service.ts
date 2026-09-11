@@ -40,11 +40,18 @@ export class RuleTemplatesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateRuleTemplateDto, adminId: string) {
+    // Whitelist: the settings page sends the group's full rules object, which
+    // can carry Prisma-only GroupRules fields the template model doesn't have
+    // (forbidNonWhitelisted would 400 on them). Only known fields persist.
+    const data: Record<string, unknown> = {
+      name: dto.name,
+      description: dto.description,
+    };
+    for (const field of RULE_FIELDS) {
+      if (dto[field] !== undefined) data[field] = dto[field];
+    }
     return this.prisma.ruleTemplate.create({
-      data: {
-        ...dto,
-        createdById: adminId,
-      },
+      data: { ...data, createdById: adminId },
     });
   }
 
@@ -84,9 +91,17 @@ export class RuleTemplatesService {
   async update(id: string, dto: UpdateRuleTemplateDto) {
     await this.findOne(id);
 
+    const data: Record<string, unknown> = {
+      name: dto.name,
+      description: dto.description,
+    };
+    for (const field of RULE_FIELDS) {
+      if (dto[field] !== undefined) data[field] = dto[field];
+    }
+
     return this.prisma.ruleTemplate.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 

@@ -112,7 +112,10 @@ export class CbeVerificationService {
       receiver: party('Receiver') || party('Beneficiary'),
       receiverAccount: extract(/(?:Receiver|Beneficiary)\s+:?.*?(?:Account|A\/C)\s*:?\s*(?<value>[\d*]+)/i, normalizedText),
       date: extract(
-        /Payment Date(?:\s*&\s*Time)?[:\s]+(?<value>[\d\/,\s:APMapm]+?)(?=\s*Reference)/i,
+        /(?:Payment|Transaction|Value)\s*Date(?:\s*&\s*Time)?\s*:?\s*(?<value>[\d\/,.\s:APMapm]{6,40}?)(?=\s*(?:Reference|Reason|Transferred|VSC|Commission|Amount|Narration|$))/i,
+        normalizedText,
+      ) || extract(
+        /Date\s*:?\s*(?<value>\d{1,2}\/\d{1,2}\/\d{2,4}(?:,?\s*[\d:]{4,8}\s*[AP]M)?)/i,
         normalizedText,
       ),
       reference:
@@ -334,13 +337,21 @@ export class CbeVerificationService {
    * CBE dates look like: "07/04/2026, 10:45:30 AM"
    */
   private parseCbeDate(dateStr: string): Date | undefined {
+    if (!dateStr) return undefined;
     try {
       const d = new Date(dateStr);
       if (!isNaN(d.getTime())) return d;
-      // Try MM/DD/YYYY format
-      const parts = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      const cleaned = dateStr.replace(/,/g, ' ').trim();
+      const d2 = new Date(cleaned);
+      if (!isNaN(d2.getTime())) return d2;
+      // DD/MM/YYYY or MM/DD/YYYY (CBE uses DD/MM/YYYY on printed receipts)
+      const parts = cleaned.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if (parts) {
-        return new Date(`${parts[3]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`);
+        const [, first, second, year] = parts;
+        // CBE prints DD/MM/YYYY — but never guess: if the first number can only
+        // be a year, treat it as ISO.
+        if (Number(first) > 1900) return new Date(`${first}-${second}-${year}`);
+        return new Date(`${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}`);
       }
     } catch { /* ignore */ }
     return undefined;
