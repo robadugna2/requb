@@ -1,13 +1,14 @@
-import { IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsString, MaxLength, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class SetGeminiKeyDto {
-  // Format is intentionally loose (Google key formats have changed before) —
-  // the "Test Key" action validates the key against the live Gemini API.
+  // Format is intentionally NOT constrained beyond length: Google key formats
+  // vary and change, and a strict regex here previously 400'd valid keys on
+  // save while the (unvalidated) Test endpoint accepted them. The "Test Key"
+  // action is the real validator — it calls Google with the key.
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
-  @MinLength(20, { message: 'That does not look like a Gemini API key (too short)' })
-  @MaxLength(200)
-  @Matches(/^[A-Za-z0-9_-]+$/, {
-    message: 'API keys contain only letters, numbers, dashes and underscores',
-  })
+  @MinLength(10, { message: 'That does not look like a Gemini API key (too short)' })
+  @MaxLength(300)
   apiKey!: string;
 }

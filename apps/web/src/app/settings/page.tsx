@@ -131,9 +131,12 @@ function SettingsContent() {
       }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      setError(
-        axiosErr.response?.data?.message || 'Failed to save the API key. Please try again.'
-      );
+      const msg =
+        axiosErr.response?.data?.message || 'Failed to save the API key. Please try again.';
+      setError(msg);
+      // Surface inline too — the top banner can be off-screen on mobile,
+      // which made a failed save look like "nothing happened".
+      p.setTestResult({ ok: false, message: `Save failed: ${msg}` });
     } finally {
       p.setSaving(false);
     }
@@ -163,7 +166,10 @@ function SettingsContent() {
           setTimeout(() => setSuccess(null), 4000);
         } catch (err: unknown) {
           const axiosErr = err as { response?: { data?: { message?: string } } };
-          setError(axiosErr.response?.data?.message || `${p.label} key verified but failed to save.`);
+          const msg = axiosErr.response?.data?.message || 'Key verified but saving failed.';
+          setError(msg);
+          // Show it inline too — the top banner can be off-screen on mobile.
+          p.setTestResult({ ok: false, message: `Save failed: ${msg}` });
         }
       }
     } catch (err: unknown) {
