@@ -179,7 +179,6 @@ export class GeminiService {
       const message = error instanceof Error ? error.message : String(error);
       const isModelGone =
         status === 404 || /not found|not supported|does not (?:exist|have)/i.test(message);
-      const isTransient = status === 429 || status === 500 || status === 503;
       const usingOverride = !!this.configService.get<string>('GEMINI_MODEL');
 
       // Retired/renamed model: refresh the auto-detection and retry once
@@ -190,15 +189,71 @@ export class GeminiService {
         return await this.callGenerateContent(key, fresh, mimeType, data, systemPrompt, userText);
       }
 
-      // Free-tier rate limits / transient server errors: back off and retry once
-      if (isTransient) {
-        this.logger.warn(`Gemini transient error (${status}) — retrying once after backoff`);
-        await new Promise((r) => setTimeout(r, 2500));
-        return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
+      // Free-tier rate limits / transient Google capacity errors (503 etc.):
+      // back off and retry a couple of times before giving up.
+      if (this.isTransientError(status, message)) {
+        const retry = await this.retryTransient(
+          key, model, mimeType, data, systemPrompt, userText,
+        );
+        if (retry) return retry;
       }
 
-      throw error;
+      throw this.friendlyGeminiError(status, message);
     }
+  }
+
+  private isTransientError(status?: number, message = ''): boolean {
+    return (
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504 ||
+      /timeout|timed out|network|econnreset|socket hang up|overload|high demand|unavailable/i.test(
+        message,
+      )
+    );
+  }
+
+  /** Retries a transient failure up to twice with backoff; null if still failing. */
+  private async retryTransient(
+    key: string,
+    model: string,
+    mimeType: string,
+    data: string,
+    systemPrompt: string,
+    userText: string,
+  ): Promise<string | null> {
+    for (const delay of [2000, 5000]) {
+      this.logger.warn(`Gemini transient error — retrying after ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+      try {
+        return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
+      } catch (error: unknown) {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        const message = error instanceof Error ? error.message : String(error);
+        if (!this.isTransientError(status, message)) throw this.friendlyGeminiError(status, message);
+      }
+    }
+    return null;
+  }
+
+  /** Turns a raw axios/Google error into an actionable message for the admin. */
+  private friendlyGeminiError(status?: number, message = ''): Error {
+    if (status === 429) {
+      return new Error(
+        "Gemini's free-tier limit was reached (too many requests). Wait about a minute and try again.",
+      );
+    }
+    if (status === 500 || status === 502 || status === 503 || status === 504) {
+      return new Error(
+        "Google's Gemini service is temporarily unavailable or overloaded. Please try again in a moment.",
+      );
+    }
+    if (/timeout|timed out|network|econnreset|socket hang up/i.test(message)) {
+      return new Error('The request to Gemini timed out. Please try again.');
+    }
+    return new Error(message || 'Gemini request failed');
   }
 
   /**

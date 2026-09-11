@@ -373,7 +373,23 @@ function ScanWorkflow() {
       .catch(() => setEvidenceError('Failed to upload the statement photo. Retake or re-upload before creating deposits.'))
       .finally(() => setUploadingEvidence(false));
 
-    const scanPromise = scanFtNumbers(file, accountNumber || undefined)
+    const scanPromise = (async () => {
+      // One automatic retry for transient failures (Render cold-start after a
+      // deploy, or a brief Gemini 503) before surfacing an error.
+      let result: FtScanResult;
+      try {
+        result = await scanFtNumbers(file, accountNumber || undefined);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 503 || status === 502 || status === 504 || !status) {
+          await new Promise((r) => setTimeout(r, 3000));
+          result = await scanFtNumbers(file, accountNumber || undefined);
+        } else {
+          throw err;
+        }
+      }
+      return result;
+    })()
       .then(async (result) => {
         setScanBank(result.bankName || '');
         setScanVia(result.detectedVia ?? 'none');
@@ -401,7 +417,15 @@ function ScanWorkflow() {
         const savedAccount = await ensureAccountSaved();
         await lookupsForFts(fts, selectedGroupId, savedAccount, result.senders);
       })
-      .catch((err: unknown) => setScanNotice(axiosMessage(err)))
+      .catch((err: unknown) => {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        const msg = axiosMessage(err);
+        setScanNotice(
+          status === 503 || /status code 50\d|timeout|network|failed to fetch/i.test(msg)
+            ? 'The AI service is briefly unavailable (server waking up or Google is busy). Please try the scan again in a few seconds.'
+            : msg,
+        );
+      })
       .finally(() => setScanning(false));
 
     await Promise.all([uploadPromise, scanPromise]);
