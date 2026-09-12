@@ -58,6 +58,7 @@ api.interceptors.response.use(
 export interface GroupListItem {
   id: string;
   name: string;
+  photoUrl?: string;
   membersCount: number;
   maxMembers: number;
   contributionAmount: number;
@@ -457,6 +458,7 @@ function mapGroupListItem(raw: Record<string, unknown>): GroupListItem {
   return {
     id: raw.id as string,
     name: raw.name as string,
+    photoUrl: (raw.photoUrl as string) || undefined,
     membersCount,
     maxMembers: raw.maxMembers as number,
     contributionAmount: raw.contributionAmount as number,

@@ -10,9 +10,39 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
-import { getGroups, createGroup, getRuleTemplates, getTrashGroups, restoreGroup, softDeleteGroup, permanentDeleteGroup } from '@/lib/api';
+import { getGroups, createGroup, getRuleTemplates, getTrashGroups, restoreGroup, softDeleteGroup, permanentDeleteGroup, getMediaUrl } from '@/lib/api';
 import type { GroupListItem, RuleTemplate } from '@/lib/api';
 import { useAdminPermissions } from '@/lib/useAdminPermissions';
+
+/** Group photo with 3D rim-lit treatment; falls back to gradient initials. */
+function GroupCardAvatar({ group }: { group: GroupListItem }) {
+  const [failed, setFailed] = useState(false);
+  const initials = group.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  return (
+    <div className="relative w-12 h-12 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-brand-500 to-violet-600 shadow-[0_6px_18px_-6px_rgba(70,95,255,0.65)]">
+      {group.photoUrl && !failed ? (
+        <img
+          src={getMediaUrl(group.photoUrl)}
+          alt={group.name}
+          onError={() => setFailed(true)}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">
+          {initials}
+        </span>
+      )}
+      {/* rim highlight + top light for the 3D edge */}
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-white/15" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/25 to-transparent" />
+    </div>
+  );
+}
 
 export default function GroupsPage() {
   const { t } = useLanguage();
@@ -230,82 +260,80 @@ export default function GroupsPage() {
       {/* Groups Grid */}
       {filteredGroups.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredGroups.map((group) => (
-            <Link
-              key={group.id}
-              href={`/groups/${group.id}`}
-              className="card-hover group cursor-pointer"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white/90 group-hover:text-primary-600 transition-colors">
-                    {group.name}
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                    {group.cycleDuration === 'Weekly' ? t('groups.frequency_weekly') : group.cycleDuration === 'Monthly' ? t('groups.frequency_monthly') : group.cycleDuration} {t('groups.cycle').toLowerCase()}
-                  </p>
-                </div>
-                <StatusBadge status={group.status} />
-              </div>
+          {filteredGroups.map((group) => {
+            const pct = group.totalCycles > 0 ? Math.round((group.currentCycle / group.totalCycles) * 100) : 0;
+            return (
+              <Link
+                key={group.id}
+                href={`/groups/${group.id}`}
+                className="group relative block overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-400/30 dark:hover:border-cyan-400/20 hover:shadow-[0_18px_50px_-20px_rgba(34,211,238,0.35)]"
+              >
+                {/* 3D edge light — bright rim along the top edge + corner glow */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-300 to-transparent opacity-80 shadow-[0_0_18px_2px_rgba(34,211,238,0.45)] transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="pointer-events-none absolute -top-20 -left-20 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl transition-all duration-500 group-hover:bg-cyan-400/25" />
+                <div className="pointer-events-none absolute -top-12 left-1/2 h-24 w-1/2 -translate-x-1/2 bg-gradient-to-b from-cyan-400/10 to-transparent blur-2xl" />
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <Users className="h-4 w-4" />
-                    {t('groups.members')}
-                  </span>
-                  <span className="font-medium text-gray-900 dark:text-white/90">
-                    {group.membersCount}/{group.maxMembers}
-                  </span>
-                </div>
+                <div className="relative p-5">
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <GroupCardAvatar group={group} />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 dark:text-white/90 truncate transition-colors group-hover:text-brand-600 dark:group-hover:text-cyan-300">
+                        {group.name}
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {group.cycleDuration === 'Weekly' ? t('groups.frequency_weekly') : group.cycleDuration === 'Monthly' ? t('groups.frequency_monthly') : group.cycleDuration} {t('groups.cycle').toLowerCase()}
+                      </p>
+                    </div>
+                    <StatusBadge status={group.status} />
+                  </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <CircleDollarSign className="h-4 w-4" />
-                    {t('groups.contribution')}
-                  </span>
-                  <span className="font-medium text-gray-900 dark:text-white/90">
-                    ETB {group.contributionAmount.toLocaleString()}
-                  </span>
-                </div>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <Users className="h-4 w-4" />
+                        {t('groups.members')}
+                      </span>
+                      <span className="font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                        {group.membersCount}/{group.maxMembers}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <CircleDollarSign className="h-4 w-4" />
+                        {t('groups.contribution')}
+                      </span>
+                      <span className="font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                        ETB {group.contributionAmount.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                        <Calendar className="h-4 w-4" />
+                        {t('groups.cycle')}
+                      </span>
+                      <span className="font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                        {group.currentCycle}/{group.totalCycles}
+                      </span>
+                    </div>
+                  </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                    <Calendar className="h-4 w-4" />
-                    {t('groups.cycle')}
-                  </span>
-                  <span className="font-medium text-gray-900 dark:text-white/90">
-                    {group.currentCycle}/{group.totalCycles}
-                  </span>
+                  {/* Progress bar */}
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                      <span>{t('groups.progress')}</span>
+                      <span className="font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{pct}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 dark:bg-white/[0.08] rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 via-brand-500 to-violet-500 shadow-[0_0_10px_rgba(34,211,238,0.55)] transition-all duration-700"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-                  <span>{t('groups.progress')}</span>
-                  <span>
-                    {group.totalCycles > 0
-                      ? Math.round((group.currentCycle / group.totalCycles) * 100)
-                      : 0}
-                    %
-                  </span>
-                </div>
-                <div className="w-full bg-gray-100 dark:bg-white/[0.08] rounded-full h-1.5">
-                  <div
-                    className="bg-primary-600 h-1.5 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${
-                        group.totalCycles > 0
-                          ? (group.currentCycle / group.totalCycles) * 100
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <div className="text-center py-16 card">
