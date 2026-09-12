@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Users, UserCheck, Receipt, CircleDollarSign, ArrowRight, AlertCircle,
   RefreshCw, Plus, Trophy, ShieldAlert, Gavel, CheckCircle, XCircle,
-  Activity, Zap, BarChart2,
+  Activity, Zap, BarChart2, ScanLine, FileBarChart, Sparkles,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   AreaChart, Area, BarChart, Bar, Legend,
@@ -82,6 +83,35 @@ function activityIcon(type: string) {
   return map[type] ?? { icon: <Activity className="h-4 w-4" />, bg: 'bg-gray-100 dark:bg-white/[0.08]', text: 'text-gray-500 dark:text-gray-400' };
 }
 
+/** Eased count-up for headline numbers (respects reduced-motion by jumping). */
+function useCountUp(target: number, duration = 1100) {
+  const [value, setValue] = useState(0);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    const from = prevRef.current;
+    prevRef.current = target;
+    if (from === target) {
+      setValue(target);
+      return;
+    }
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setValue(target);
+      return;
+    }
+    let frame: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(from + (target - from) * eased));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+  return value;
+}
+
 export default function DashboardPage() {
   const { t } = useLanguage();
   const [stats, setStats] = useState<DashboardStats>({ totalGroups: 0, activeMembers: 0, pendingReceipts: 0, totalCollected: 'ETB 0' });
@@ -140,11 +170,25 @@ export default function DashboardPage() {
 
   const activeGroups = groups.filter(g => g.status === 'active').length;
   const activeGroupsPct = groups.length ? Math.round((activeGroups / groups.length) * 100) : 0;
-  const groupChartData = groups.slice(0, 8).map(g => ({
+  const groupChartData = useMemo(() => groups.slice(0, 8).map(g => ({
     name: g.name.length > 10 ? g.name.slice(0, 10) + '…' : g.name,
     members: g.membersCount,
     max: g.maxMembers,
-  }));
+  })), [groups]);
+
+  const collectedNum = useMemo(
+    () => parseInt(String(stats.totalCollected).replace(/[^0-9]/g, ''), 10) || 0,
+    [stats.totalCollected],
+  );
+  const collectedAnim = useCountUp(collectedNum);
+  const membersAnim = useCountUp(stats.activeMembers, 900);
+
+  const quickActions = [
+    { label: 'Scan FT', icon: ScanLine, href: '/scan', primary: true },
+    { label: 'Receipts', icon: Receipt, href: '/receipts' },
+    { label: 'New Group', icon: Plus, href: '/groups' },
+    { label: 'Reports', icon: FileBarChart, href: '/groups' },
+  ];
 
   if (loading) {
     return (
@@ -154,12 +198,12 @@ export default function DashboardPage() {
             <Skeleton className="h-8 w-48" />
             <Skeleton className="h-8 w-24" />
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Skeleton className="lg:col-span-4 h-96 rounded-xl" />
-            <Skeleton className="lg:col-span-3 h-96 rounded-xl" />
+            <Skeleton className="lg:col-span-4 h-80 rounded-xl" />
+            <Skeleton className="lg:col-span-3 h-80 rounded-xl" />
           </div>
         </div>
       </DashboardLayout>
@@ -177,101 +221,186 @@ export default function DashboardPage() {
       )}
 
       <div className="flex-1 space-y-4">
-        <div className="flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
-          <h2 className="text-3xl font-bold tracking-tight">{greeting()}, {stats.user?.name || 'Admin'} 👋</h2>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground mr-2 hidden md:inline-block">
-              {getEthiopianDateString()}
-            </span>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+        {/* Compact greeting row */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center justify-between gap-3"
+        >
+          <div className="min-w-0">
+            <h2 className="text-lg md:text-2xl font-bold tracking-tight truncate">
+              {greeting()}, {stats.user?.name || 'Admin'} <span className="inline-block motion-safe:animate-bounce [animation-duration:2.4s]">👋</span>
+            </h2>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{getEthiopianDateString()}</p>
           </div>
-        </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh"
+            className="shrink-0 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white/90 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </motion.div>
 
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="overview" className="space-y-4">
-            {/* KPI Cards */}
-            <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <StaggerItem className="lift">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">{t('db.stat_groups')}</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalGroups}</div>
-                  <p className="text-xs text-muted-foreground mt-1">Total Equb Groups</p>
-                </CardContent>
-              </Card>
+            {/* KPI tiles — 2×2 on phones, 4-up on desktop; collected gets the hero gradient */}
+            <Stagger className="grid gap-3 grid-cols-2 md:grid-cols-4">
+              <StaggerItem className="lift col-span-2">
+                <motion.div
+                  whileHover={{ scale: 1.01 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+                  className="relative overflow-hidden rounded-xl bg-gradient-to-br from-brand-500 via-indigo-600 to-violet-600 text-white p-4 h-full shadow-theme-lg"
+                >
+                  {/* animated shine sweep */}
+                  <motion.div
+                    className="pointer-events-none absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-[-18deg]"
+                    animate={{ x: ['-180%', '360%'] }}
+                    transition={{ repeat: Infinity, duration: 3.2, ease: 'easeInOut', repeatDelay: 2.2 }}
+                  />
+                  {/* soft glow blobs */}
+                  <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+                  <div className="pointer-events-none absolute -bottom-12 -left-8 h-28 w-28 rounded-full bg-violet-300/30 blur-2xl" />
+                  <div className="relative">
+                    <div className="flex items-center justify-between">
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/85">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {t('db.stat_collected')}
+                      </p>
+                      <span className="flex items-center gap-1.5 text-[10px] font-semibold bg-white/15 rounded-full px-2 py-0.5">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75 motion-safe:animate-ping" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-200" />
+                        </span>
+                        LIVE
+                      </span>
+                    </div>
+                    <p className="mt-2 text-3xl md:text-4xl font-extrabold tabular-nums tracking-tight">
+                      {collectedAnim.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] text-white/75 mt-1">
+                      ETB · total deposits processed
+                    </p>
+                  </div>
+                </motion.div>
               </StaggerItem>
+
               <StaggerItem className="lift">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">{t('db.stat_members')}</CardTitle>
-                  <UserCheck className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.activeMembers}</div>
-                  <p className="text-xs text-muted-foreground mt-1">Active participants</p>
-                </CardContent>
-              </Card>
+                <Card className="h-full">
+                  <CardContent className="p-3.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_groups')}</p>
+                      <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-light-500/10">
+                        <Users className="h-4 w-4 text-blue-600 dark:text-blue-light-400" />
+                      </span>
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{stats.totalGroups}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+                      {activeGroupsPct > 0 ? `${activeGroupsPct}% active` : 'Total Equb groups'}
+                    </p>
+                  </CardContent>
+                </Card>
               </StaggerItem>
+
               <StaggerItem className="lift">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">{t('db.stat_receipts')}</CardTitle>
-                  <Receipt className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.pendingReceipts}</div>
-                  <p className="text-xs text-muted-foreground mt-1">Awaiting verification</p>
-                </CardContent>
-              </Card>
+                <Card className="h-full">
+                  <CardContent className="p-3.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_members')}</p>
+                      <span className="p-1.5 rounded-lg bg-green-50 dark:bg-success-500/10">
+                        <UserCheck className="h-4 w-4 text-green-600 dark:text-success-400" />
+                      </span>
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{membersAnim}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">Active participants</p>
+                  </CardContent>
+                </Card>
               </StaggerItem>
-              <StaggerItem className="lift">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">{t('db.stat_collected')}</CardTitle>
-                  <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalCollected}</div>
-                  <p className="text-xs text-muted-foreground mt-1">Total deposits processed</p>
-                </CardContent>
-              </Card>
+
+              <StaggerItem className="lift col-span-2 md:col-span-2">
+                <Card className={`h-full ${stats.pendingReceipts > 0 ? 'ring-1 ring-amber-300 dark:ring-warning-500/40' : ''}`}>
+                  <CardContent className="p-3.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_receipts')}</p>
+                        {stats.pendingReceipts > 0 && (
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-safe:animate-ping" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{stats.pendingReceipts}</p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">Awaiting verification</p>
+                    </div>
+                    <span className={`p-2.5 rounded-xl shrink-0 ${stats.pendingReceipts > 0 ? 'bg-amber-50 dark:bg-warning-500/10' : 'bg-gray-50 dark:bg-white/[0.06]'}`}>
+                      <Receipt className={`h-5 w-5 ${stats.pendingReceipts > 0 ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'}`} />
+                    </span>
+                  </CardContent>
+                </Card>
               </StaggerItem>
             </Stagger>
 
+            {/* Quick actions */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.35 }}
+              className="flex gap-2 overflow-x-auto pb-0.5"
+            >
+              {quickActions.map((a) => (
+                <motion.div
+                  key={a.label}
+                  whileHover={{ scale: 1.04, y: -1 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 22 }}
+                  className="shrink-0"
+                >
+                  <Link
+                    href={a.href}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold transition-colors ${
+                      a.primary
+                        ? 'bg-gradient-to-r from-brand-500 to-indigo-600 text-white shadow-theme-sm hover:from-brand-600 hover:to-indigo-700'
+                        : 'border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.08]'
+                    }`}
+                  >
+                    <a.icon className="h-3.5 w-3.5" />
+                    {a.label}
+                  </Link>
+                </motion.div>
+              ))}
+            </motion.div>
+
             {/* Main Row: Chart + Recent Activity */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <Card className="lg:col-span-4">
+              <Card className="lg:col-span-4 min-w-0 overflow-hidden">
                 <CardHeader>
                   <CardTitle>{t('db.chart_title')}</CardTitle>
                   <CardDescription>{t('db.chart_subtitle')}</CardDescription>
                 </CardHeader>
                 <CardContent className="pl-2">
-                  <div className="h-[300px] w-full">
+                  <div className="h-[220px] md:h-[280px] w-full">
                     {chartData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorDeposits" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                              <stop offset="5%" stopColor="#465fff" stopOpacity={0.35}/>
+                              <stop offset="95%" stopColor="#465fff" stopOpacity={0}/>
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                           <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                           <RechartsTooltip contentStyle={{ borderRadius: '8px' }} />
-                          <Area type="monotone" dataKey="deposits" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#colorDeposits)" />
+                          <Area type="monotone" dataKey="deposits" stroke="#465fff" strokeWidth={2} fillOpacity={1} fill="url(#colorDeposits)" activeDot={{ r: 4 }} />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
@@ -284,25 +413,31 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <Card className="lg:col-span-3">
+              <Card className="lg:col-span-3 min-w-0 overflow-hidden">
                 <CardHeader>
                   <CardTitle>{t('db.activity_title')}</CardTitle>
                   <CardDescription>Recent actions across the platform.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    {activity.length > 0 ? activity.map(item => {
+                  <div className="space-y-4">
+                    {activity.length > 0 ? activity.map((item, i) => {
                       const { icon, bg, text } = activityIcon(item.type);
                       return (
-                        <div key={item.id} className="flex items-center">
-                          <span className={`relative flex h-9 w-9 items-center justify-center rounded-full ${bg} ${text} mr-4`}>
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.05 * i, duration: 0.3 }}
+                          className="flex items-center gap-3"
+                        >
+                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${bg} ${text}`}>
                             {icon}
                           </span>
-                          <div className="ml-4 space-y-1">
-                            <p className="text-sm font-medium leading-none">{item.message}</p>
-                            <p className="text-sm text-muted-foreground">{item.time}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium leading-tight truncate">{item.message}</p>
+                            <p className="text-xs text-muted-foreground">{item.time}</p>
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     }) : (
                       <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -362,18 +497,18 @@ export default function DashboardPage() {
                   </Link>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {pending.length > 0 ? pending.map(r => (
-                      <div key={r.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">{r.memberName}</p>
-                          <p className="text-xs text-muted-foreground">{r.groupName} · ETB {r.amount.toLocaleString()}</p>
+                      <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 dark:border-gray-800 p-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">{r.memberName}</p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{r.groupName} · ETB {r.amount.toLocaleString()}</p>
                         </div>
-                        <div className="flex gap-2">
-                          <Button size="icon" variant="outline" className="h-8 w-8 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700" onClick={() => handleVerify(r.id)} disabled={!!verifying[r.id]}>
+                        <div className="flex gap-1.5 shrink-0">
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700 active:scale-95 transition-transform" onClick={() => handleVerify(r.id)} disabled={!!verifying[r.id]} title="Verify">
                             <CheckCircle className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="outline" className="h-8 w-8 text-red-600 dark:text-error-400 border-red-200 bg-red-50 dark:bg-error-500/10 hover:bg-red-100 hover:text-red-700 dark:hover:text-red-400" onClick={() => handleReject(r.id)} disabled={!!verifying[r.id]}>
+                          <Button size="icon" variant="outline" className="h-8 w-8 text-red-600 dark:text-error-400 border-red-200 bg-red-50 dark:bg-error-500/10 hover:bg-red-100 hover:text-red-700 dark:hover:text-red-400 active:scale-95 transition-transform" onClick={() => handleReject(r.id)} disabled={!!verifying[r.id]} title="Reject">
                             <XCircle className="h-4 w-4" />
                           </Button>
                         </div>
@@ -390,13 +525,13 @@ export default function DashboardPage() {
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4">
-            <Card>
+            <Card className="min-w-0 overflow-hidden">
               <CardHeader>
                 <CardTitle>Group Utilization Analytics</CardTitle>
                 <CardDescription>Members vs Capacity across groups</CardDescription>
               </CardHeader>
               <CardContent className="pl-2">
-                <div className="h-[350px] w-full">
+                <div className="h-[260px] md:h-[320px] w-full">
                   {groupChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={groupChartData} barGap={4}>
@@ -405,7 +540,7 @@ export default function DashboardPage() {
                         <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                         <RechartsTooltip contentStyle={{ borderRadius: '8px' }} />
                         <Legend wrapperStyle={{ fontSize: 12, paddingTop: '20px' }} />
-                        <Bar dataKey="members" fill="#4f46e5" radius={[4,4,0,0]} name="Members" />
+                        <Bar dataKey="members" fill="#465fff" radius={[4,4,0,0]} name="Members" />
                         <Bar dataKey="max" fill="#9ca3af" opacity={0.3} radius={[4,4,0,0]} name="Max Capacity" />
                       </BarChart>
                     </ResponsiveContainer>
