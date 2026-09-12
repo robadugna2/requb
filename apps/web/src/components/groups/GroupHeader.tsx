@@ -181,6 +181,17 @@ export default function GroupHeader({
   const contributionCount = useCountUp(group.contributionAmount);
   const cycleCount = useCountUp(group.currentCycle);
 
+  // Uploaded files can go missing (e.g. ephemeral server disk after a
+  // redeploy) — fall back to initials instead of a broken image icon.
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => setImgFailed(false), [group.photoUrl]);
+  const initials = group.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
     <>
       <motion.div
@@ -190,17 +201,22 @@ export default function GroupHeader({
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            {group.photoUrl ? (
-              <img src={getMediaUrl(group.photoUrl)} alt={group.name} className="w-20 h-20 rounded-lg object-cover bg-gray-100 dark:bg-white/[0.08] flex-shrink-0" />
+          <div className="flex items-start gap-4 min-w-0">
+            {group.photoUrl && !imgFailed ? (
+              <img
+                src={getMediaUrl(group.photoUrl)}
+                alt={group.name}
+                onError={() => setImgFailed(true)}
+                className="w-20 h-20 rounded-lg object-cover bg-gray-100 dark:bg-white/[0.08] flex-shrink-0"
+              />
             ) : (
-              <div className="w-20 h-20 rounded-lg bg-gray-100 dark:bg-white/[0.08] flex items-center justify-center flex-shrink-0">
-                <Users className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+              <div className="w-20 h-20 rounded-lg bg-brand-50 dark:bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center flex-shrink-0 text-xl font-bold">
+                {initials}
               </div>
             )}
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{group.name}</h1>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90 break-words">{group.name}</h1>
                 <StatusBadge status={group.status} />
               </div>
               {group.description && (
@@ -232,21 +248,21 @@ export default function GroupHeader({
               </div>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex flex-wrap gap-2 w-full md:w-auto md:flex-shrink-0">
             {isOwnerOrSuper && (
-              <Button variant="secondary" onClick={openEdit}>
+              <Button variant="secondary" onClick={openEdit} className="flex-1 min-w-[9.5rem] justify-center md:flex-none md:min-w-0">
                 <Settings className="h-4 w-4 mr-2" />
                 Edit Info
               </Button>
             )}
             {isOwnerOrSuper && (
-              <Button variant="danger" onClick={handleDelete}>
+              <Button variant="danger" onClick={handleDelete} className="flex-1 min-w-[9.5rem] justify-center md:flex-none md:min-w-0">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Group
               </Button>
             )}
             {canTriggerLottery && (
-              <Button onClick={onDrawLottery} loading={drawLoading}>
+              <Button onClick={onDrawLottery} loading={drawLoading} className="flex-1 min-w-[9.5rem] justify-center md:flex-none md:min-w-0">
                 <Ticket className="h-4 w-4 mr-2" />
                 Draw Lottery
               </Button>
