@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Users, UserCheck, Receipt, CircleDollarSign, ArrowRight, AlertCircle,
-  RefreshCw, Plus, Trophy, ShieldAlert, Gavel, CheckCircle, XCircle,
-  Activity, Zap, BarChart2, ScanLine, FileBarChart, Sparkles,
+  Users, UserCheck, Receipt, CircleDollarSign, AlertCircle,
+  RefreshCw, Trophy, ShieldAlert, Gavel, CheckCircle, XCircle,
+  Activity, BarChart2, Sparkles,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
@@ -183,13 +183,6 @@ export default function DashboardPage() {
   const collectedAnim = useCountUp(collectedNum);
   const membersAnim = useCountUp(stats.activeMembers, 900);
 
-  const quickActions = [
-    { label: 'Scan FT', icon: ScanLine, href: '/scan', primary: true },
-    { label: 'Receipts', icon: Receipt, href: '/receipts' },
-    { label: 'New Group', icon: Plus, href: '/groups' },
-    { label: 'Reports', icon: FileBarChart, href: '/groups' },
-  ];
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -251,131 +244,75 @@ export default function DashboardPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            {/* KPI tiles — 2×2 on phones, 4-up on desktop; collected gets the hero gradient */}
-            <Stagger className="grid gap-3 grid-cols-2 md:grid-cols-4">
-              <StaggerItem className="lift col-span-2">
-                <motion.div
-                  whileHover={{ scale: 1.01 }}
-                  transition={{ type: 'spring', stiffness: 320, damping: 24 }}
-                  className="relative overflow-hidden rounded-xl bg-gradient-to-br from-brand-500 via-indigo-600 to-violet-600 text-white p-4 h-full shadow-theme-lg"
-                >
-                  {/* animated shine sweep */}
-                  <motion.div
-                    className="pointer-events-none absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-[-18deg]"
-                    animate={{ x: ['-180%', '360%'] }}
-                    transition={{ repeat: Infinity, duration: 3.2, ease: 'easeInOut', repeatDelay: 2.2 }}
-                  />
-                  {/* soft glow blobs */}
-                  <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
-                  <div className="pointer-events-none absolute -bottom-12 -left-8 h-28 w-28 rounded-full bg-violet-300/30 blur-2xl" />
-                  <div className="relative">
-                    <div className="flex items-center justify-between">
-                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/85">
-                        <Sparkles className="h-3.5 w-3.5" />
-                        {t('db.stat_collected')}
-                      </p>
-                      <span className="flex items-center gap-1.5 text-[10px] font-semibold bg-white/15 rounded-full px-2 py-0.5">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75 motion-safe:animate-ping" />
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-200" />
-                        </span>
-                        LIVE
-                      </span>
-                    </div>
-                    <p className="mt-2 text-3xl md:text-4xl font-extrabold tabular-nums tracking-tight">
-                      {collectedAnim.toLocaleString()}
-                    </p>
-                    <p className="text-[11px] text-white/75 mt-1">
-                      ETB · total deposits processed
-                    </p>
-                  </div>
-                </motion.div>
-              </StaggerItem>
-
-              <StaggerItem className="lift">
-                <Card className="h-full">
-                  <CardContent className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_groups')}</p>
-                      <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-light-500/10">
-                        <Users className="h-4 w-4 text-blue-600 dark:text-blue-light-400" />
-                      </span>
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{stats.totalGroups}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-                      {activeGroupsPct > 0 ? `${activeGroupsPct}% active` : 'Total Equb groups'}
-                    </p>
-                  </CardContent>
-                </Card>
-              </StaggerItem>
-
-              <StaggerItem className="lift">
-                <Card className="h-full">
-                  <CardContent className="p-3.5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_members')}</p>
-                      <span className="p-1.5 rounded-lg bg-green-50 dark:bg-success-500/10">
-                        <UserCheck className="h-4 w-4 text-green-600 dark:text-success-400" />
-                      </span>
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{membersAnim}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">Active participants</p>
-                  </CardContent>
-                </Card>
-              </StaggerItem>
-
-              <StaggerItem className="lift col-span-2 md:col-span-2">
-                <Card className={`h-full ${stats.pendingReceipts > 0 ? 'ring-1 ring-amber-300 dark:ring-warning-500/40' : ''}`}>
-                  <CardContent className="p-3.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('db.stat_receipts')}</p>
-                        {stats.pendingReceipts > 0 && (
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-safe:animate-ping" />
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white/90 tabular-nums">{stats.pendingReceipts}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">Awaiting verification</p>
-                    </div>
-                    <span className={`p-2.5 rounded-xl shrink-0 ${stats.pendingReceipts > 0 ? 'bg-amber-50 dark:bg-warning-500/10' : 'bg-gray-50 dark:bg-white/[0.06]'}`}>
-                      <Receipt className={`h-5 w-5 ${stats.pendingReceipts > 0 ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'}`} />
-                    </span>
-                  </CardContent>
-                </Card>
-              </StaggerItem>
-            </Stagger>
-
-            {/* Quick actions */}
+            {/* Overview card — one surface: gradient hero band + stats strip */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15, duration: 0.35 }}
-              className="flex gap-2 overflow-x-auto pb-0.5"
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-theme-sm"
             >
-              {quickActions.map((a) => (
+              <div className="relative overflow-hidden bg-gradient-to-br from-brand-500 via-indigo-600 to-violet-600 p-4 md:p-5 text-white">
                 <motion.div
-                  key={a.label}
-                  whileHover={{ scale: 1.04, y: -1 }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 22 }}
-                  className="shrink-0"
-                >
-                  <Link
-                    href={a.href}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold transition-colors ${
-                      a.primary
-                        ? 'bg-gradient-to-r from-brand-500 to-indigo-600 text-white shadow-theme-sm hover:from-brand-600 hover:to-indigo-700'
-                        : 'border border-gray-200 dark:border-gray-800 bg-white dark:bg-white/[0.04] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    <a.icon className="h-3.5 w-3.5" />
-                    {a.label}
-                  </Link>
-                </motion.div>
-              ))}
+                  className="pointer-events-none absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-[-18deg]"
+                  animate={{ x: ['-180%', '360%'] }}
+                  transition={{ repeat: Infinity, duration: 3.2, ease: 'easeInOut', repeatDelay: 2.6 }}
+                />
+                <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/80">
+                      <Sparkles className="h-3 w-3" />
+                      {t('db.stat_collected')}
+                    </p>
+                    <p className="mt-1 text-3xl md:text-4xl font-extrabold tabular-nums tracking-tight">
+                      ETB {collectedAnim.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] text-white/70 mt-0.5">Total deposits processed across all groups</p>
+                  </div>
+                  <span className="shrink-0 flex items-center gap-1.5 text-[10px] font-semibold bg-white/15 rounded-full px-2 py-0.5">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75 motion-safe:animate-ping" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-200" />
+                    </span>
+                    LIVE
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
+                <div className="px-3 py-2.5 min-w-0">
+                  <p className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate">
+                    <Users className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-light-400" />
+                    <span className="truncate">{t('db.stat_groups')}</span>
+                  </p>
+                  <p className="mt-0.5 text-lg font-bold text-gray-900 dark:text-white/90 tabular-nums">
+                    {stats.totalGroups}
+                    <span className="ml-1.5 text-[10px] font-medium text-gray-400 dark:text-gray-500">{activeGroupsPct}% active</span>
+                  </p>
+                </div>
+                <div className="px-3 py-2.5 min-w-0">
+                  <p className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate">
+                    <UserCheck className="h-3 w-3 shrink-0 text-green-600 dark:text-success-400" />
+                    <span className="truncate">{t('db.stat_members')}</span>
+                  </p>
+                  <p className="mt-0.5 text-lg font-bold text-gray-900 dark:text-white/90 tabular-nums">{membersAnim}</p>
+                </div>
+                <Link href="/receipts" className="px-3 py-2.5 min-w-0 block hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors">
+                  <p className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate">
+                    <Receipt className="h-3 w-3 shrink-0 text-amber-500" />
+                    <span className="truncate">{t('db.stat_receipts')}</span>
+                    {stats.pendingReceipts > 0 && (
+                      <span className="relative flex h-1.5 w-1.5 shrink-0">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-safe:animate-ping" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
+                      </span>
+                    )}
+                  </p>
+                  <p className={`mt-0.5 text-lg font-bold tabular-nums ${stats.pendingReceipts > 0 ? 'text-amber-600 dark:text-warning-400' : 'text-gray-900 dark:text-white/90'}`}>
+                    {stats.pendingReceipts}
+                  </p>
+                </Link>
+              </div>
             </motion.div>
 
             {/* Main Row: Chart + Recent Activity */}
