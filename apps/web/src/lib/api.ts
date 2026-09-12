@@ -200,6 +200,8 @@ export interface GroupRules {
   requireExactAmount: boolean;
   allowPartialPayments: boolean;
   allowOverpayment: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   depositDeadlineDay?: number;
   minVerificationHours: number;
   allowSkipRound: boolean;
@@ -314,6 +316,7 @@ export interface DepositItem {
   status: 'verified' | 'pending' | 'rejected';
   date: string;
   transferDate: string;
+  createdAt?: string;
   ftNumber?: string;
   narrative?: string;
   receiptUrl?: string;
@@ -718,6 +721,7 @@ function mapDepositItem(raw: Record<string, unknown>): DepositItem {
     ftNumber: (raw.ftNumber as string) || undefined,
     narrative: (raw.narrative as string) || undefined,
     receiptUrl: raw.imageUrl as string | undefined,
+    createdAt: raw.createdAt ? new Date(raw.createdAt as string).toISOString() : undefined,
     cycleNumber: (cycle?.cycleNumber as number) || undefined,
     bankName: (raw.bankName as string) || undefined,
     senderName: (raw.senderName as string) || undefined,
@@ -955,7 +959,25 @@ export const getRuleTemplates = async (): Promise<RuleTemplate[]> => {
 };
 
 export const createRuleTemplate = async (data: Partial<RuleTemplate> & { name: string }): Promise<RuleTemplate> => {
-  const { id: _id, createdBy: _cb, createdAt: _ca, updatedAt: _ua, ...payload } = data as RuleTemplate;
+  // Send only fields the template model persists — the loaded GroupRules row
+  // also carries Prisma-only fields (allowMergedMembers, …) the backend would
+  // otherwise reject.
+  const {
+    id: _id,
+    groupId: _g,
+    createdBy: _cb,
+    createdAt: _ca,
+    updatedAt: _ua,
+    allowMergedMembers: _am,
+    maxMergedMembersPerSlot: _mm,
+    feeWaiverGracePeriodDays: _fw,
+    ...payload
+  } = data as RuleTemplate & {
+    groupId?: string;
+    allowMergedMembers?: boolean;
+    maxMergedMembersPerSlot?: number;
+    feeWaiverGracePeriodDays?: number;
+  };
   const response = await api.post('/rule-templates', payload);
   return response.data as RuleTemplate;
 };

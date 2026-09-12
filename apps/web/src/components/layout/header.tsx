@@ -91,7 +91,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 flex w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-40">
       <div className="flex flex-col items-center justify-between grow lg:flex-row lg:px-6">
-        <div className="flex items-center justify-between w-full gap-2 px-3 py-3 sm:gap-4 lg:justify-normal lg:px-0 lg:py-4">
+        <div className="flex items-center justify-between w-full gap-2 px-3 py-3 sm:gap-4 lg:w-auto lg:justify-normal lg:px-0 lg:py-4">
           {/* Hamburger */}
           <button
             className="flex items-center justify-center w-10 h-10 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 rounded-lg lg:h-11 lg:w-11 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"

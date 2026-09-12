@@ -241,7 +241,9 @@ export default function SettingsTab({
     if (!rules) return;
     setRulesSaving(true);
     try {
-      const { id: _id, groupId: _gId, ...rulesData } = rules;
+      // Strip DB-managed fields the rules endpoint doesn't accept — the loaded
+      // rules row carries id/groupId/createdAt/updatedAt that would 400.
+      const { id: _id, groupId: _gId, createdAt: _ca, updatedAt: _ua, ...rulesData } = rules;
       const updated = await updateGroupRules(groupId, rulesData);
       setRules(updated);
       notifySuccess('Group rules saved successfully!');

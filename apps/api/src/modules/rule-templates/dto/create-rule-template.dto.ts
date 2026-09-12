@@ -79,6 +79,22 @@ export class CreateRuleTemplateDto {
   @IsBoolean()
   requireExactAmount?: boolean;
 
+  // The settings page saves the group's FULL rules object as a template, which
+  // carries Prisma-only GroupRules fields the template model doesn't persist.
+  // They are accepted here and dropped by the service whitelist.
+  @IsOptional()
+  @IsBoolean()
+  allowMergedMembers?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Max(20)
+  maxMergedMembersPerSlot?: number;
+
+  @IsOptional()
+  @IsNumber()
+  feeWaiverGracePeriodDays?: number;
+
   @IsOptional()
   @IsBoolean()
   allowPartialPayments?: boolean;

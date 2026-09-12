@@ -70,6 +70,24 @@ export class UpdateGroupRulesDto {
   @IsBoolean()
   requireExactAmount?: boolean;
 
+  // Merged-member rules — exist on the GroupRules table; the settings page
+  // sends the full loaded rules object on save.
+  @IsOptional()
+  @IsBoolean()
+  allowMergedMembers?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  maxMergedMembersPerSlot?: number;
+
+  // Fee waiver escalation
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  feeWaiverGracePeriodDays?: number;
+
   @IsOptional()
   @IsBoolean()
   allowPartialPayments?: boolean;

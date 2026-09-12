@@ -38,10 +38,13 @@ export function useBreadcrumbs() {
     const segments = pathname.split('/').filter(Boolean);
     return segments.map((segment, index) => {
       const path = `/${segments.slice(0, index + 1).join('/')}`;
-      return {
-        title: segment.charAt(0).toUpperCase() + segment.slice(1),
-        link: path
-      };
+      // Dynamic route ids (Prisma CUIDs like "cmqh5w5ft...") are noise in a
+      // breadcrumb — the page itself shows the real title.
+      const isCuid = /^c[a-z0-9]{20,}$/.test(segment);
+      const title = isCuid
+        ? 'Details'
+        : segment.charAt(0).toUpperCase() + segment.slice(1);
+      return { title, link: path };
     });
   }, [pathname]);
 

@@ -51,7 +51,7 @@ export class RuleTemplatesService {
       if (dto[field] !== undefined) data[field] = dto[field];
     }
     return this.prisma.ruleTemplate.create({
-      data: { ...data, createdById: adminId },
+      data: { ...data, createdById: adminId } as any,
     });
   }
 

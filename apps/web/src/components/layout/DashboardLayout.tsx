@@ -38,7 +38,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen xl:flex">
       <AppSidebar />
       <Backdrop />
-      <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+      <div className={`flex-1 min-w-0 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
         <Header />
         <div className="p-4 mx-auto max-w-7xl pb-24 md:p-6 md:pb-24 lg:pb-6">{children}</div>
         <BottomNav />
