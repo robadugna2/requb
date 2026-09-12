@@ -152,6 +152,16 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchAll().finally(() => setLoading(false)); }, [fetchAll]);
 
+  // Keep every number on this page live: silent refresh + 60s poll
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchAll();
+    }, 60_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void fetchAll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, [fetchAll]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchAll();
@@ -404,19 +414,19 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-zinc-800">
                     <div>
                       <p className="text-xs text-zinc-400">{t('db.active_wase')}</p>
-                      <p className="text-lg font-bold mt-1">{t('db.guarantees_value')}</p>
+                      <p className="text-lg font-bold mt-1 tabular-nums">{stats.activeGuarantees ?? 0} active</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-400">{t('db.emergency_skips')}</p>
-                      <p className="text-lg font-bold mt-1">{t('db.requests_value')}</p>
+                      <p className="text-lg font-bold mt-1 tabular-nums">{stats.pendingSwapRequests ?? 0} pending</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-400">{t('db.coffee_mode')}</p>
-                      <p className="text-lg font-bold mt-1">{t('db.groups_value')}</p>
+                      <p className="text-lg font-bold mt-1 tabular-nums">{stats.completedDraws ?? 0} draws held</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-400">{t('db.auction_equb')}</p>
-                      <p className="text-lg font-bold mt-1">{t('db.disbursed_value')}</p>
+                      <p className="text-lg font-bold mt-1 tabular-nums">ETB {(stats.totalDisbursed ?? 0).toLocaleString()} disbursed</p>
                     </div>
                   </div>
                 </CardContent>

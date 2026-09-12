@@ -23,7 +23,8 @@ export class DashboardService {
   async getStats(user: JwtPayload) {
     const groupWhere = this.getGroupWhereClause(user);
 
-    const [totalGroups, activeMembers, pendingReceipts, totalCollectedRaw, adminRecord] =
+    const [totalGroups, activeMembers, pendingReceipts, totalCollectedRaw, adminRecord,
+      activeGuarantees, pendingSwapRequests, completedDraws, disbursedRaw] =
       await Promise.all([
         this.prisma.equbGroup.count({
           where: { ...groupWhere, status: 'ACTIVE' },
@@ -43,7 +44,21 @@ export class DashboardService {
         this.prisma.admin.findUnique({
           where: { id: user.id },
           include: { createdBy: { select: { name: true } } }
-        })
+        }),
+        // Traditional Equb community metrics (real data)
+        this.prisma.guarantor.count({
+          where: { status: 'ACTIVE', group: groupWhere },
+        }),
+        this.prisma.turnSwapRequest.count({
+          where: { status: 'PENDING', group: groupWhere },
+        }),
+        this.prisma.lotteryResult.count({
+          where: { cycle: { group: groupWhere } },
+        }),
+        this.prisma.lotteryResult.aggregate({
+          where: { cycle: { group: groupWhere } },
+          _sum: { amountWon: true },
+        }),
       ]);
 
     const sum = totalCollectedRaw._sum.amount || 0;
@@ -54,6 +69,10 @@ export class DashboardService {
       activeMembers: activeMembers.length,
       pendingReceipts,
       totalCollected,
+      activeGuarantees,
+      pendingSwapRequests,
+      completedDraws,
+      totalDisbursed: disbursedRaw._sum.amountWon || 0,
       user: {
         name: adminRecord?.name || user.name,
         role: adminRecord?.role || user.role,

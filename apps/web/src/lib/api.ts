@@ -394,6 +394,10 @@ export interface DashboardStats {
   activeMembers: number;
   pendingReceipts: number;
   totalCollected: string;
+  activeGuarantees?: number;
+  pendingSwapRequests?: number;
+  completedDraws?: number;
+  totalDisbursed?: number;
   user?: {
     name: string;
     role: string;
