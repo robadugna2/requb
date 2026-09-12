@@ -334,14 +334,80 @@ export interface DepositItem {
   cbeVerificationData?: CbeTransactionData;
 }
 
+export type LotteryDrawStatus = 'PENDING' | 'CONFIRMED' | 'VOID';
+
 export interface LotteryResultItem {
   id: string;
   groupName: string;
   groupId: string;
   cycle: number;
+  cycleId: string;
   winnerName: string;
+  winnerId: string;
+  method: 'RANDOM' | 'WEIGHTED' | 'LIVE_DRAW' | 'FIXED_ORDER';
+  status: LotteryDrawStatus;
+  attempt: number;
   amount: number;
+  adminFee: number | null;
+  net: number | null;
+  seed: string | null;
+  resultHash: string | null;
   date: string;
+  drawnAt: string;
+  drawnByName: string | null;
+  confirmedByName: string | null;
+  confirmedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  payout: {
+    status: 'PENDING' | 'COMPLETED';
+    amount: number | null;
+    payoutDate: string | null;
+  } | null;
+}
+
+export interface LotteryEligibilityMember {
+  userId: string;
+  name: string;
+  phone?: string;
+  photoUrl?: string;
+  shares: number;
+  confirmedWins: number;
+  rotationLeft: number;
+  verifiedAmount: number;
+  eligible: boolean;
+  reason: string;
+}
+
+export interface LotteryEligibility {
+  groupId: string;
+  groupName: string;
+  cycleId: string;
+  cycleNumber: number;
+  defaultMethod: 'RANDOM' | 'WEIGHTED' | 'LIVE_DRAW' | 'FIXED_ORDER';
+  members: LotteryEligibilityMember[];
+  eligibleCount: number;
+  totalPool: number;
+  violations: { rule: string; message: string; severity: 'ERROR' | 'WARNING' }[];
+  pendingResultId: string | null;
+}
+
+export interface LotteryDrawPending {
+  id: string;
+  cycleId: string;
+  winnerId: string;
+  winnerName: string;
+  method: LotteryResultItem['method'];
+  attempt: number;
+  status: LotteryDrawStatus;
+  gross: number;
+  adminFee: number;
+  net: number;
+  eligibleCount: number;
+  amount: number;
+  seed: string | null;
+  resultHash: string | null;
+  awaitingConfirmation: boolean;
 }
 
 export interface PenaltyRecord {
@@ -478,15 +544,16 @@ function mapGroupDetail(raw: Record<string, unknown>): GroupDetail {
   const latestCycle = cycles?.[0];
   const currentCycle = (latestCycle?.cycleNumber as number) ?? 0;
 
-  // Build winner set from lottery results across all cycles
+  // Build winner set from confirmed lottery results across all cycles
   const winnerMap = new Map<string, number>();
   if (cycles) {
     for (const cycle of cycles) {
-      const lr = cycle.lotteryResult as Record<string, unknown> | undefined;
-      if (lr) {
-        const winner = lr.winner as Record<string, unknown> | undefined;
-        const winnerId = (lr.winnerId as string) || (winner?.id as string);
-        if (winnerId) {
+      const results = (cycle.lotteryResults as Array<Record<string, unknown>> | undefined) || [];
+      const confirmed = results.find((r) => r.status === 'CONFIRMED') || results[0];
+      if (confirmed) {
+        const winner = confirmed.winner as Record<string, unknown> | undefined;
+        const winnerId = (confirmed.winnerId as string) || (winner?.id as string);
+        if (winnerId && confirmed.status === 'CONFIRMED') {
           winnerMap.set(winnerId, cycle.cycleNumber as number);
         }
       }
@@ -746,15 +813,41 @@ function mapLotteryResult(raw: Record<string, unknown>): LotteryResultItem {
   const winner = raw.winner as Record<string, unknown> | undefined;
   const cycle = raw.cycle as Record<string, unknown> | undefined;
   const group = cycle?.group as Record<string, unknown> | undefined;
+  const payout = raw.payout as Record<string, unknown> | undefined;
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 
   return {
     id: raw.id as string,
     groupName: (group?.name as string) || 'Unknown',
     groupId: (group?.id as string) || '',
     cycle: (cycle?.cycleNumber as number) || 0,
+    cycleId: (cycle?.id as string) || '',
     winnerName: (winner?.name as string) || 'Unknown',
+    winnerId: (raw.winnerId as string) || (winner?.id as string) || '',
+    method: (raw.method as LotteryResultItem['method']) || 'RANDOM',
+    status: (raw.status as LotteryDrawStatus) || 'CONFIRMED',
+    attempt: (raw.attempt as number) ?? 1,
     amount: (raw.amountWon as number) || 0,
+    adminFee: (raw.adminFeeAmount as number) ?? null,
+    net: (raw.netAmount as number) ?? null,
+    seed: (raw.seed as string) || null,
+    resultHash: (raw.resultHash as string) || null,
     date: raw.drawnAt ? new Date(raw.drawnAt as string).toLocaleDateString('en-CA') : 'N/A',
+    drawnAt: iso(raw.drawnAt) || '',
+    drawnByName: (raw.drawnByName as string) || null,
+    confirmedByName: (raw.confirmedByName as string) || null,
+    confirmedAt: iso(raw.confirmedAt),
+    voidedAt: iso(raw.voidedAt),
+    voidReason: (raw.voidReason as string) || null,
+    payout: payout
+      ? {
+          status: (payout.status as 'PENDING' | 'COMPLETED') || 'PENDING',
+          amount: (payout.amount as number) ?? null,
+          payoutDate: payout.payoutDate
+            ? new Date(payout.payoutDate as string).toLocaleDateString('en-CA')
+            : null,
+        }
+      : null,
   };
 }
 
@@ -1310,14 +1403,65 @@ export const updateGroupCbeAccounts = async (
 };
 
 // Lottery
-export const triggerLottery = async (groupId: string): Promise<{ winner: { name: string }; amount: number }> => {
-  const response = await api.post(`/groups/${groupId}/lottery`);
-  const data = response.data as Record<string, unknown>;
-  const winner = data.winner as Record<string, unknown> | undefined;
+export const triggerLottery = async (
+  groupId: string,
+  method?: string,
+): Promise<LotteryDrawPending> => {
+  // Group-page quick draw: resolves the active cycle, then runs phase 1
+  const group = await getGroup(groupId);
+  const activeCycle = group.cycles?.find((c) => c.status === 'ACTIVE');
+  if (!activeCycle) throw new Error('No active cycle found for this group');
+  return drawLottery(activeCycle.id, method);
+};
+
+/** Phase 1 - spin the wheel server-side; returns a PENDING draw. */
+export const drawLottery = async (
+  cycleId: string,
+  method?: string,
+): Promise<LotteryDrawPending> => {
+  const response = await api.post(`/lottery/draw/${cycleId}`, method ? { method } : {});
+  return mapDrawPending(response.data as Record<string, unknown>);
+};
+
+/** Phase 2a - admin confirms the drawn winner (cycle completes, payout created). */
+export const confirmLotteryDraw = async (resultId: string, groupId: string): Promise<void> => {
+  await api.post(`/lottery/${resultId}/confirm`, { groupId });
+};
+
+/** Phase 2b - admin voids the pending draw and immediately re-runs it. */
+export const redrawLotteryDraw = async (
+  resultId: string,
+  groupId: string,
+): Promise<LotteryDrawPending> => {
+  const response = await api.post(`/lottery/${resultId}/redraw`, { groupId });
+  return mapDrawPending(response.data as Record<string, unknown>);
+};
+
+function mapDrawPending(d: Record<string, unknown>): LotteryDrawPending {
+  const winner = d.winner as Record<string, unknown> | undefined;
   return {
-    winner: { name: (winner?.name as string) || 'Winner' },
-    amount: (data.amountWon as number) || 0,
+    id: d.id as string,
+    cycleId: d.cycleId as string,
+    winnerId: d.winnerId as string,
+    winnerName: (winner?.name as string) || 'Winner',
+    method: (d.method as LotteryDrawPending['method']) || 'RANDOM',
+    attempt: (d.attempt as number) ?? 1,
+    status: 'PENDING',
+    gross: (d.gross as number) ?? (d.amountWon as number) ?? 0,
+    adminFee: (d.adminFee as number) ?? 0,
+    net: (d.net as number) ?? 0,
+    eligibleCount: (d.eligibleCount as number) ?? 0,
+    amount: (d.amount as number) ?? (d.amountWon as number) ?? 0,
+    seed: (d.seed as string) || null,
+    resultHash: (d.resultHash as string) || null,
+    awaitingConfirmation: true,
   };
+}
+
+/** Eligibility board - the exact member pool (with reasons) a draw uses. */
+export const getLotteryEligibility = async (groupId: string): Promise<LotteryEligibility> => {
+  const response = await api.get(`/lottery/eligibility/${groupId}`);
+  return response.data as LotteryEligibility;
 };
 
 export const getLotteryResults = async (groupId?: string): Promise<LotteryResultItem[]> => {

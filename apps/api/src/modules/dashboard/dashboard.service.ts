@@ -53,10 +53,10 @@ export class DashboardService {
           where: { status: 'PENDING', group: groupWhere },
         }),
         this.prisma.lotteryResult.count({
-          where: { cycle: { group: groupWhere } },
+          where: { status: 'CONFIRMED', cycle: { group: groupWhere } },
         }),
         this.prisma.lotteryResult.aggregate({
-          where: { cycle: { group: groupWhere } },
+          where: { status: 'CONFIRMED', cycle: { group: groupWhere } },
           _sum: { amountWon: true },
         }),
       ]);
@@ -108,7 +108,7 @@ export class DashboardService {
           },
         }),
         this.prisma.lotteryResult.findMany({
-          where: { cycle: { group: groupWhere } },
+          where: { status: 'CONFIRMED', cycle: { group: groupWhere } },
           orderBy: { drawnAt: 'desc' },
           take: 15,
           include: {

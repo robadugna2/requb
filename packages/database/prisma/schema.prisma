@@ -46,8 +46,16 @@ enum VerificationStatus {
 
 enum LotteryMethod {
   RANDOM
+  WEIGHTED
   LIVE_DRAW
   FIXED_ORDER
+}
+
+// Two-phase draws: PENDING awaits admin confirm / re-draw; VOID keeps history
+enum DrawStatus {
+  PENDING
+  CONFIRMED
+  VOID
 }
 
 enum PayoutStatus {
@@ -237,7 +245,7 @@ model Cycle {
   group          EqubGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
   winner         User?           @relation("CycleWinner", fields: [winnerId], references: [id])
   deposits       Deposit[]
-  lotteryResult  LotteryResult?
+  lotteryResults LotteryResult[]
   penaltyRecords PenaltyRecord[]
 
   @@unique([groupId, cycleNumber])
@@ -278,18 +286,30 @@ model Deposit {
 }
 
 model LotteryResult {
-  id         String        @id @default(cuid())
-  cycleId    String        @unique @map("cycle_id")
-  winnerId   String        @map("winner_id")
-  method     LotteryMethod
-  amountWon  Float         @map("amount_won")
-  drawnAt    DateTime      @default(now()) @map("drawn_at")
-  drawnBy    String?       @map("drawn_by") // admin id who triggered
+  id             String      @id @default(cuid())
+  cycleId        String      @map("cycle_id")
+  winnerId       String      @map("winner_id")
+  method         LotteryMethod
+  status         DrawStatus  @default(CONFIRMED)
+  attempt        Int         @default(1)
+  amountWon      Float       @map("amount_won")
+  adminFeeAmount Float?      @map("admin_fee_amount")
+  netAmount      Float?      @map("net_amount")
+  seed           String?     // provably-fair draw seed (hex)
+  resultHash     String?     @map("result_hash") // sha256 audit hash of seed+cycle+winner
+  drawnAt        DateTime    @default(now()) @map("drawn_at")
+  drawnBy        String?     @map("drawn_by") // admin id who triggered
+  confirmedBy    String?     @map("confirmed_by")
+  confirmedAt    DateTime?   @map("confirmed_at")
+  voidedAt       DateTime?   @map("voided_at")
+  voidReason     String?     @map("void_reason")
 
   cycle  Cycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   winner User   @relation(fields: [winnerId], references: [id])
   payout Payout?
 
+  @@index([cycleId])
+  @@index([status])
   @@map("lottery_results")
 }
 

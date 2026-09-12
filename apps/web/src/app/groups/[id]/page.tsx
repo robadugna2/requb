@@ -106,7 +106,7 @@ export default function GroupDetailPage() {
     try {
       const result = await triggerLottery(groupId);
       notifySuccess(
-        `Lottery draw complete! Winner: ${result.winner?.name || 'TBD'} (Amount: ETB ${result.amount || 0})`
+        `Draw complete — ${result.winnerName} is the lucky member (ETB ${(result.gross || result.amount || 0).toLocaleString()}). Confirm the win in the Lottery Arena.`
       );
       await fetchGroup();
       setRefreshKey((k) => k + 1);

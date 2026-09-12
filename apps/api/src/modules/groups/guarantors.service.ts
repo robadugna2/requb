@@ -51,6 +51,7 @@ export class GuarantorsService {
     // Check if guarantor has already won (traditionally, only members who haven't won can act as wase)
     const guarantorWins = await this.prisma.lotteryResult.count({
       where: {
+        status: 'CONFIRMED',
         winnerId: guarantorUserId,
         cycle: { groupId },
       },

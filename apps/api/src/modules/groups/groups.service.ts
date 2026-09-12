@@ -143,7 +143,9 @@ export class GroupsService {
         cycles: {
           orderBy: { cycleNumber: 'desc' },
           include: {
-            lotteryResult: {
+            lotteryResults: {
+              where: { status: { not: 'VOID' } },
+              orderBy: { attempt: 'desc' },
               include: { winner: true },
             },
           },

@@ -22,11 +22,46 @@ export class LotteryController {
     private readonly turnSwapService: TurnSwapService,
   ) {}
 
+  /** Eligibility board for a group's active cycle — same pool the draw uses. */
+  @Get('eligibility/:groupId')
+  @UseGuards(GroupPermissionsGuard)
+  @RequirePermission('canTriggerLottery')
+  getEligibility(@Param('groupId') groupId: string) {
+    return this.lotteryService.getEligibility(groupId);
+  }
+
+  /** Phase 1 — spin. Creates a PENDING result awaiting admin confirmation. */
   @Post('draw/:cycleId')
   @UseGuards(GroupPermissionsGuard)
   @RequirePermission('canTriggerLottery')
-  draw(@Param('cycleId') cycleId: string, @Request() req: { user: { id: string } }) {
-    return this.lotteryService.drawWinner(cycleId, req.user.id);
+  draw(
+    @Param('cycleId') cycleId: string,
+    @Request() req: { user: { id: string } },
+    @Body() body: { method?: string },
+  ) {
+    return this.lotteryService.drawWinner(cycleId, req.user.id, body?.method);
+  }
+
+  /** Phase 2a — admin confirms the lucky member (completes cycle + payout). */
+  @Post(':id/confirm')
+  @UseGuards(GroupPermissionsGuard)
+  @RequirePermission('canTriggerLottery')
+  confirm(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.lotteryService.confirmDraw(id, req.user.id);
+  }
+
+  /** Phase 2b — admin voids the pending draw and re-runs it. */
+  @Post(':id/redraw')
+  @UseGuards(GroupPermissionsGuard)
+  @RequirePermission('canTriggerLottery')
+  redraw(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.lotteryService.redrawDraw(id, req.user.id);
   }
 
   @Get('results')

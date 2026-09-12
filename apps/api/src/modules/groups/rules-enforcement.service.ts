@@ -134,6 +134,7 @@ export class RulesEnforcementService {
     if (rules?.postWinContributionRequired) {
       const memberWins = await this.prisma.lotteryResult.findMany({
         where: {
+          status: 'CONFIRMED',
           winnerId: userId,
           cycle: { groupId },
         },
@@ -344,6 +345,7 @@ export class RulesEnforcementService {
     // Get all previous winners in this group
     const previousWinners = await this.prisma.lotteryResult.findMany({
       where: {
+        status: 'CONFIRMED',
         cycle: { groupId },
       },
       include: {
@@ -508,6 +510,7 @@ export class RulesEnforcementService {
 
     const completedDraws = await this.prisma.lotteryResult.count({
       where: {
+        status: 'CONFIRMED',
         cycle: { groupId },
       },
     });
