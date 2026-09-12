@@ -259,60 +259,53 @@ export default function DepositsTab({
   };
 
   return (
-    <div className="space-y-6">
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="card p-4 flex items-center gap-3">
-          <div className="p-2 bg-green-50 dark:bg-success-500/10 rounded-lg flex-shrink-0"><TrendingUp className="h-5 w-5 text-green-600 dark:text-success-400" /></div>
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Verified</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white/90">ETB {depositKPIs.totalVerified.toLocaleString()}</p>
-            <p className="text-xs text-green-600 dark:text-success-400">{depositKPIs.countVerified} deposits</p>
-          </div>
-        </div>
-        <div className="card p-4 flex items-center gap-3">
-          <div className="p-2 bg-amber-50 dark:bg-warning-500/10 rounded-lg flex-shrink-0"><Clock className="h-5 w-5 text-amber-500" /></div>
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Pending</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white/90">ETB {depositKPIs.totalPending.toLocaleString()}</p>
-            <p className="text-xs text-amber-600 dark:text-warning-400">{depositKPIs.countPending} awaiting</p>
-          </div>
-        </div>
-        <div className="card p-4 flex items-center gap-3">
-          <div className="p-2 bg-red-50 dark:bg-error-500/10 rounded-lg flex-shrink-0"><XCircle className="h-5 w-5 text-red-500 dark:text-error-400" /></div>
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Rejected</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white/90">{depositKPIs.countRejected}</p>
-            <p className="text-xs text-red-600 dark:text-error-400">deposits</p>
-          </div>
-        </div>
-        <div className="card p-4 flex items-center gap-3">
-          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg flex-shrink-0"><AlertTriangle className="h-5 w-5 text-orange-500 dark:text-orange-400" /></div>
-          <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Late</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white/90">{depositKPIs.countLate}</p>
-            <p className="text-xs text-orange-600 dark:text-orange-400">flagged</p>
-          </div>
+    <div className="space-y-4">
+      {/* Compact KPI strip — one slim row instead of four big cards */}
+      <div className="card !p-0 overflow-hidden">
+        <div className="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800">
+          {[
+            { icon: TrendingUp, tint: 'text-green-600 dark:text-success-400', label: 'Verified', value: `ETB ${depositKPIs.totalVerified.toLocaleString()}`, sub: `${depositKPIs.countVerified} deposits` },
+            { icon: Clock, tint: 'text-amber-500', label: 'Pending', value: `ETB ${depositKPIs.totalPending.toLocaleString()}`, sub: `${depositKPIs.countPending} awaiting` },
+            { icon: XCircle, tint: 'text-red-500 dark:text-error-400', label: 'Rejected', value: `${depositKPIs.countRejected}`, sub: 'deposits' },
+            { icon: AlertTriangle, tint: 'text-orange-500 dark:text-orange-400', label: 'Late', value: `${depositKPIs.countLate}`, sub: 'flagged' },
+          ].map((k) => (
+            <div key={k.label} className="px-2 py-2.5 min-w-0">
+              <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-semibold truncate">
+                <k.icon className={`h-3 w-3 shrink-0 ${k.tint}`} />
+                <span className="truncate">{k.label}</span>
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white/90 tabular-nums truncate">{k.value}</p>
+              <p className={`text-[10px] truncate ${k.tint}`}>{k.sub}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="card p-3">
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+      {/* Compact toolbar: search + scan / filters / status pills */}
+      <div className="card p-2.5 space-y-2">
+        <div className="flex gap-2">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
             <input
               type="text"
               value={depositSearch}
               onChange={(e) => { setDepositSearch(e.target.value); setDepositPage(1); }}
-              placeholder="Search by member, FT ref, or bank…"
+              placeholder="Member, FT ref, or bank…"
               className="input-field pl-9 text-sm w-full"
             />
           </div>
+          {canManageDeposits && (
+            <Button size="sm" onClick={() => router.push(`/scan?group=${groupId}`)} className="shrink-0 self-stretch">
+              <ScanLine className="h-4 w-4 mr-1" />
+              Scan FT
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
           <select
             value={depositCycleFilter}
             onChange={(e) => { setDepositCycleFilter(e.target.value === 'all' ? 'all' : Number(e.target.value)); setDepositPage(1); }}
-            className="input-field text-sm min-w-[130px]"
+            className="input-field text-sm flex-1 min-w-0"
           >
             <option value="all">All Cycles</option>
             {depositCycles.map((c) => <option key={c} value={c}>Cycle {c}</option>)}
@@ -323,7 +316,7 @@ export default function DepositsTab({
               const [field, dir] = e.target.value.split('-') as ['date' | 'amount' | 'member', 'asc' | 'desc'];
               setDepositSort({ field, dir }); setDepositPage(1);
             }}
-            className="input-field text-sm min-w-[170px]"
+            className="input-field text-sm flex-1 min-w-0"
           >
             <option value="date-desc">Date — Newest</option>
             <option value="date-asc">Date — Oldest</option>
@@ -334,22 +327,16 @@ export default function DepositsTab({
           </select>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white/90 border border-gray-200 dark:border-gray-800 rounded-lg hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors flex-shrink-0"
+            className="shrink-0 flex items-center gap-1.5 px-3 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white/90 border border-gray-200 dark:border-gray-800 rounded-lg hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors self-stretch"
             title="Export current view as CSV"
           >
             <Download className="h-4 w-4" />
-            CSV
+            <span className="hidden sm:inline">CSV</span>
           </button>
-          {canManageDeposits && (
-            <Button size="sm" onClick={() => router.push(`/scan?group=${groupId}`)} className="flex-shrink-0">
-              <ScanLine className="h-4 w-4 mr-1" />
-              Scan FT
-            </Button>
-          )}
         </div>
 
         {/* Status filter pills */}
-        <div className="flex gap-2 mt-3 flex-wrap">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
           {(['all', 'pending', 'verified', 'rejected'] as const).map((s) => {
             const counts: Record<string, number> = {
               all: deposits.length,
@@ -362,7 +349,7 @@ export default function DepositsTab({
               <button
                 key={s}
                 onClick={() => { setDepositStatusFilter(s); setDepositPage(1); setSelectedDepositIds(new Set()); }}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
                   active ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/[0.12]'
                 }`}
               >
@@ -393,7 +380,79 @@ export default function DepositsTab({
       <div className="card overflow-hidden p-0">
         {filteredSortedDeposits.length > 0 ? (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile / tablet: compact deposit cards */}
+            <div className="md:hidden divide-y divide-gray-50 dark:divide-gray-800">
+              {pagedDeposits.map((deposit) => (
+                <div
+                  key={deposit.id}
+                  onClick={() => setPreviewDeposit(deposit)}
+                  className="flex items-center gap-2.5 px-3 py-2.5 active:bg-gray-50 dark:active:bg-white/[0.02] cursor-pointer"
+                >
+                  {deposit.status === 'pending' && (
+                    <input
+                      type="checkbox"
+                      checked={selectedDepositIds.has(deposit.id)}
+                      onChange={() => toggleSelectDeposit(deposit.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded border-gray-300 text-primary-600 dark:text-brand-400 focus:ring-primary-500 shrink-0"
+                    />
+                  )}
+                  <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-brand-500/15 flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-bold text-primary-700 dark:text-brand-400">
+                      {deposit.memberName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white/90 truncate">{deposit.memberName}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                      {deposit.ftNumber || deposit.bankName || '—'} · {String(deposit.transferDate || deposit.date).slice(0, 10)}
+                      {deposit.senderName && deposit.senderName !== deposit.memberName && (
+                        <> · via {deposit.senderName}</>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                      ETB {deposit.amount.toLocaleString()}
+                    </p>
+                    <div className="flex items-center justify-end gap-1 mt-0.5">
+                      {deposit.cycleNumber && (
+                        <span className="text-[10px] font-semibold text-indigo-700 dark:text-brand-400 bg-indigo-50 dark:bg-brand-500/10 px-1.5 py-px rounded-full">
+                          C{deposit.cycleNumber}
+                        </span>
+                      )}
+                      {deposit.isLate && (
+                        <span className="text-[10px] bg-orange-100 text-orange-700 dark:text-orange-400 px-1.5 py-px rounded-full font-medium">Late</span>
+                      )}
+                      <StatusBadge status={deposit.status} />
+                    </div>
+                  </div>
+                  {deposit.status === 'pending' && canManageDeposits && (
+                    <div className="flex flex-col gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleVerify(deposit.id)}
+                        disabled={verifyingDepositId === deposit.id}
+                        className="p-1.5 text-green-600 dark:text-success-400 bg-green-50 dark:bg-success-500/10 rounded-lg disabled:opacity-40 active:scale-95 transition-all"
+                        title="Verify"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleReject(deposit.id)}
+                        disabled={rejectingDepositId === deposit.id}
+                        className="p-1.5 text-red-500 dark:text-error-400 bg-red-50 dark:bg-error-500/10 rounded-lg disabled:opacity-40 active:scale-95 transition-all"
+                        title="Reject"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: full table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                   <tr>
@@ -528,7 +587,7 @@ export default function DepositsTab({
             )}
           </>
         ) : (
-          <div className="text-center py-16">
+          <div className="text-center py-10">
             <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 dark:text-gray-400 font-medium">No deposits found</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -550,9 +609,9 @@ export default function DepositsTab({
 
       {/* Penalties section */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white/90">Penalties</h3>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white/90">Penalties</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">Late-payment penalties enforced by the group rules</p>
           </div>
         </div>
@@ -562,7 +621,40 @@ export default function DepositsTab({
             <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
           </div>
         ) : penalties.length > 0 ? (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-gray-50 dark:divide-gray-800">
+              {penalties.map((penalty) => (
+                <div key={penalty.id} className="flex items-center gap-2.5 px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white/90 truncate">
+                      {penalty.user?.name || 'Unknown Member'}
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                      {penalty.reason} · {new Date(penalty.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                      ETB {penalty.amount.toLocaleString()}
+                    </p>
+                    <StatusBadge
+                      status={penalty.status === 'PAID' ? 'verified' : penalty.status === 'WAIVED' ? 'pending' : 'rejected'}
+                    >
+                      {penalty.status}
+                    </StatusBadge>
+                  </div>
+                  {penalty.status === 'PENDING' && (
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <Button size="sm" onClick={() => handlePayPenalty(penalty.id)}>Paid</Button>
+                      <Button size="sm" variant="secondary" onClick={() => handleWaivePenalty(penalty.id)}>Waive</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
                 <tr>
@@ -618,7 +710,8 @@ export default function DepositsTab({
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         ) : (
           <div className="text-center py-12">
             <Ban className="h-10 w-10 text-gray-300 mx-auto mb-3" />
