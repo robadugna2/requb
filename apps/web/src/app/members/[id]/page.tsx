@@ -36,6 +36,7 @@ export default function MemberDetailPage() {
 
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [photoFailed, setPhotoFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -252,7 +253,7 @@ export default function MemberDetailPage() {
       <DashboardLayout>
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
+          className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           {t('member.back')}
@@ -278,46 +279,57 @@ export default function MemberDetailPage() {
     return status.charAt(0) + status.slice(1).toLowerCase();
   };
 
+  // Deposits grouped by cycle (shared by the mobile card list and desktop table)
+  const depositsByCycle = Object.entries(
+    user.deposits.reduce<Record<number, typeof user.deposits>>((acc, d) => {
+      const key = d.cycleNumber || 0;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(d);
+      return acc;
+    }, {}),
+  ).sort(([a], [b]) => Number(a) - Number(b));
+
 
   return (
     <DashboardLayout>
       {/* Back button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-6 transition-colors"
+        className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 mb-4 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         {t('member.back')}
       </button>
 
       {success && (
-        <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
+        <div className="mb-4 p-4 rounded-lg bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400 text-sm font-medium border border-green-100 flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700 font-bold text-lg">×</button>
         </div>
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center gap-3">
+        <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-error-500/10 text-red-700 dark:text-error-400 text-sm font-medium border border-red-100 flex items-center gap-3">
           <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {/* Profile Header */}
-      <div className="card mb-6">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-5">
+      <div className="card mb-4">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
             {/* Avatar / Photo */}
-            <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-brand-500/15 flex items-center justify-center overflow-hidden flex-shrink-0">
-              {user.photoUrl ? (
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary-100 dark:bg-brand-500/15 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {user.photoUrl && !photoFailed ? (
                 <img
                   src={getMediaUrl(user.photoUrl)}
                   alt={user.name}
+                  onError={() => setPhotoFailed(true)}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-2xl font-bold text-primary-700 dark:text-brand-400">
+                <span className="text-xl md:text-2xl font-bold text-primary-700 dark:text-brand-400">
                   {user.name
                     .split(' ')
                     .map((n) => n[0])
@@ -326,9 +338,9 @@ export default function MemberDetailPage() {
               )}
             </div>
 
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white/90">{user.name}</h1>
-              <div className="flex items-center gap-4 mt-2">
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white/90 break-words">{user.name}</h1>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
                 <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                   <Phone className="h-4 w-4" />
                   <span className="text-sm">{user.phone}</span>
@@ -346,11 +358,12 @@ export default function MemberDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2 w-full md:w-auto md:flex-shrink-0">
             <Button
               variant="secondary"
               size="sm"
               onClick={openEditModal}
+              className="flex-1 md:flex-none justify-center"
             >
               <Pencil className="h-4 w-4 mr-2" />
               {t('member.edit')}
@@ -359,6 +372,7 @@ export default function MemberDetailPage() {
               variant="danger"
               size="sm"
               onClick={() => setShowDeleteModal(true)}
+              className="flex-1 md:flex-none justify-center"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               {t('member.delete_btn')}
@@ -366,83 +380,59 @@ export default function MemberDetailPage() {
           </div>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 dark:bg-blue-light-500/10 rounded-lg">
-              <Users className="h-5 w-5 text-blue-600 dark:text-blue-light-400" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.tab_groups')}</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.groups.length}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-50 dark:bg-success-500/10 rounded-lg">
-              <CircleDollarSign className="h-5 w-5 text-green-600 dark:text-success-400" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t('members.col_deposits')}</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">
-                ETB {user.totalDeposits.toLocaleString()}
+        {/* Quick Stats — compact 4-cell strip */}
+        <div className="grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+          {[
+            { icon: Users, tint: 'text-blue-600 dark:text-blue-light-400', label: t('member.tab_groups'), value: String(user.groups.length) },
+            { icon: CircleDollarSign, tint: 'text-green-600 dark:text-success-400', label: t('members.col_deposits'), value: `ETB ${user.totalDeposits.toLocaleString()}` },
+            { icon: Trophy, tint: 'text-purple-600 dark:text-theme-purple-500', label: t('member.stat_wins'), value: String(user.lotteryWins.length) },
+            { icon: Calendar, tint: 'text-orange-600 dark:text-orange-400', label: t('member.stat_payments'), value: String(user.deposits.length) },
+          ].map((s) => (
+            <div key={s.label} className="px-2 py-1 min-w-0">
+              <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-semibold truncate">
+                <s.icon className={`h-3 w-3 shrink-0 ${s.tint}`} />
+                <span className="truncate">{s.label}</span>
               </p>
+              <p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white/90 tabular-nums truncate">{s.value}</p>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-50 dark:bg-theme-purple-500/10 rounded-lg">
-              <Trophy className="h-5 w-5 text-purple-600 dark:text-theme-purple-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.stat_wins')}</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.lotteryWins.length}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg">
-              <Calendar className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{t('member.stat_payments')}</p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white/90">{user.deposits.length}</p>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
       {/* {t('member.personal_info')} & {t('members.address')} */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* {t('member.personal_info')} */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-4 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white/90 mb-3 flex items-center gap-2">
             <Shield className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             {t('member.personal_info')}
           </h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+          <div>
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_gov_id')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.governmentId || 'Not provided'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">Bank Account Name</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.bankAccountName || 'Not provided'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_marital')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {formatMaritalStatus(user.maritalStatus)}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_employment')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {formatEmploymentType(user.employmentType)}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2">
+            <div className="flex justify-between items-center py-1.5">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_employer')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.employerName || 'Not specified'}
@@ -453,36 +443,36 @@ export default function MemberDetailPage() {
 
         {/* {t('members.address')} */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-4 flex items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white/90 mb-3 flex items-center gap-2">
             <MapPin className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             {t('members.address')}
           </h2>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+          <div>
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_country')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.country || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_city')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.city || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">Sub {t('members.label_city')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.subCity || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-50 dark:border-gray-800">
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_woreda')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.woreda || 'Not specified'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2">
+            <div className="flex justify-between items-center py-1.5">
               <span className="text-sm text-gray-500 dark:text-gray-400">{t('members.label_house')}</span>
               <span className="text-sm font-medium text-gray-900 dark:text-white/90">
                 {user.houseNumber || 'Not specified'}
@@ -493,7 +483,7 @@ export default function MemberDetailPage() {
       </div>
 
       {/* Authorized payers — people who contribute on this member's behalf */}
-      <div className="card mb-6">
+      <div className="card mb-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white/90 mb-1 flex items-center gap-2">
           <UserPlus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
           Authorized Payers
@@ -562,7 +552,7 @@ export default function MemberDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-white/[0.08] p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-4 bg-gray-100 dark:bg-white/[0.08] p-1 rounded-lg w-fit max-w-full overflow-x-auto">
         <button
           onClick={() => setActiveTab('deposits')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
@@ -599,84 +589,116 @@ export default function MemberDetailPage() {
       {activeTab === 'deposits' && (
         <div className="card overflow-hidden p-0">
           {user.deposits.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
-                  <tr>
-                    <th className="table-header">Group</th>
-                    <th className="table-header">Cycle</th>
-                    <th className="table-header">Amount</th>
-                    <th className="table-header">FT Ref</th>
-                    <th className="table-header">Transfer Method</th>
-                    <th className="table-header">Transfer Date</th>
-                    <th className="table-header">{t('group.col_status')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                  {(() => {
-                    const grouped = user.deposits.reduce<Record<number, typeof user.deposits>>((acc, d) => {
-                      const key = d.cycleNumber || 0;
-                      if (!acc[key]) acc[key] = [];
-                      acc[key].push(d);
-                      return acc;
-                    }, {});
-                    return Object.entries(grouped)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([cycleNum, cycleDeposits]) => (
-                        <React.Fragment key={`cycle-${cycleNum}`}>
-                          <tr className="bg-indigo-50/70">
-                            <td colSpan={7} className="px-4 py-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-indigo-700 dark:text-brand-400 uppercase tracking-wide">
-                                  Cycle {cycleNum}
+            <>
+              {/* Mobile: compact cycle-grouped cards */}
+              <div className="md:hidden">
+                {depositsByCycle.map(([cycleNum, cycleDeposits]) => (
+                  <div key={`mcycle-${cycleNum}`}>
+                    <div className="px-3 py-1.5 bg-indigo-50/70 dark:bg-brand-500/5 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-indigo-700 dark:text-brand-400 uppercase tracking-wide">
+                        Cycle {cycleNum}
+                      </span>
+                      <span className="text-[11px] text-indigo-500 dark:text-brand-400/70">
+                        {cycleDeposits.length} deposit{cycleDeposits.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-gray-50 dark:divide-gray-800">
+                      {cycleDeposits.map((deposit) => (
+                        <div key={deposit.id} className="flex items-center gap-2.5 px-3 py-2.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white/90 truncate">
+                              {deposit.groupName}
+                            </p>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                              {deposit.ftNumber || '—'} · {deposit.transferDate}
+                              {deposit.narrative ? ` · ${deposit.narrative}` : ''}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white/90 tabular-nums">
+                              ETB {deposit.amount.toLocaleString()}
+                            </p>
+                            <div className="flex justify-end mt-0.5">
+                              <StatusBadge status={deposit.status} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: full table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
+                    <tr>
+                      <th className="table-header">Group</th>
+                      <th className="table-header">Cycle</th>
+                      <th className="table-header">Amount</th>
+                      <th className="table-header">FT Ref</th>
+                      <th className="table-header">Transfer Method</th>
+                      <th className="table-header">Transfer Date</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                    {depositsByCycle.map(([cycleNum, cycleDeposits]) => (
+                      <React.Fragment key={`cycle-${cycleNum}`}>
+                        <tr className="bg-indigo-50/70">
+                          <td colSpan={7} className="px-4 py-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-indigo-700 dark:text-brand-400 uppercase tracking-wide">
+                                Cycle {cycleNum}
+                              </span>
+                              <span className="text-xs text-indigo-500">
+                                {cycleDeposits.length} deposit{cycleDeposits.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {cycleDeposits.map((deposit) => (
+                          <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="table-cell font-medium text-gray-900 dark:text-white/90">
+                              {deposit.groupName}
+                            </td>
+                            <td className="table-cell text-gray-500 dark:text-gray-400">
+                              Cycle {deposit.cycleNumber}
+                            </td>
+                            <td className="table-cell text-gray-700 dark:text-gray-300">
+                              ETB {deposit.amount.toLocaleString()}
+                            </td>
+                            <td className="table-cell">
+                              {deposit.ftNumber ? (
+                                <span className="font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[120px] truncate block" title={deposit.ftNumber}>
+                                  {deposit.ftNumber}
                                 </span>
-                                <span className="text-xs text-indigo-500">
-                                  {cycleDeposits.length} deposit{cycleDeposits.length !== 1 ? 's' : ''}
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="table-cell">
+                              {deposit.narrative ? (
+                                <span className="text-xs text-gray-500 dark:text-gray-400 max-w-[150px] truncate block" title={deposit.narrative}>
+                                  {deposit.narrative}
                                 </span>
-                              </div>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="table-cell text-gray-500 dark:text-gray-400 text-sm">{deposit.transferDate}</td>
+                            <td className="table-cell">
+                              <StatusBadge status={deposit.status} />
                             </td>
                           </tr>
-                          {cycleDeposits.map((deposit) => (
-                            <tr key={deposit.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="table-cell font-medium text-gray-900 dark:text-white/90">
-                                {deposit.groupName}
-                              </td>
-                              <td className="table-cell text-gray-500 dark:text-gray-400">
-                                Cycle {deposit.cycleNumber}
-                              </td>
-                              <td className="table-cell text-gray-700 dark:text-gray-300">
-                                ETB {deposit.amount.toLocaleString()}
-                              </td>
-                              <td className="table-cell">
-                                {deposit.ftNumber ? (
-                                  <span className="font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[120px] truncate block" title={deposit.ftNumber}>
-                                    {deposit.ftNumber}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
-                                )}
-                              </td>
-                              <td className="table-cell">
-                                {deposit.narrative ? (
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 max-w-[150px] truncate block" title={deposit.narrative}>
-                                    {deposit.narrative}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
-                                )}
-                              </td>
-                              <td className="table-cell text-gray-500 dark:text-gray-400 text-sm">{deposit.transferDate}</td>
-                              <td className="table-cell">
-                                <StatusBadge status={deposit.status} />
-                              </td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      ));
-                  })()}
-                </tbody>
-              </table>
-            </div>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12">
               <CircleDollarSign className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -690,63 +712,104 @@ export default function MemberDetailPage() {
       {activeTab === 'groups' && (
         <div className="card overflow-hidden p-0">
           {user.groups.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
-                  <tr>
-                    <th className="table-header">{t('member.col_group_name')}</th>
-                    <th className="table-header">{t('group.col_status')}</th>
-                    <th className="table-header">Joined</th>
-                    <th className="table-header">{t('member.col_shares')}</th>
-                    <th className="table-header">{t('member.col_expected')}</th>
-                    <th className="table-header text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                  {user.groups.map((group) => (
-                    <tr key={group.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="table-cell font-medium text-gray-900 dark:text-white/90">
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden divide-y divide-gray-50 dark:divide-gray-800">
+                {user.groups.map((group) => (
+                  <div key={group.id} className="flex items-center gap-2.5 px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white/90 truncate">
                         {group.groupName}
-                      </td>
-                      <td className="table-cell">
-                        <StatusBadge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
-                      </td>
-                      <td className="table-cell text-gray-500 dark:text-gray-400">{group.joinedAt}</td>
-                      <td className="table-cell">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-brand-500/10 text-indigo-700 dark:text-brand-400 ring-1 ring-inset ring-indigo-700/10">
-                          {group.shares} {t('member.col_shares')}
-                        </span>
-                      </td>
-                      <td className="table-cell font-semibold text-gray-900 dark:text-white/90">
-                        ETB {(group.contributionAmount * group.shares).toLocaleString()}
-                      </td>
-                      <td className="table-cell text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares, contributionAmount: group.contributionAmount });
-                              setShareValue(group.shares);
-                              setShowEditSharesModal(true);
-                            }}
-                            className="p-1.5 text-indigo-600 dark:text-brand-400 hover:bg-indigo-50 dark:hover:bg-brand-500/10 rounded-lg transition-colors"
-                            title={t('member.edit_shares')}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => router.push(`/groups/${group.groupId}`)}
-                            className="p-1.5 text-primary-600 dark:text-brand-400 hover:bg-primary-50 rounded-lg transition-colors"
-                            title="View group"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      </p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                        {group.joinedAt} · {group.shares} {t('member.col_shares')} · ETB{' '}
+                        {(group.contributionAmount * group.shares).toLocaleString()}/cycle
+                      </p>
+                    </div>
+                    <StatusBadge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares, contributionAmount: group.contributionAmount });
+                          setShareValue(group.shares);
+                          setShowEditSharesModal(true);
+                        }}
+                        className="p-1.5 text-indigo-600 dark:text-brand-400 bg-indigo-50 dark:bg-brand-500/10 rounded-lg active:scale-95 transition-all"
+                        title={t('member.edit_shares')}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => router.push(`/groups/${group.groupId}`)}
+                        className="p-1.5 text-primary-600 dark:text-brand-400 bg-gray-50 dark:bg-white/[0.06] rounded-lg active:scale-95 transition-all"
+                        title="View group"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
+                    <tr>
+                      <th className="table-header">{t('member.col_group_name')}</th>
+                      <th className="table-header">{t('group.col_status')}</th>
+                      <th className="table-header">Joined</th>
+                      <th className="table-header">{t('member.col_shares')}</th>
+                      <th className="table-header">{t('member.col_expected')}</th>
+                      <th className="table-header text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                    {user.groups.map((group) => (
+                      <tr key={group.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="table-cell font-medium text-gray-900 dark:text-white/90">
+                          {group.groupName}
+                        </td>
+                        <td className="table-cell">
+                          <StatusBadge status={group.status === 'ACTIVE' ? 'active' : 'inactive'} />
+                        </td>
+                        <td className="table-cell text-gray-500 dark:text-gray-400">{group.joinedAt}</td>
+                        <td className="table-cell">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-brand-500/10 text-indigo-700 dark:text-brand-400 ring-1 ring-inset ring-indigo-700/10">
+                            {group.shares} {t('member.col_shares')}
+                          </span>
+                        </td>
+                        <td className="table-cell font-semibold text-gray-900 dark:text-white/90">
+                          ETB {(group.contributionAmount * group.shares).toLocaleString()}
+                        </td>
+                        <td className="table-cell text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingShareGroup({ groupId: group.groupId, groupName: group.groupName, shares: group.shares, contributionAmount: group.contributionAmount });
+                                setShareValue(group.shares);
+                                setShowEditSharesModal(true);
+                              }}
+                              className="p-1.5 text-indigo-600 dark:text-brand-400 hover:bg-indigo-50 dark:hover:bg-brand-500/10 rounded-lg transition-colors"
+                              title={t('member.edit_shares')}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => router.push(`/groups/${group.groupId}`)}
+                              className="p-1.5 text-primary-600 dark:text-brand-400 hover:bg-primary-50 rounded-lg transition-colors"
+                              title="View group"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12">
               <Users className="h-10 w-10 text-gray-300 mx-auto mb-3" />
@@ -760,34 +823,59 @@ export default function MemberDetailPage() {
       {activeTab === 'wins' && (
         <div className="card overflow-hidden p-0">
           {user.lotteryWins.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
-                  <tr>
-                    <th className="table-header">Group</th>
-                    <th className="table-header">Cycle</th>
-                    <th className="table-header">{t('member.col_amount_won')}</th>
-                    <th className="table-header">{t('group.col_date')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                  {user.lotteryWins.map((win) => (
-                    <tr key={win.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="table-cell font-medium text-gray-900 dark:text-white/90">
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden divide-y divide-gray-50 dark:divide-gray-800">
+                {user.lotteryWins.map((win) => (
+                  <div key={win.id} className="flex items-center gap-2.5 px-3 py-2.5">
+                    <div className="p-2 bg-purple-50 dark:bg-theme-purple-500/10 rounded-lg shrink-0">
+                      <Trophy className="h-4 w-4 text-purple-600 dark:text-theme-purple-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white/90 truncate">
                         {win.groupName}
-                      </td>
-                      <td className="table-cell text-gray-500 dark:text-gray-400">
-                        Cycle {win.cycleNumber}
-                      </td>
-                      <td className="table-cell font-semibold text-green-700 dark:text-success-400">
-                        ETB {win.amountWon.toLocaleString()}
-                      </td>
-                      <td className="table-cell text-gray-500 dark:text-gray-400">{win.date}</td>
+                      </p>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                        Cycle {win.cycleNumber} · {win.date}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-green-700 dark:text-success-400 tabular-nums shrink-0">
+                      ETB {win.amountWon.toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-white/[0.04] border-b border-gray-100 dark:border-gray-800">
+                    <tr>
+                      <th className="table-header">Group</th>
+                      <th className="table-header">Cycle</th>
+                      <th className="table-header">{t('member.col_amount_won')}</th>
+                      <th className="table-header">{t('group.col_date')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                    {user.lotteryWins.map((win) => (
+                      <tr key={win.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="table-cell font-medium text-gray-900 dark:text-white/90">
+                          {win.groupName}
+                        </td>
+                        <td className="table-cell text-gray-500 dark:text-gray-400">
+                          Cycle {win.cycleNumber}
+                        </td>
+                        <td className="table-cell font-semibold text-green-700 dark:text-success-400">
+                          ETB {win.amountWon.toLocaleString()}
+                        </td>
+                        <td className="table-cell text-gray-500 dark:text-gray-400">{win.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12">
               <Trophy className="h-10 w-10 text-gray-300 mx-auto mb-3" />
