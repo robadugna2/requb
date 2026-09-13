@@ -167,9 +167,39 @@ function SettingsContent() {
     p.setTestResult(null);
 
     try {
+      const typed = p.keyValue.trim();
+
+      // Gemini multi-key paste: validate EVERY key individually, save the
+      // whole pool, and report a per-key summary.
+      if (provider === 'gemini' && /[\n,;]/.test(typed)) {
+        const keys = typed.split(/[\s,;]+/).filter(Boolean);
+        const results: { ok: boolean; message: string }[] = [];
+        for (const k of keys) {
+          try {
+            results.push(await p.test(k));
+          } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            results.push({ ok: false, message: axiosErr?.response?.data?.message || 'Test failed' });
+          }
+        }
+        await p.save(typed);
+        p.setKeyValue('');
+        await refreshAiStatus();
+        const okCount = results.filter((r) => r.ok).length;
+        const summary = results
+          .map((r, i) => `#${i + 1} ${r.ok ? 'valid' : 'failed'} (${r.message.length > 70 ? r.message.slice(0, 70) + '…' : r.message})`)
+          .join(' · ');
+        p.setTestResult({
+          ok: okCount === keys.length,
+          message: `${okCount}/${keys.length} keys valid. ${summary}`,
+        });
+        setSuccess(`${keys.length} Gemini keys saved — requests round-robin across healthy keys.`);
+        setTimeout(() => setSuccess(null), 6000);
+        return;
+      }
+
       // Prefer the key currently typed in the input (not yet saved) so the
       // admin can validate before committing; fall back to the saved one.
-      const typed = p.keyValue.trim();
       const result = await p.test(typed || undefined);
       p.setTestResult(result);
 
@@ -465,9 +495,10 @@ function SettingsContent() {
             {/* Gemini — recommended free-tier provider */}
             <AiProviderSection
               title="Google Gemini"
-              description="Reads FT numbers and receipt details. Free daily quota is plenty for scanning."
-              badge="Recommended — free tier"
-              placeholder="AIza..."
+              description="Reads FT numbers and receipt details. Paste one or more API keys (one per line) — requests round-robin across healthy keys and fall back automatically when one hits its quota."
+              badge="Multi-key round-robin"
+              placeholder="AIza...\nAIza... (one key per line)"
+              multiline
               status={aiSettings.gemini}
               statusLoading={aiStatusLoading}
               keyValue={geminiKeyInput}
@@ -639,6 +670,7 @@ interface AiProviderSectionProps {
   description: string;
   badge?: string;
   placeholder: string;
+  multiline?: boolean;
   status: GeminiSettingStatus | null;
   statusLoading: boolean;
   keyValue: string;
@@ -659,6 +691,7 @@ function AiProviderSection({
   description,
   badge,
   placeholder,
+  multiline,
   status,
   statusLoading,
   keyValue,
@@ -695,10 +728,15 @@ function AiProviderSection({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-4">
           <span className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
           <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            Configured via {status.source === 'database' ? 'Settings (database)' : 'environment variable'}
+            {status.keysCount && status.keysCount > 1
+              ? `${status.keysCount} keys active — round-robin with automatic fallback`
+              : 'Configured'}
+            {status.source === 'environment' ? ' (environment variable)' : ''}
           </span>
-          {status.keyHint && (
-            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">{status.keyHint}</span>
+          {status.keyHints && status.keyHints.length > 0 && (
+            <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+              {status.keyHints.join(', ')}
+            </span>
           )}
           {status.source === 'database' && status.updatedAt && (
             <span className="text-xs text-gray-400 dark:text-gray-500">
@@ -715,24 +753,36 @@ function AiProviderSection({
 
       {/* Update API key form */}
       <form onSubmit={onSave} className="space-y-3">
-        <div className="relative">
-          <input
-            type={showValue ? 'text' : 'password'}
+        {multiline ? (
+          <textarea
             value={keyValue}
             onChange={(e) => onKeyValueChange(e.target.value)}
-            className="input-field font-mono pr-10"
+            className="input-field font-mono text-xs"
+            rows={4}
             placeholder={placeholder}
             autoComplete="off"
-            aria-label={`${title} API key`}
+            aria-label={`${title} API keys (one per line)`}
           />
-          <button
-            type="button"
-            onClick={onToggleShow}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
-          >
-            {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
+        ) : (
+          <div className="relative">
+            <input
+              type={showValue ? 'text' : 'password'}
+              value={keyValue}
+              onChange={(e) => onKeyValueChange(e.target.value)}
+              className="input-field font-mono pr-10"
+              placeholder={placeholder}
+              autoComplete="off"
+              aria-label={`${title} API key`}
+            />
+            <button
+              type="button"
+              onClick={onToggleShow}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            >
+              {showValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" loading={saving} disabled={!keyValue.trim()}>

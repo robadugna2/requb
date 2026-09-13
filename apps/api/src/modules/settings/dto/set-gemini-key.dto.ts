@@ -6,9 +6,11 @@ export class SetGeminiKeyDto {
   // vary and change, and a strict regex here previously 400'd valid keys on
   // save while the (unvalidated) Test endpoint accepted them. The "Test Key"
   // action is the real validator — it calls Google with the key.
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => (typeof value === 'string' ? value : value))
   @IsString()
   @MinLength(10, { message: 'That does not look like a Gemini API key (too short)' })
-  @MaxLength(300)
+  // Large enough for several keys — one per line / comma separated; the
+  // service splits them into the round-robin pool.
+  @MaxLength(5000)
   apiKey!: string;
 }

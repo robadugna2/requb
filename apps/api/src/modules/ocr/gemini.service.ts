@@ -90,8 +90,14 @@ interface GeminiApiResponse {
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
   /** Auto-detected model per key, refreshed hourly or on model-not-found */
-  private modelCache: { key: string; model: string; at: number } | null = null;
+  private modelCache = new Map<string, { model: string; at: number }>();
   private static MODEL_CACHE_TTL = 60 * 60 * 1000;
+  /** Round-robin cursor — each successful request starts the next one at the
+   *  following key, spreading free-tier quota evenly across the pool. */
+  private rrIndex = 0;
+  /** Keys hard-rejected by Google (400/403) rest here briefly and are skipped */
+  private keyCooldown = new Map<string, number>();
+  private static KEY_COOLDOWN_MS = 5 * 60 * 1000;
 
   constructor(
     private readonly configService: ConfigService,
@@ -102,15 +108,27 @@ export class GeminiService {
   // is no client object to rebuild when the key changes; the resolved key is
   // simply re-read before every call (cheap: SettingsService caches it in
   // memory, so a key set/cleared by an admin takes effect immediately).
-  private async resolveApiKey(): Promise<string | null> {
-    const { key } = await this.settingsService.resolveGeminiKey();
-    return key;
-  }
-
   /** True when a Gemini key is resolvable from the database or environment. */
   async isConfigured(): Promise<boolean> {
-    const { key } = await this.settingsService.resolveGeminiKey();
-    return key != null;
+    const keys = await this.settingsService.getGeminiKeys();
+    return keys.length > 0;
+  }
+
+  /**
+   * The whole key pool in the order the next request will use: round-robin
+   * start, with hard-rejected (cooldowning) keys pushed to the back unless
+   * every key is cooling down.
+   */
+  private async orderedKeys(): Promise<string[]> {
+    const all = await this.settingsService.getGeminiKeys();
+    if (all.length === 0) return [];
+
+    const now = Date.now();
+    const healthy = all.filter((k) => (this.keyCooldown.get(k) ?? 0) <= now);
+    const pool = healthy.length > 0 ? healthy : all;
+
+    const start = this.rrIndex % pool.length;
+    return pool.slice(start).concat(pool.slice(0, start));
   }
 
   /**
@@ -181,8 +199,8 @@ export class GeminiService {
     systemPrompt: string,
     userText: string,
   ): Promise<string> {
-    const key = await this.resolveApiKey();
-    if (!key) {
+    const keys = await this.orderedKeys();
+    if (keys.length === 0) {
       throw new Error('Gemini API key is not configured');
     }
 
@@ -191,36 +209,69 @@ export class GeminiService {
     // downloaded server-side first.
     const { mimeType, data } = await this.toInlineData(imageRef);
 
-    const model = await this.getBestModel(key);
+    // Try every key in rotating order: quota errors / outages on one key
+    // fall through to the next; the winner advances the round-robin cursor.
+    const failures: string[] = [];
+    let lastStatus: number | undefined;
+    let lastMessage = 'Gemini request failed';
 
-    try {
-      return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
-    } catch (error: unknown) {
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      const message = error instanceof Error ? error.message : String(error);
-      const isModelGone =
-        status === 404 || /not found|not supported|does not (?:exist|have)/i.test(message);
-      const usingOverride = !!this.configService.get<string>('GEMINI_MODEL');
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      try {
+        const model = await this.getBestModel(key);
+        try {
+          const text = await this.callGenerateContent(
+            key, model, mimeType, data, systemPrompt, userText,
+          );
+          this.rrIndex = (this.rrIndex + 1) % keys.length;
+          return text;
+        } catch (error: unknown) {
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          const message = error instanceof Error ? error.message : String(error);
+          const isModelGone =
+            status === 404 || /not found|not supported|does not (?:exist|have)/i.test(message);
+          const usingOverride = !!this.configService.get<string>('GEMINI_MODEL');
 
-      // Retired/renamed model: refresh the auto-detection and retry once
-      if (isModelGone && !usingOverride) {
-        this.logger.warn(`Gemini model ${model} unavailable — re-detecting from /models list`);
-        this.invalidateModelCache();
-        const fresh = await this.getBestModel(key);
-        return await this.callGenerateContent(key, fresh, mimeType, data, systemPrompt, userText);
-      }
+          // Retired/renamed model: refresh the auto-detection and retry once
+          if (isModelGone && !usingOverride) {
+            this.logger.warn(`Gemini model ${model} unavailable — re-detecting from /models list`);
+            this.invalidateModelCache(key);
+            const fresh = await this.getBestModel(key);
+            const text = await this.callGenerateContent(
+              key, fresh, mimeType, data, systemPrompt, userText,
+            );
+            this.rrIndex = (this.rrIndex + 1) % keys.length;
+            return text;
+          }
 
-      // Free-tier rate limits / transient Google capacity errors (503 etc.):
-      // back off and retry a couple of times before giving up.
-      if (this.isTransientError(status, message)) {
-        const retry = await this.retryTransient(
-          key, model, mimeType, data, systemPrompt, userText,
+          throw error;
+        }
+      } catch (error: unknown) {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        const message = error instanceof Error ? error.message : String(error);
+        lastStatus = status;
+        lastMessage = message;
+        failures.push(`key #${i + 1}: ${message}`);
+
+        // Hard-rejected keys cool down so later requests skip them fast
+        if (status === 400 || status === 403) {
+          this.keyCooldown.set(key, Date.now() + GeminiService.KEY_COOLDOWN_MS);
+        }
+        // Quota / outage / bad key → fall through to the next key
+        this.logger.warn(
+          `Gemini key #${i + 1} failed (${status ?? 'no status'}) — trying the next key`,
         );
-        if (retry) return retry;
       }
-
-      throw this.friendlyGeminiError(status, message);
     }
+
+    this.logger.error(`All ${keys.length} Gemini key(s) failed — ${failures.join(' | ')}`);
+    if (keys.length > 1) {
+      const friendly = this.friendlyGeminiError(lastStatus, lastMessage).message;
+      throw new Error(
+        `All ${keys.length} Gemini API keys failed. Last error: ${friendly}`,
+      );
+    }
+    throw this.friendlyGeminiError(lastStatus, lastMessage);
   }
 
   private isTransientError(status?: number, message = ''): boolean {
@@ -234,29 +285,6 @@ export class GeminiService {
         message,
       )
     );
-  }
-
-  /** Retries a transient failure up to twice with backoff; null if still failing. */
-  private async retryTransient(
-    key: string,
-    model: string,
-    mimeType: string,
-    data: string,
-    systemPrompt: string,
-    userText: string,
-  ): Promise<string | null> {
-    for (const delay of [2000, 5000]) {
-      this.logger.warn(`Gemini transient error — retrying after ${delay}ms`);
-      await new Promise((r) => setTimeout(r, delay));
-      try {
-        return await this.callGenerateContent(key, model, mimeType, data, systemPrompt, userText);
-      } catch (error: unknown) {
-        const status = (error as { response?: { status?: number } })?.response?.status;
-        const message = error instanceof Error ? error.message : String(error);
-        if (!this.isTransientError(status, message)) throw this.friendlyGeminiError(status, message);
-      }
-    }
-    return null;
   }
 
   /** Turns a raw axios/Google error into an actionable message for the admin. */
@@ -315,8 +343,8 @@ export class GeminiService {
     const envModel = this.configService.get<string>('GEMINI_MODEL');
     if (envModel) return envModel;
 
-    const cached = this.modelCache;
-    if (cached && cached.key === key && Date.now() - cached.at < GeminiService.MODEL_CACHE_TTL) {
+    const cached = this.modelCache.get(key);
+    if (cached && Date.now() - cached.at < GeminiService.MODEL_CACHE_TTL) {
       return cached.model;
     }
 
@@ -328,13 +356,14 @@ export class GeminiService {
     if (!best) {
       throw new Error('No Gemini models with generateContent support are available to this API key');
     }
-    this.modelCache = { key, model: best, at: Date.now() };
+    this.modelCache.set(key, { model: best, at: Date.now() });
     this.logger.log(`Auto-detected Gemini model: ${best}`);
     return best;
   }
 
-  private invalidateModelCache() {
-    this.modelCache = null;
+  private invalidateModelCache(key?: string) {
+    if (key) this.modelCache.delete(key);
+    else this.modelCache.clear();
   }
 
   private async callGenerateContent(

@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 
 const GEMINI_KEY_SETTING = 'gemini_api_key';
+const GEMINI_KEYS_SETTING = 'gemini_api_keys';
 const GEMINI_WEB_BASE_URL = 'gemini_web_base_url';
 const GEMINI_WEB_API_KEY = 'gemini_web_api_key';
 const GEMINI_WEB_MODEL = 'gemini_web_model';
@@ -50,17 +51,105 @@ export class SettingsService {
     configured: boolean;
     source: 'database' | 'environment' | null;
     keyHint: string | null;
+    keyHints: string[];
+    keysCount: number;
     updatedAt: string | null;
   }> {
-    return this.getProviderStatus(GEMINI_KEY_SETTING, 'GEMINI_API_KEY', 'AIza…');
+    const keys = await this.getGeminiKeys();
+    if (keys.length === 0) {
+      return {
+        configured: false,
+        source: null,
+        keyHint: null,
+        keyHints: [],
+        keysCount: 0,
+        updatedAt: null,
+      };
+    }
+
+    const { source } = await this.resolveGeminiKey();
+    const keyHints = keys.map((k) => this.maskKey(k, 'AIza…'));
+
+    let updatedAt: string | null = null;
+    const row =
+      (await this.prisma.systemSetting.findUnique({
+        where: { key: GEMINI_KEYS_SETTING },
+        select: { updatedAt: true },
+      })) ??
+      (await this.prisma.systemSetting.findUnique({
+        where: { key: GEMINI_KEY_SETTING },
+        select: { updatedAt: true },
+      }));
+    updatedAt = row ? row.updatedAt.toISOString() : null;
+
+    return {
+      configured: true,
+      source,
+      keyHint: keyHints[0],
+      keyHints,
+      keysCount: keys.length,
+      updatedAt,
+    };
   }
 
   async setGeminiKey(plainKey: string, adminId: string): Promise<void> {
-    return this.setRow(GEMINI_KEY_SETTING, plainKey, adminId);
+    // Accepts one key or several (newline / comma / semicolon separated) —
+    // the whole pool is stored and requests round-robin across healthy keys.
+    const keys = plainKey.split(/[\s,;]+/).filter(Boolean);
+    return this.setGeminiKeys(keys, adminId);
   }
 
   async clearGeminiKey(): Promise<void> {
-    return this.clearRow(GEMINI_KEY_SETTING);
+    return this.clearGeminiKeys();
+  }
+
+  /**
+   * All configured official-Gemini keys in priority order, deduplicated:
+   *  1. the multi-key row (encrypted JSON array, saved from Settings)
+   *  2. the legacy single-key row (kept in sync = first key, for compat)
+   *  3. the GEMINI_API_KEYS env var (comma separated) and GEMINI_API_KEY env
+   */
+  async getGeminiKeys(): Promise<string[]> {
+    const keys: string[] = [];
+    const push = (k: string | null | undefined) => {
+      const t = (k ?? '').trim();
+      if (t && !keys.includes(t)) keys.push(t);
+    };
+
+    const multiRaw = await this.getRow(GEMINI_KEYS_SETTING);
+    if (multiRaw) {
+      try {
+        const parsed = JSON.parse(multiRaw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((k) => push(typeof k === 'string' ? k : String(k)));
+        }
+      } catch {
+        /* malformed row — ignore and fall through to the other sources */
+      }
+    }
+    push(await this.getRow(GEMINI_KEY_SETTING));
+
+    const envMulti = this.configService.get<string>('GEMINI_API_KEYS');
+    if (envMulti) envMulti.split(/[\s,;]+/).forEach(push);
+    push(this.configService.get<string>('GEMINI_API_KEY'));
+
+    return keys;
+  }
+
+  async setGeminiKeys(plainKeys: string[], adminId: string): Promise<void> {
+    const cleaned = [...new Set(plainKeys.map((k) => k.trim()).filter(Boolean))];
+    if (cleaned.length === 0) {
+      throw new BadRequestException('At least one Gemini API key is required');
+    }
+    await this.setRow(GEMINI_KEYS_SETTING, JSON.stringify(cleaned), adminId);
+    // Keep the legacy single-key row in sync (= first key) so any older
+    // reader keeps working.
+    await this.setRow(GEMINI_KEY_SETTING, cleaned[0], adminId);
+  }
+
+  async clearGeminiKeys(): Promise<void> {
+    await this.clearRow(GEMINI_KEYS_SETTING);
+    await this.clearRow(GEMINI_KEY_SETTING);
   }
 
   /**

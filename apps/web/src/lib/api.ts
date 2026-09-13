@@ -1985,7 +1985,9 @@ export const getAdminUsers = async (): Promise<AdminUserItem[]> => {
 export interface GeminiSettingStatus {
   configured: boolean;
   source: 'database' | 'environment' | null;
-  keyHint: string | null;   // masked, e.g. "sk-…abc4"
+  keyHint: string | null;   // masked, e.g. "AIza…abc4" (first key)
+  keyHints?: string[];      // masked hints for every key in the pool
+  keysCount?: number;       // pool size — requests round-robin across them
   updatedAt: string | null; // ISO string
 }
 
