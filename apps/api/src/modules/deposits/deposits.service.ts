@@ -9,9 +9,11 @@ import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 import {
-  WEAK_MATCH_THRESHOLD,
+  AMBIGUITY_MARGIN,
+  MEMBER_MATCH_THRESHOLD,
   normalizeName,
   rankMembersByPayerName,
+  type MemberMatchCandidate,
 } from './member-matching';
 
 export interface CreateDepositData {
@@ -361,9 +363,12 @@ export class DepositsService {
    *   1. History — if this exact payer name was paired to a member before
    *      (verified deposit in this group), reuse that pairing deterministically.
    *   2. Fuzzy — rank members by name / bank-account-name similarity and
-   *      auto-pair the best candidate down to WEAK_MATCH_THRESHOLD; the
-   *      scanner UI flags weak pairs for review. Manual picking remains only
-   *      for payers with no plausible candidate at all.
+   *      SUGGEST tier: similarity >= 0.6 with a clear margin over the
+   *      runner-up; surfaced as a one-click accept chip, NEVER applied
+   *      automatically.
+   *   3. UNKNOWN tier: everything else (including ambiguous top-2) — the
+   *      scanner offers the Unknown Senders actions (pick member, quick-create
+   *      member, park in the Unknown Senders queue).
    */
   async suggestMembersForPayer(groupId: string, payerName: string) {
     const memberships = await this.prisma.groupMembership.findMany({
@@ -438,14 +443,67 @@ export class DepositsService {
       })),
     );
 
-    const best = suggestions[0];
-    // Auto-pair anything at or above the weak threshold — the scanner UI
-    // flags weak (< 0.6) pairs for review instead of forcing manual picks.
-    const bestMatch =
-      best && best.score >= WEAK_MATCH_THRESHOLD
-        ? { ...best, autoPaired: true }
-        : null;
+    // Strict tiering — wrong pairings are worse than no pairing.
+    // AUTO requires TRUE normalized equality against exactly one identity
+    // (member name, bank-account-holder name, or registered alias) — a
+    // perfect similarity SCORE is not enough, since the scorer hands out
+    // 1.0 for near-identical spellings. Everything else is human-decided.
+    const exactCandidates: MemberMatchCandidate[] = [];
+    if (payerKey) {
+      for (const m of memberships) {
+        const u = m.user;
+        const base = {
+          userId: u.id,
+          name: u.name,
+          phone: u.phone,
+          photoUrl: u.photoUrl ?? undefined,
+          score: 1,
+        };
+        if (normalizeName(u.name) === payerKey) {
+          exactCandidates.push({ ...base, matchedVia: 'name' });
+          continue;
+        }
+        if (u.bankAccountName && normalizeName(u.bankAccountName) === payerKey) {
+          exactCandidates.push({ ...base, matchedVia: 'bankAccountName' });
+          continue;
+        }
+        const alias = (u.payerAliases ?? []).find(
+          (a) => normalizeName(a.name) === payerKey,
+        );
+        if (alias) {
+          exactCandidates.push({
+            ...base,
+            matchedVia: 'payerAlias',
+            matchedAlias: alias.name,
+          });
+        }
+      }
+    }
 
-    return { payerName, suggestions, bestMatch };
+    let tier: 'AUTO' | 'SUGGEST' | 'UNKNOWN' = 'UNKNOWN';
+    let bestMatch: (MemberMatchCandidate & { autoPaired: boolean; suggested: boolean }) | null = null;
+
+    if (exactCandidates.length === 1) {
+      // Deterministic identity: one member matches exactly
+      tier = 'AUTO';
+      bestMatch = { ...exactCandidates[0], autoPaired: true, suggested: false };
+    } else if (exactCandidates.length > 1) {
+      // Two members share this identity — never guess
+      tier = 'UNKNOWN';
+    } else {
+      const top = suggestions[0];
+      const runnerUp = suggestions[1];
+      const margin = runnerUp ? top.score - runnerUp.score : 1;
+      if (top && top.score >= MEMBER_MATCH_THRESHOLD && margin >= AMBIGUITY_MARGIN) {
+        // Confident but not exact — one-click suggestion for the admin
+        tier = 'SUGGEST';
+        bestMatch = { ...top, autoPaired: false, suggested: true };
+      } else {
+        // Weak or ambiguous — Unknown Sender territory
+        tier = 'UNKNOWN';
+      }
+    }
+
+    return { payerName, tier, suggestions, bestMatch };
   }
 }

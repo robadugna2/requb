@@ -14,6 +14,7 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { Prisma } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GroupPermissionsGuard } from '../../common/guards/group-permissions.guard';
@@ -21,7 +22,13 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { DepositsService } from './deposits.service';
 import { CbeVerificationService } from './cbe-verification.service';
 import { FtDetectionService } from '../ocr/ft-detection.service';
+import { UnknownSenderService } from './unknown-sender.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
+import {
+  QueueUnknownSenderDto,
+  ResolveUnknownSenderDto,
+  DismissUnknownSenderDto,
+} from './dto/unknown-sender.dto';
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -32,6 +39,7 @@ export class DepositsController {
     private readonly depositsService: DepositsService,
     private readonly cbeVerificationService: CbeVerificationService,
     private readonly ftDetectionService: FtDetectionService,
+    private readonly unknownSenderService: UnknownSenderService,
   ) {}
 
   /**
@@ -103,6 +111,75 @@ export class DepositsController {
     if (!groupId) throw new BadRequestException('groupId is required');
     if (!payerName) throw new BadRequestException('payerName is required');
     return this.depositsService.suggestMembersForPayer(groupId, payerName);
+  }
+
+  // ─── Unknown Senders queue ──────────────────────────────────────────────
+
+  /**
+   * POST /deposits/unknown-senders
+   * Park a CBE-verified transaction whose payer could not be paired
+   * confidently. Kept with full evidence until the admin resolves it.
+   */
+  @Post('unknown-senders')
+  @HttpCode(201)
+  @RequirePermission('canManageDeposits')
+  queueUnknownSender(@Request() req: { user: { id: string } }, @Body() dto: QueueUnknownSenderDto) {
+    return this.unknownSenderService.queue(
+      {
+        groupId: dto.groupId,
+        payerName: dto.payerName,
+        ftNumber: dto.ftNumber,
+        amount: dto.amount,
+        transferDate: dto.transferDate ? new Date(dto.transferDate) : undefined,
+        senderAccount: dto.senderAccount,
+        bankName: dto.bankName,
+        imageUrl: dto.imageUrl,
+        reason: dto.reason,
+        cbeData: dto.cbeData as Prisma.InputJsonValue,
+      },
+    );
+  }
+
+  /** GET /deposits/unknown-senders — unresolved queue (admin-scoped). */
+  @Get('unknown-senders')
+  listUnknownSenders(
+    @Request() req: { user: { id: string; role: string } },
+    @Query('groupId') groupId?: string,
+  ) {
+    return this.unknownSenderService.list(groupId, req.user.id, req.user.role);
+  }
+
+  /** GET /deposits/unknown-senders/count — live nav badge. */
+  @Get('unknown-senders/count')
+  countUnknownSenders(@Request() req: { user: { id: string; role: string } }) {
+    return this.unknownSenderService.count(req.user.id, req.user.role);
+  }
+
+  /**
+   * POST /deposits/unknown-senders/:id/resolve
+   * Pair to an existing member ({ userId }) or quick-create a new member
+   * ({ createMember: { name, phone, shares } }); creates the deposit from the
+   * stored CBE data and registers the payer as an authorized alias.
+   */
+  @Post('unknown-senders/:id/resolve')
+  @RequirePermission('canManageDeposits')
+  resolveUnknownSender(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+    @Body() dto: ResolveUnknownSenderDto,
+  ) {
+    return this.unknownSenderService.resolve(id, req.user.id, dto);
+  }
+
+  /** POST /deposits/unknown-senders/:id/dismiss — close with an audit note. */
+  @Post('unknown-senders/:id/dismiss')
+  @RequirePermission('canManageDeposits')
+  dismissUnknownSender(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string } },
+    @Body() dto: DismissUnknownSenderDto,
+  ) {
+    return this.unknownSenderService.dismiss(id, req.user.id, dto.note);
   }
 
   @Get()

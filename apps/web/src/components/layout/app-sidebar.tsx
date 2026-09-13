@@ -15,6 +15,7 @@ import { navGroups } from '@/config/nav-config';
 import { useLanguage, Language } from './LanguageContext';
 import { useSidebar } from './SidebarContext';
 import { getUnreadNotificationCount, getMediaUrl } from '@/lib/api';
+import { useUnknownSenderCount } from '@/lib/useUnknownSenderCount';
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -25,6 +26,7 @@ export function AppSidebar() {
   // desktop rail, which collapses to icons unless expanded/hovered.
   const showLabels = isExpanded || isHovered || isMobileOpen;
   const [unreadCount, setUnreadCount] = useState(0);
+  const unknownSenderCount = useUnknownSenderCount();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(() => {
@@ -127,6 +129,16 @@ export function AppSidebar() {
                           }`}
                         >
                           {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                      {item.title === 'Receipts' && unknownSenderCount > 0 && (
+                        <span
+                          className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold text-amber-800 bg-warning-400 rounded-full ${
+                            showLabels ? '' : 'absolute right-2 top-2'
+                          }`}
+                          title="Unknown senders awaiting a pairing decision"
+                        >
+                          {unknownSenderCount > 99 ? '99+' : unknownSenderCount}
                         </span>
                       )}
                     </Link>

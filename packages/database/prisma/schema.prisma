@@ -211,6 +211,7 @@ model EqubGroup {
   mergedGroups     MergedMemberGroup[]
   adminFeeWaivers  AdminFeeWaiver[]
   leaders          GroupLeader[]
+  unmatchedDeposits UnmatchedDeposit[]
 
   @@map("equb_groups")
 }
@@ -328,6 +329,44 @@ model Payout {
   lotteryResult LotteryResult @relation(fields: [lotteryResultId], references: [id], onDelete: Cascade)
 
   @@map("payouts")
+}
+
+
+// ─── Unknown Sender Queue ─────────────────────────────────────────────
+// Detected FTs whose CBE payer name has no confident equb-member pair.
+// Kept server-side with full evidence until an admin pairs them to a
+// member, creates a new member by that name, or dismisses them.
+enum UnmatchedStatus {
+  PENDING
+  PAIRED
+  DISMISSED
+}
+
+model UnmatchedDeposit {
+  id            String          @id @default(cuid())
+  groupId       String          @map("group_id")
+  status        UnmatchedStatus @default(PENDING)
+  ftNumber      String          @map("ft_number")
+  senderName    String          @map("sender_name")
+  senderAccount String?         @map("sender_account")
+  amount        Float
+  bankName      String?         @map("bank_name")
+  transferDate  DateTime?       @map("transfer_date")
+  cbeData       Json?           @map("cbe_data") // full CBE receipt payload
+  imageUrl      String?         @map("image_url")
+  reason        String?         // why pairing failed (e.g. "no candidate above threshold")
+  resolvedBy    String?         @map("resolved_by") // admin id
+  resolvedAt    DateTime?       @map("resolved_at")
+  resolution    String?         // "paired" | "created-member" | "dismissed"
+  createdUserId String?         @map("created_user_id") // member created from this record
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  group EqubGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([ftNumber])
+  @@index([groupId, status])
+  @@map("unmatched_deposits")
 }
 
 // ─── Guarantor System ───────────────────────────────────────────────

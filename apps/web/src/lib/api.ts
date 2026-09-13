@@ -1310,6 +1310,8 @@ export interface FtScanResult {
   errors?: string[];
 }
 
+export type PairingTier = 'AUTO' | 'SUGGEST' | 'UNKNOWN';
+
 export interface MemberSuggestion {
   userId: string;
   name: string;
@@ -1318,14 +1320,96 @@ export interface MemberSuggestion {
   membershipStatus?: string;
   score: number;
   matchedVia?: 'name' | 'bankAccountName' | 'history' | 'payerAlias';
+  /** Strict tier: only deterministic identities (exact name/account/alias/history) */
   autoPaired?: boolean;
+  /** Confident-but-not-exact: offered as a one-click accept chip, never applied */
+  suggested?: boolean;
 }
 
 export interface SuggestMembersResult {
   payerName: string;
+  tier: PairingTier;
   suggestions: MemberSuggestion[];
   bestMatch: MemberSuggestion | null;
 }
+
+// ─── Unknown Senders queue ──────────────────────────────────────────────────
+
+export interface UnknownSenderItem {
+  id: string;
+  groupId: string;
+  groupName: string;
+  payerName: string;
+  ftNumber: string | null;
+  amount: number;
+  bankName: string | null;
+  transferDate: string | null;
+  imageUrl: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface QueueUnknownSenderPayload {
+  groupId: string;
+  payerName: string;
+  amount: number;
+  ftNumber?: string;
+  transferDate?: string;
+  senderAccount?: string;
+  bankName?: string;
+  imageUrl?: string;
+  reason?: string;
+  cbeData?: Record<string, unknown>;
+}
+
+export const queueUnknownSender = async (
+  payload: QueueUnknownSenderPayload,
+): Promise<UnknownSenderItem> => {
+  const response = await api.post('/deposits/unknown-senders', payload);
+  return response.data as UnknownSenderItem;
+};
+
+export const getUnknownSenders = async (groupId?: string): Promise<UnknownSenderItem[]> => {
+  const response = await api.get('/deposits/unknown-senders', { params: groupId ? { groupId } : {} });
+  return (response.data as Array<Record<string, unknown>>).map((raw) => {
+    const group = raw.group as Record<string, unknown> | undefined;
+    return {
+      id: raw.id as string,
+      groupId: (raw.groupId as string) || (group?.id as string) || '',
+      groupName: (group?.name as string) || 'Unknown group',
+      payerName: (raw.senderName as string) || 'Unknown payer',
+      ftNumber: (raw.ftNumber as string) || null,
+      amount: (raw.amount as number) || 0,
+      bankName: (raw.bankName as string) || null,
+      transferDate: raw.transferDate
+        ? new Date(raw.transferDate as string).toLocaleDateString('en-CA')
+        : null,
+      imageUrl: (raw.imageUrl as string) || null,
+      reason: (raw.reason as string) || null,
+      createdAt: raw.createdAt ? new Date(raw.createdAt as string).toISOString() : '',
+    };
+  });
+};
+
+export const getUnknownSenderCount = async (): Promise<{ count: number }> => {
+  const response = await api.get('/deposits/unknown-senders/count');
+  return response.data as { count: number };
+};
+
+/** Resolve a queued sender: pair to an existing member, or quick-create one. */
+export const resolveUnknownSender = async (
+  id: string,
+  resolution:
+    | { userId: string }
+    | { createMember: { name: string; phone: string; shares?: number } },
+): Promise<{ deposit: { id: string }; userId: string; createdMember: boolean }> => {
+  const response = await api.post(`/deposits/unknown-senders/${id}/resolve`, resolution);
+  return response.data as { deposit: { id: string }; userId: string; createdMember: boolean };
+};
+
+export const dismissUnknownSender = async (id: string, note?: string): Promise<void> => {
+  await api.post(`/deposits/unknown-senders/${id}/dismiss`, note ? { note } : {});
+};
 
 export interface CreateDepositPayload {
   cycleId: string;

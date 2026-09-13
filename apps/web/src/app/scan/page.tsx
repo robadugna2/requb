@@ -31,6 +31,8 @@ import {
   scanFtNumbers,
   cbeLookup,
   suggestMembers,
+  queueUnknownSender,
+  resolveUnknownSender,
   createDeposit,
   autoVerifyDepositCbe,
   updateGroupCbeAccounts,
@@ -63,6 +65,11 @@ interface ScanItem {
   autoPaired: boolean;
   matchScore?: number;
   matchVia?: 'name' | 'bankAccountName' | 'history' | 'payerAlias';
+  /** Pairing strictness tier returned by the server */
+  tier?: 'AUTO' | 'SUGGEST' | 'UNKNOWN';
+  /** Confident-but-not-exact candidate offered as a one-click accept */
+  suggestCandidate?: MemberSuggestion;
+  queueing?: boolean;
   suggestions: MemberSuggestion[];
   amount?: number;
   /** yyyy-mm-dd for the date input */
@@ -227,6 +234,12 @@ function ScanWorkflow() {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [existingFts, setExistingFts] = useState<Set<string>>(new Set());
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+  // Quick-create a brand-new member from an unknown payer (scan flow)
+  const [createMemberIndex, setCreateMemberIndex] = useState<number | null>(null);
+  const [cmName, setCmName] = useState('');
+  const [cmPhone, setCmPhone] = useState('');
+  const [cmShares, setCmShares] = useState('1');
+  const [cmSaving, setCmSaving] = useState(false);
   const [expandedRaw, setExpandedRaw] = useState<number | null>(null);
 
   // Confirm state
@@ -322,15 +335,21 @@ function ScanWorkflow() {
       let matchScore: number | undefined;
       let matchVia: ScanItem['matchVia'];
       let suggestions: MemberSuggestion[] = [];
+      let tier: 'AUTO' | 'SUGGEST' | 'UNKNOWN' = 'UNKNOWN';
+      let suggestCandidate: MemberSuggestion | undefined;
       if (payerName) {
         try {
           const res = await suggestMembers(grpId, payerName);
+          tier = res.tier ?? 'UNKNOWN';
           suggestions = res.suggestions;
-          if (res.bestMatch) {
+          // AUTO only: deterministic identity. SUGGEST stays one-click.
+          if (res.bestMatch && res.bestMatch.autoPaired) {
             member = { id: res.bestMatch.userId, name: res.bestMatch.name };
             autoPaired = true;
             matchScore = res.bestMatch.score;
             matchVia = res.bestMatch.matchedVia;
+          } else if (res.bestMatch && res.tier === 'SUGGEST') {
+            suggestCandidate = res.bestMatch;
           }
         } catch {
           /* suggestions are best-effort */
@@ -347,6 +366,8 @@ function ScanWorkflow() {
                 autoPaired,
                 matchScore,
                 matchVia,
+                tier,
+                suggestCandidate,
                 suggestions,
                 amount: it.amount ?? tx.amount,
                 depositDate: it.depositDate ?? toInputDate(parseCbeDate(tx.date || '')),
@@ -608,6 +629,85 @@ function ScanWorkflow() {
     } catch (err: unknown) {
       patchItem(ft, { registeringAlias: false });
       showToast(axiosMessage(err), 'error');
+    }
+  };
+
+  // ─── Unknown Senders actions ────────────────────────────────────────────────
+
+  /** Shared payload describing an unpaired transaction for the queue. */
+  const unknownPayloadFor = (it: ScanItem, reason: string) => ({
+    groupId: group!.id,
+    payerName: it.tx?.payer || it.geminiSender || 'Unknown payer',
+    amount: it.amount ?? it.tx?.amount ?? 0,
+    ftNumber: it.ftNumber,
+    transferDate: it.depositDate
+      ? new Date(`${it.depositDate}T12:00:00`).toISOString()
+      : undefined,
+    senderAccount: it.tx?.payerAccount,
+    bankName: 'CBE',
+    imageUrl: evidenceUrl || undefined,
+    reason,
+    cbeData: (it.tx ?? {}) as unknown as Record<string, unknown>,
+  });
+
+  /** Park an unpaired transaction in the Unknown Senders queue (Receipts page). */
+  const queueToUnknown = async (it: ScanItem, reason: string) => {
+    patchItem(it.ftNumber, { queueing: true });
+    try {
+      await queueUnknownSender(unknownPayloadFor(it, reason));
+      removeItem(it.ftNumber);
+      showToast('Stored in Unknown Senders — resolve it from the Receipts page', 'success');
+    } catch (err: unknown) {
+      patchItem(it.ftNumber, { queueing: false });
+      showToast(axiosMessage(err), 'error');
+    }
+  };
+
+  /** Quick-create a member from the payer identity, then record + auto-verify. */
+  const createMemberAndRecord = async () => {
+    const idx = createMemberIndex;
+    if (idx === null || !group) return;
+    const it = items[idx];
+    if (!it || !cmName.trim() || !cmPhone.trim()) {
+      showToast('Payer name and phone are required to create a member', 'warning');
+      return;
+    }
+    setCmSaving(true);
+    try {
+      // One pipeline for everything: queue keeps the evidence, resolve creates
+      // the member + membership + deposit and registers the payer alias.
+      const queued = await queueUnknownSender(
+        unknownPayloadFor(it, 'Admin quick-created a member from this payer'),
+      );
+      const resolved = await resolveUnknownSender(queued.id, {
+        createMember: {
+          name: cmName.trim(),
+          phone: cmPhone.trim(),
+          shares: parseFloat(cmShares) || 1,
+        },
+      });
+      let outcome: ScanItem['outcome'] = 'pending';
+      let outcomeMsg = `New member ${resolved.userId ? 'created' : ''} — deposit recorded`;
+      try {
+        const res = await autoVerifyDepositCbe(resolved.deposit.id, accountNumber || undefined);
+        if (res.verified) {
+          outcome = 'verified';
+          outcomeMsg = `Member "${cmName.trim()}" created — deposit auto-verified against CBE`;
+        } else {
+          outcomeMsg = `Member "${cmName.trim()}" created — deposit PENDING review`;
+        }
+      } catch (err: unknown) {
+        outcomeMsg = `Member "${cmName.trim()}" created — deposit PENDING review (${axiosMessage(err)})`;
+      }
+      patchItem(it.ftNumber, { creating: false, outcome, outcomeMsg });
+      setCreateMemberIndex(null);
+      setCmName(''); setCmPhone(''); setCmShares('1');
+      showToast(outcomeMsg, outcome === 'verified' ? 'success' : 'success');
+      await loadExistingFts(selectedGroupId);
+    } catch (err: unknown) {
+      showToast(axiosMessage(err), 'error');
+    } finally {
+      setCmSaving(false);
     }
   };
 
@@ -1157,23 +1257,81 @@ function ScanWorkflow() {
                                     : `auto-paired (${Math.round(it.matchScore * 100)}%)`}
                             </span>
                           )}
-                          {it.autoPaired && typeof it.matchScore === 'number' && it.matchScore < 0.6 && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-warning-50 dark:bg-warning-500/10 text-warning-700 dark:text-warning-400">
-                              low confidence — verify member
-                            </span>
-                          )}
                         </span>
                         <Button variant="ghost" size="sm" onClick={() => setPickerIndex(idx)}>
                           Change
                         </Button>
                       </div>
+                    ) : it.tier === 'SUGGEST' && it.suggestCandidate ? (
+                      <div className="rounded-lg border border-amber-200 dark:border-warning-500/20 bg-amber-50 dark:bg-warning-500/10 p-3 space-y-2">
+                        <p className="text-xs text-warning-800 dark:text-warning-400 flex items-start gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            Possible match:{' '}
+                            <b>{it.suggestCandidate.name}</b>{' '}
+                            ({Math.round(it.suggestCandidate.score * 100)}% via{' '}
+                            {it.suggestCandidate.matchedVia === 'bankAccountName'
+                              ? 'bank account name'
+                              : it.suggestCandidate.matchedVia === 'payerAlias'
+                                ? 'authorized payer'
+                                : 'name similarity'}). Accept it, or choose differently.
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              patchItem(it.ftNumber, {
+                                member: {
+                                  id: it.suggestCandidate!.userId,
+                                  name: it.suggestCandidate!.name,
+                                },
+                                autoPaired: false,
+                                matchScore: it.suggestCandidate!.score,
+                                matchVia: it.suggestCandidate!.matchedVia,
+                                suggestCandidate: undefined,
+                              })
+                            }
+                          >
+                            <CheckCircle className="h-3.5 w-3.5 mr-1" /> Accept pairing
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => setPickerIndex(idx)}>
+                            <UserRound className="h-3.5 w-3.5 mr-1" /> Different member
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 pt-1 border-t border-warning-200/60 dark:border-warning-500/10">
+                          <button
+                            type="button"
+                            className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline underline-offset-2 disabled:opacity-50"
+                            disabled={it.queueing}
+                            onClick={() => {
+                              setCmName(it.tx?.payer || it.geminiSender || '');
+                              setCreateMemberIndex(idx);
+                            }}
+                          >
+                            New member? Create &amp; record
+                          </button>
+                          <button
+                            type="button"
+                            className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline underline-offset-2 disabled:opacity-50"
+                            disabled={it.queueing}
+                            onClick={() => queueToUnknown(it, 'Admin declined the suggested pairing')}
+                          >
+                            {it.queueing ? 'Saving…' : 'Send to Unknown Senders'}
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="rounded-lg border border-warning-200 dark:border-warning-500/20 bg-warning-50 dark:bg-warning-500/10 p-3 space-y-2">
-                        <p className="text-xs text-warning-800 dark:text-warning-400 flex items-center gap-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                          {it.tx?.payer
-                            ? `Payer "${it.tx.payer}" did not match any member clearly. Select the member manually.`
-                            : 'Select the member this transaction belongs to.'}
+                      <div className="rounded-lg border border-error-200 dark:border-error-500/20 bg-error-50 dark:bg-error-500/10 p-3 space-y-2">
+                        <p className="text-xs text-error-700 dark:text-error-400 flex items-start gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            <b>Unknown sender.</b>{' '}
+                            {it.tx?.payer
+                              ? `"${it.tx.payer}" does not confidently match any member.`
+                              : 'No payer name was detected.'}{' '}
+                            Pair it, create a new member, or park it for later.
+                          </span>
                         </p>
                         {it.suggestions.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
@@ -1196,9 +1354,22 @@ function ScanWorkflow() {
                             ))}
                           </div>
                         )}
-                        <Button variant="secondary" size="sm" onClick={() => setPickerIndex(idx)}>
-                          <UserRound className="h-3.5 w-3.5 mr-1" /> Choose member
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="secondary" size="sm" onClick={() => setPickerIndex(idx)}>
+                            <UserRound className="h-3.5 w-3.5 mr-1" /> Choose member
+                          </Button>
+                          <Button variant="ghost" size="sm" disabled={it.queueing} onClick={() => { setCmName(it.tx?.payer || it.geminiSender || ''); setCreateMemberIndex(idx); }}>
+                            <Plus className="h-3.5 w-3.5 mr-1" /> Create new member
+                          </Button>
+                          <button
+                            type="button"
+                            className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline underline-offset-2 disabled:opacity-50 self-center"
+                            disabled={it.queueing}
+                            onClick={() => queueToUnknown(it, 'No member matched the confident tier')}
+                          >
+                            {it.queueing ? 'Saving…' : 'Send to Unknown Senders'}
+                          </button>
+                        </div>
                       </div>
                     )}
                     {/* Self-learning: register an unmatched proxy payer name */}
@@ -1397,6 +1568,75 @@ function ScanWorkflow() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Quick-create a member from an unknown payer */}
+        {createMemberIndex !== null && items[createMemberIndex] && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-gray-900/60 backdrop-blur-sm p-0 sm:p-4"
+            onClick={() => !cmSaving && setCreateMemberIndex(null)}
+          >
+            <div
+              className="w-full sm:max-w-md bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-800 p-5 space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white/90">Create new member</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Absolutely new payer? Create the member and record this verified transaction under them.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Member name</label>
+                  <input
+                    className="input-field"
+                    value={cmName}
+                    onChange={(e) => setCmName(e.target.value)}
+                    placeholder="Full name (prefilled from the payer)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone *</label>
+                  <input
+                    className="input-field"
+                    value={cmPhone}
+                    onChange={(e) => setCmPhone(e.target.value)}
+                    placeholder="09xxxxxxxx"
+                    inputMode="tel"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Shares</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    min={0.25}
+                    max={10}
+                    step={0.25}
+                    value={cmShares}
+                    onChange={(e) => setCmShares(e.target.value)}
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                  Group: {group?.name}. The payer name is saved as an authorized payer automatically, so future payments pair instantly.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <Button variant="secondary" size="sm" disabled={cmSaving} onClick={() => setCreateMemberIndex(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  loading={cmSaving}
+                  disabled={!cmName.trim() || !cmPhone.trim()}
+                  onClick={createMemberAndRecord}
+                >
+                  Create &amp; record
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

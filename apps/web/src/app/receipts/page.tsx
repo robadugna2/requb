@@ -14,6 +14,9 @@ import {
   ChevronDown,
   ChevronUp,
   ScanLine,
+  UserRound,
+  UserPlus,
+  Inbox,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
@@ -29,8 +32,13 @@ import {
   autoVerifyDepositCbe,
   cbeLookup,
   getGroups,
+  getGroup,
+  getUnknownSenders,
+  resolveUnknownSender,
+  dismissUnknownSender,
 } from '@/lib/api';
-import type { ReceiptItem, GroupListItem } from '@/lib/api';
+import type { ReceiptItem, GroupListItem, UnknownSenderItem, GroupMember } from '@/lib/api';
+import MemberPickerModal from '@/components/scan/MemberPickerModal';
 import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
 export default function ReceiptsPage() {
@@ -51,6 +59,109 @@ export default function ReceiptsPage() {
 
   // Manual FT lookup panel
   const [showLookupPanel, setShowLookupPanel] = useState(false);
+  // Unknown Senders queue
+  const [unknownSenders, setUnknownSenders] = useState<UnknownSenderItem[]>([]);
+  const [showUnknown, setShowUnknown] = useState(true);
+  const [senderBusy, setSenderBusy] = useState<string | null>(null);
+  const [pairingSender, setPairingSender] = useState<UnknownSenderItem | null>(null);
+  const [pairingMembers, setPairingMembers] = useState<GroupMember[]>([]);
+  const [createSender, setCreateSender] = useState<UnknownSenderItem | null>(null);
+  const [cmName, setCmName] = useState('');
+  const [cmPhone, setCmPhone] = useState('');
+  const [cmShares, setCmShares] = useState('1');
+
+  const fetchUnknownSenders = async () => {
+    try {
+      setUnknownSenders(await getUnknownSenders());
+    } catch {
+      /* the queue is optional data */
+    }
+  };
+
+  const handleDismissSender = async (sender: UnknownSenderItem) => {
+    const note = window.prompt(
+      `Dismiss "${sender.payerName}"? Optional reason (e.g. duplicate, not an equb payment):`,
+    );
+    if (note === null) return; // cancelled
+    setSenderBusy(sender.id);
+    try {
+      await dismissUnknownSender(sender.id, note || undefined);
+      setUnknownSenders((prev) => prev.filter((x) => x.id !== sender.id));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
+      }
+    } catch {
+      /* toast-less: refresh will reflect reality */
+      await fetchUnknownSenders();
+    } finally {
+      setSenderBusy(null);
+    }
+  };
+
+  const openPairSender = async (sender: UnknownSenderItem) => {
+    setSenderBusy(sender.id);
+    try {
+      const detail = await getGroup(sender.groupId);
+      setPairingMembers(detail.members);
+      setPairingSender(sender);
+    } catch {
+      /* picker stays closed on failure */
+    } finally {
+      setSenderBusy(null);
+    }
+  };
+
+  const confirmPairSender = async (member: GroupMember) => {
+    if (!pairingSender) return;
+    const sender = pairingSender;
+    setPairingSender(null);
+    setSenderBusy(sender.id);
+    try {
+      await resolveUnknownSender(sender.id, { userId: member.id });
+      setUnknownSenders((prev) => prev.filter((x) => x.id !== sender.id));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
+      }
+      await fetchReceipts();
+    } catch {
+      await fetchUnknownSenders();
+    } finally {
+      setSenderBusy(null);
+    }
+  };
+
+  const openCreateSender = (sender: UnknownSenderItem) => {
+    setCmName(sender.payerName);
+    setCmPhone('');
+    setCmShares('1');
+    setCreateSender(sender);
+  };
+
+  const confirmCreateSender = async () => {
+    if (!createSender) return;
+    if (!cmName.trim() || !cmPhone.trim()) return;
+    setSenderBusy(createSender.id);
+    try {
+      await resolveUnknownSender(createSender.id, {
+        createMember: {
+          name: cmName.trim(),
+          phone: cmPhone.trim(),
+          shares: parseFloat(cmShares) || 1,
+        },
+      });
+      setCreateSender(null);
+      setUnknownSenders((prev) => prev.filter((x) => x.id !== createSender.id));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
+      }
+      await fetchReceipts();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      setError(axiosErr?.response?.data?.message || 'Failed to create the member.');
+    } finally {
+      setSenderBusy(null);
+    }
+  };
 
   const fetchReceipts = async () => {
     setLoading(true);
@@ -82,6 +193,14 @@ export default function ReceiptsPage() {
       // silently fail - CBE accounts are optional
     }
   };
+
+  useEffect(() => {
+    fetchUnknownSenders();
+    const onQueueChange = () => void fetchUnknownSenders();
+    window.addEventListener('unknown-senders-changed', onQueueChange);
+    return () => window.removeEventListener('unknown-senders-changed', onQueueChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchReceipts();
@@ -223,6 +342,82 @@ export default function ReceiptsPage() {
             defaultAccount={Object.values(groupCbeAccounts)[0]?.[0] || ''}
             onLookupFn={cbeLookup}
           />
+        </div>
+      )}
+
+      {/* Unknown Senders queue */}
+      {unknownSenders.length > 0 && (
+        <div className="mb-6 card !p-0 overflow-hidden border border-amber-200 dark:border-warning-500/20">
+          <button
+            onClick={() => setShowUnknown((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-amber-50 dark:bg-warning-500/10 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-warning-400 min-w-0">
+              <Inbox className="h-4 w-4 shrink-0" />
+              Unknown Senders
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-warning-500/20 text-amber-800 dark:text-warning-300 tabular-nums">
+                {unknownSenders.length}
+              </span>
+              <span className="text-xs font-normal text-amber-700/80 dark:text-warning-400/80 truncate hidden sm:inline">
+                verified payments waiting for your pairing decision
+              </span>
+            </span>
+            {showUnknown ? <ChevronUp className="h-4 w-4 text-amber-700 shrink-0" /> : <ChevronDown className="h-4 w-4 text-amber-700 shrink-0" />}
+          </button>
+          {showUnknown && (
+            <div className="divide-y divide-gray-50 dark:divide-gray-800">
+              {unknownSenders.map((sender) => (
+                <div key={sender.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <span className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {sender.payerName.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white/90 truncate">
+                      {sender.payerName}
+                      {sender.ftNumber && (
+                        <span className="ml-2 font-mono text-[10px] text-gray-400 dark:text-gray-500">{sender.ftNumber}</span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                      {sender.groupName}
+                      {sender.transferDate ? ` · ${sender.transferDate}` : ''}
+                      {sender.reason ? ` · ${sender.reason}` : ''}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white/90 tabular-nums shrink-0">
+                    ETB {sender.amount.toLocaleString()}
+                  </p>
+                  <div className="flex gap-2 shrink-0 w-full sm:w-auto">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={senderBusy === sender.id}
+                      onClick={() => void openPairSender(sender)}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <UserRound className="h-3.5 w-3.5 mr-1" /> Pair
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={senderBusy === sender.id}
+                      onClick={() => openCreateSender(sender)}
+                      className="flex-1 sm:flex-none"
+                    >
+                      <UserPlus className="h-3.5 w-3.5 mr-1" /> New member
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={senderBusy === sender.id}
+                      onClick={() => void handleDismissSender(sender)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -531,6 +726,74 @@ export default function ReceiptsPage() {
             </div>
           </div>
         )}
+      </Modal>
+      {/* Pair unknown sender to an existing member */}
+      <MemberPickerModal
+        isOpen={!!pairingSender}
+        onClose={() => setPairingSender(null)}
+        members={pairingMembers}
+        payerName={pairingSender?.payerName}
+        onSelect={(member) => void confirmPairSender(member)}
+      />
+
+      {/* Quick-create a member from an unknown sender */}
+      <Modal
+        isOpen={!!createSender}
+        onClose={() => (!senderBusy ? setCreateSender(null) : undefined)}
+        title="Create new member"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Absolutely new payer? Create the member and record their verified
+            transaction under them. The payer name is saved as an authorized
+            payer automatically.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Member name</label>
+            <input
+              className="input-field"
+              value={cmName}
+              onChange={(e) => setCmName(e.target.value)}
+              placeholder="Full name (prefilled from the payer)"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone *</label>
+            <input
+              className="input-field"
+              value={cmPhone}
+              onChange={(e) => setCmPhone(e.target.value)}
+              placeholder="09xxxxxxxx"
+              inputMode="tel"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Shares</label>
+            <input
+              className="input-field"
+              type="number"
+              min={0.25}
+              max={10}
+              step={0.25}
+              value={cmShares}
+              onChange={(e) => setCmShares(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+            <Button variant="secondary" size="sm" disabled={senderBusy === createSender?.id} onClick={() => setCreateSender(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              loading={senderBusy === createSender?.id}
+              disabled={!cmName.trim() || !cmPhone.trim()}
+              onClick={() => void confirmCreateSender()}
+            >
+              Create &amp; record
+            </Button>
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );

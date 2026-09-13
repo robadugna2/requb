@@ -97,15 +97,20 @@ export function scoreNameMatch(payerName: string, memberName: string): number {
   return Math.round(Math.min(score, 1) * 1000) / 1000;
 }
 
-/** Confidence threshold above which a suggestion is offered as auto-paired. */
-export const MEMBER_MATCH_THRESHOLD = 0.6;
-
 /**
- * Below this a name match is considered too weak to auto-pair at all;
- * between this and MEMBER_MATCH_THRESHOLD the pairing is still automatic but
- * the scanner UI flags it for review (automation over manual picking).
+ * Strictness model (three tiers, evaluated by the caller):
+ *
+ *  AUTO    — deterministic identity only: the normalized payer name equals the
+ *            member name, bank-account-holder name, or an exact authorized-payer
+ *            alias (score 1.0), or the exact payer was paired before (history).
+ *            A single unambiguous candidate is required — never a guess.
+ *  SUGGEST — high-but-not-exact similarity >= MEMBER_MATCH_THRESHOLD with a
+ *            clear margin over the runner-up (AMBIGUITY_MARGIN). Never applied
+ *            automatically; surfaced as a one-click "accept" chip.
+ *  UNKNOWN — everything else (including any ambiguous top-2) goes to the
+ *            Unknown Senders queue for human resolution.
  */
-export const WEAK_MATCH_THRESHOLD = 0.35;
+export const MEMBER_MATCH_THRESHOLD = 0.6;
 
 /**
  * Margin between the top two candidates below which the match is considered
