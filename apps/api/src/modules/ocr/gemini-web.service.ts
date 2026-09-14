@@ -142,6 +142,7 @@ export class GeminiWebService {
       return {
         ftNumbers: parsed.ftNumbers,
         senders: parsed.senders,
+        regions: parsed.regions,
         bankName: parsed.bankName,
         confidence: parsed.confidence,
         rawText: content,

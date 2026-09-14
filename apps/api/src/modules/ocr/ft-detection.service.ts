@@ -7,6 +7,8 @@ export interface FtDetectionResult {
   ftNumbers: string[];
   /** Payer / sender name per FT, read from the statement (pairing input) */
   senders: Record<string, string>;
+  /** Normalized (0–1) [x, y, w, h] location of each FT, when the model reports it */
+  regions?: Record<string, [number, number, number, number]>;
   bankName?: string;
   confidence: number;
   detectedVia: 'gemini-web' | 'gemini' | 'none';
@@ -77,6 +79,7 @@ export class FtDetectionService {
     r: {
       ftNumbers: string[];
       senders?: Record<string, string>;
+      regions?: Record<string, [number, number, number, number]>;
       bankName?: string;
       confidence: number;
       errors?: string[];
@@ -101,6 +104,7 @@ export class FtDetectionService {
     return {
       ftNumbers: r.ftNumbers,
       senders,
+      regions: r.regions,
       bankName: r.bankName,
       confidence: r.confidence,
       detectedVia: r.ftNumbers.length > 0 ? via : 'none',

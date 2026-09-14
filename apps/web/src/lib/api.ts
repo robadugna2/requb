@@ -1304,6 +1304,9 @@ export interface FtScanResult {
   ftNumbers: string[];
   /** Payer / sender name per FT, read from the statement (pairing input) */
   senders?: Record<string, string>;
+  /** Normalized (0–1) [x, y, w, h] location of each FT on the first photo,
+   *  when the model reports them — powers the focus-box overlay */
+  regions?: Record<string, [number, number, number, number]>;
   bankName?: string;
   confidence: number;
   detectedVia?: 'gemini-web' | 'gemini' | 'none';

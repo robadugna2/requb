@@ -18,20 +18,26 @@ Rules:
 - CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. They appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows. References may be wrapped across two lines inside one table cell — read them as one. Some have extended identifiers after "\\", "/", or "|" (e.g. FT24AB123456\\BNK) — return only the FT part.
 - For each FT number, also read the payer / sender / account-holder name printed nearest to it (same row or adjacent cell), if visible. Map it as senders: { "FT...": "PAYER FULL NAME" }.
 - Also report which bank the document is from.
+- Additionally report the pixel location of each FT number as regions: { "FT...": [x, y, width, height] } with all four values normalized 0.0–1.0 relative to the image dimensions (x, y = top-left corner of the tight box around the reference text).
 
 Return ONLY valid JSON in this exact shape:
-{ "ftNumbers": ["FT...", "..."], "senders": { "FT...": "Payer Full Name" }, "bankName": "CBE", "confidence": 0.9 }`;
+{ "ftNumbers": ["FT...", "..."], "senders": { "FT...": "Payer Full Name" }, "regions": { "FT...": [0.12, 0.34, 0.20, 0.02] }, "bankName": "CBE", "confidence": 0.9 }`;
 
 export const FT_USER_PROMPT = 'Find all transaction / FT reference numbers in this bank document photo:';
+
+/** Normalized (0–1) top-left box: [x, y, width, height] relative to the image */
+export type FtRegion = [number, number, number, number];
 
 /**
  * Parses a model's JSON reply into normalized FT numbers + per-FT sender
  * names. Shared by the official Gemini service and the web proxy so both
- * providers behave identically.
+ * providers behave identically. `regions` is optional — models that skip
+ * the location field simply produce no focus boxes on the client.
  */
 export function parseFtScanJson(content: string): {
   ftNumbers: string[];
   senders: Record<string, string>;
+  regions?: Record<string, FtRegion>;
   bankName?: string;
   confidence: number;
 } {
@@ -41,6 +47,7 @@ export function parseFtScanJson(content: string): {
   let parsed: {
     ftNumbers?: unknown;
     senders?: Record<string, unknown>;
+    regions?: Record<string, unknown>;
     bankName?: string;
     confidence?: number;
   };
@@ -65,9 +72,24 @@ export function parseFtScanJson(content: string): {
     if (clean && cleanName && /^FT\w{10}$/.test(clean)) senders[clean] = cleanName;
   }
 
+  // Optional per-FT bounding boxes: keep only sane normalized boxes for FTs
+  // that were actually detected. Absent/garbage regions are silently dropped.
+  let regions: Record<string, FtRegion> | undefined;
+  for (const [ft, box] of Object.entries(parsed.regions ?? {})) {
+    const clean = normalizeFtNumber(String(ft ?? ''));
+    if (!clean || !ftNumbers.includes(clean) || !Array.isArray(box) || box.length !== 4) continue;
+    const nums = box.map((v: unknown) => Number(v));
+    if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > 1)) continue;
+    const [x, y, w, h] = nums as FtRegion;
+    if (w <= 0 || h <= 0 || x + w > 1.05 || y + h > 1.05) continue;
+    regions = regions ?? {};
+    regions[clean] = [Math.min(x, 1), Math.min(y, 1), Math.min(w, 1 - x), Math.min(h, 1 - y)];
+  }
+
   return {
     ftNumbers,
     senders,
+    regions,
     bankName: parsed.bankName || undefined,
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
   };
@@ -171,6 +193,7 @@ export class GeminiService {
       return {
         ftNumbers: parsed.ftNumbers,
         senders: parsed.senders,
+        regions: parsed.regions,
         bankName: parsed.bankName,
         confidence: parsed.confidence,
         rawText: content,

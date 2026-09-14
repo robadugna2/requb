@@ -19,6 +19,8 @@ export interface FtScanResult {
   ftNumbers: string[];
   /** Payer / sender name per FT, read from the statement (pairing input) */
   senders?: Record<string, string>;
+  /** Normalized (0–1) [x, y, w, h] location of each FT, when the model reports it */
+  regions?: Record<string, [number, number, number, number]>;
   bankName?: string;
   confidence: number;
   detectedVia?: 'gemini' | 'none';

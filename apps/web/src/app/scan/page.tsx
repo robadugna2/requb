@@ -15,8 +15,12 @@ import {
   RefreshCw,
   Eye,
   Image as ImageIcon,
+  Sparkles,
+  Crosshair,
+  FileUp,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { enhanceFile, cropAndEnhance } from '@/lib/imageEnhance';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/Toast';
 import { CbeTransactionCard } from '@/components/ui/CbeVerifyPanel';
@@ -211,6 +215,17 @@ function ScanWorkflow() {
   /** Extra statement pages attached to the batched scan (beyond the first) */
   const [attached, setAttached] = useState<AttachedPhoto[]>([]);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  /** Preprocess every photo (contrast stretch + sharpen) before FT detection */
+  const [autoEnhance, setAutoEnhance] = useState(true);
+  /** Normalized FT locations from the last scan — powers focus-box overlay */
+  const [ftRegions, setFtRegions] = useState<Record<string, [number, number, number, number]>>({});
+  const [rescanningFt, setRescanningFt] = useState<string | null>(null);
+  const [lastCaptureFile, setLastCaptureFile] = useState<File | null>(null);
+  /** Bulk import: one FT per line, verified sequentially */
+  const [bulkText, setBulkText] = useState('');
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const bulkFileRef = useRef<HTMLInputElement>(null);
   const [rules, setRules] = useState<GroupRules | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -476,6 +491,8 @@ function ScanWorkflow() {
     setScanSenders({});
     setScanNotice('');
     setEvidenceError('');
+    setFtRegions({});
+    setLastCaptureFile(file);
     if (capturePreview) URL.revokeObjectURL(capturePreview);
     setEvidenceUrl('');
 
@@ -485,8 +502,12 @@ function ScanWorkflow() {
     if (!group) return;
 
     // The cropped first page plus any attached pages are read in ONE batched
-    // request.
-    const batch: File[] = [file, ...attached.map((a) => a.file)];
+    // request. With auto-enhance on, every page is preprocessed (grayscale,
+    // contrast stretch, sharpen) first — faint print reads far more reliably.
+    const rawBatch: File[] = [file, ...attached.map((a) => a.file)];
+    const batch = autoEnhance
+      ? await Promise.all(rawBatch.map((f) => enhanceFile(f, 'auto').catch(() => f)))
+      : rawBatch;
 
     // Upload evidence image and run FT detection in parallel
     setUploadingEvidence(true);
@@ -517,6 +538,7 @@ function ScanWorkflow() {
         setScanBank(result.bankName || '');
         setScanVia(result.detectedVia ?? 'none');
         setScanSenders(result.senders ?? {});
+        setFtRegions(result.regions ?? {});
         const fts = Array.from(new Set(result.ftNumbers.map((f) => f.toUpperCase())));
         if (fts.length === 0) {
           setScanNotice(
@@ -616,6 +638,161 @@ function ScanWorkflow() {
 
   const retryItem = async (ft: string) => {
     await runLookup(ft, selectedGroupId, accountNumber, scanSenders[ft]);
+  };
+
+  /**
+   * Focus & re-scan: the admin tapped an FT focus box on the captured photo.
+   * That region is cropped (with context padding), heavily enhanced (2×
+   * upscale + contrast + sharpen) and re-read on its own — the precise second
+   * pass for FTs the full-page scan misread or missed.
+   */
+  const rescanRegion = async (ft: string) => {
+    const region = ftRegions[ft];
+    if (!lastCaptureFile || !region) return;
+    if (!selectedGroupId || !accountReady) {
+      showToast('Select the equb group and receiver account first', 'error');
+      return;
+    }
+    setRescanningFt(ft);
+    try {
+      const [x, y, w, h] = region;
+      const crop = await cropAndEnhance(lastCaptureFile, { x, y, w, h });
+      const result = await scanFtNumbers([crop], accountNumber || undefined);
+      const found = Array.from(new Set(result.ftNumbers.map((f) => f.toUpperCase())));
+
+      if (found.length === 0) {
+        showToast(`Focus re-scan could not read ${ft} — try dragging a wider crop`, 'warning');
+        return;
+      }
+
+      await loadExistingFts(selectedGroupId);
+      const savedAccount = await ensureAccountSaved();
+      const senders = { ...scanSenders, ...(result.senders ?? {}) };
+      setScanSenders(senders);
+
+      // Merge: re-verify the tapped FT and add any new ones read from the crop
+      for (const foundFt of found) {
+        if (items.some((it) => it.ftNumber === foundFt)) {
+          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt]);
+        } else {
+          const fresh = sessionActive ? existingFts : await loadExistingFts(selectedGroupId);
+          setItems((prev) => [
+            ...prev,
+            {
+              ftNumber: foundFt,
+              status: 'verifying' as const,
+              member: null,
+              autoPaired: false,
+              suggestions: [],
+              cycleId: activeCycle?.id,
+              isDuplicate: fresh.has(foundFt),
+            },
+          ]);
+          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt]);
+        }
+      }
+      showToast(`Focus re-scan read ${found.length} FT${found.length === 1 ? '' : 's'} from the selected area`, 'success');
+    } catch (err: unknown) {
+      showToast(axiosMessage(err), 'error');
+    } finally {
+      setRescanningFt(null);
+    }
+  };
+
+  /**
+   * Bulk FT import: a .txt file (or pasted text) with one FT number per line.
+   * Every line is validated, de-duplicated, and then verified ONE AT A TIME
+   * through the same pipeline as scanned FTs (CBE lookup → auto-pairing), so
+   * each number gets its own precise result.
+   */
+  const parseBulkFts = (text: string): string[] =>
+    Array.from(
+      new Set(
+        text
+          .split(/[\r\n,;\t]+/)
+          .map((line) => (normalizeFtNumber(line.trim()) ?? '').toUpperCase())
+          .filter((ft) => FT_REGEX.test(ft)),
+      ),
+    );
+
+  const handleBulkFile = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const fts = parseBulkFts(text);
+    if (fts.length === 0) {
+      showToast('No valid FT numbers found in that file (one FT per line, e.g. FT253126QXMJ)', 'error');
+      return;
+    }
+    setBulkText((prev) => (prev ? prev + '\n' + fts.join('\n') : fts.join('\n')));
+    showToast(`${fts.length} valid FT number${fts.length === 1 ? '' : 's'} loaded from ${file.name}`, 'success');
+  };
+
+  const processBulkFts = async () => {
+    const fts = parseBulkFts(bulkText);
+    if (fts.length === 0) {
+      showToast('Enter or upload FT numbers first (one per line)', 'error');
+      return;
+    }
+    if (!selectedGroupId) {
+      showToast('Select the equb group first', 'error');
+      return;
+    }
+    if (!accountReady) {
+      showToast('Select or enter the CBE receiver account first', 'error');
+      return;
+    }
+
+    const fresh = sessionActive ? existingFts : await loadExistingFts(selectedGroupId);
+    if (!sessionActive) {
+      setSessionActive(true);
+      setShowResults(false);
+    }
+
+    // Skip ones already queued in this session, warn about already-recorded ones
+    const queue = fts.filter((ft) => {
+      if (items.some((it) => it.ftNumber === ft)) {
+        showToast(`FT ${ft} is already in this scan — skipped`, 'warning');
+        return false;
+      }
+      return true;
+    });
+
+    setBulkRunning(true);
+    setBulkProgress({ done: 0, total: queue.length });
+    const savedAccount = await ensureAccountSaved();
+
+    let done = 0;
+    for (const ft of queue) {
+      const isDuplicate = fresh.has(ft);
+      setItems((prev) =>
+        prev.some((it) => it.ftNumber === ft)
+          ? prev
+          : [
+              ...prev,
+              {
+                ftNumber: ft,
+                status: 'verifying' as const,
+                member: null,
+                autoPaired: false,
+                suggestions: [],
+                cycleId: activeCycle?.id,
+                isDuplicate,
+              },
+            ],
+      );
+      if (isDuplicate) {
+        showToast(`FT ${ft} is already recorded in this group — flagged as duplicate`, 'warning');
+      }
+      // One at a time — each FT gets a clean, precise CBE lookup + pairing
+      await runLookup(ft, selectedGroupId, savedAccount);
+      done += 1;
+      setBulkProgress({ done, total: queue.length });
+    }
+
+    setBulkRunning(false);
+    setBulkText('');
+    showToast(`Bulk import finished — ${done} FT number${done === 1 ? '' : 's'} processed`, 'success');
   };
 
   // Self-learning: register the detected payer name as an authorized payer
@@ -966,6 +1143,18 @@ function ScanWorkflow() {
               </Button>
             </div>
 
+            {/* Auto-enhance toggle */}
+            <label className="mt-3 inline-flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoEnhance}
+                onChange={(e) => setAutoEnhance(e.target.checked)}
+                className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <Sparkles className="h-3.5 w-3.5 text-brand-500" />
+              Auto-enhance photos before scanning (grayscale + contrast + sharpen)
+            </label>
+
             {/* Manual FT entry — same CBE verification + pairing pipeline, no photo needed */}
             <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
@@ -1000,6 +1189,71 @@ function ScanWorkflow() {
               </p>
             </div>
 
+            {/* Bulk FT import — one number per line, verified one at a time */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Bulk import — paste or upload FT numbers, one per line
+                </label>
+                <input
+                  ref={bulkFileRef}
+                  type="file"
+                  accept=".txt,text/plain"
+                  className="hidden"
+                  onChange={(e) => {
+                    handleBulkFile(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => bulkFileRef.current?.click()}
+                  disabled={bulkRunning}
+                  className="flex-shrink-0"
+                >
+                  <FileUp className="h-3.5 w-3.5 mr-1" /> Upload .txt
+                </Button>
+              </div>
+              <textarea
+                className="input-field font-mono text-xs"
+                rows={4}
+                placeholder={'FT253126QXMJ\nFT253127ABCD\nFT253128WXYZ'}
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                disabled={bulkRunning}
+              />
+              <div className="flex items-center justify-between mt-2 gap-3 flex-wrap">
+                <p className="text-xs text-gray-400">
+                  {(() => {
+                    const fts = parseBulkFts(bulkText);
+                    return fts.length > 0
+                      ? `${fts.length} valid FT number${fts.length === 1 ? '' : 's'} detected`
+                      : 'Invalid lines are ignored automatically';
+                  })()}
+                  {bulkRunning && ` — processing ${bulkProgress.done}/${bulkProgress.total}…`}
+                </p>
+                <Button
+                  onClick={processBulkFts}
+                  loading={bulkRunning}
+                  disabled={bulkRunning || !parseBulkFts(bulkText).length || !selectedGroupId || !accountReady}
+                  size="sm"
+                  className="flex-shrink-0"
+                >
+                  {bulkRunning ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      {bulkProgress.done}/{bulkProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <Crosshair className="h-3.5 w-3.5 mr-1" /> Verify All
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
             {attached.length > 0 && (
               <div className="mt-4">
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
@@ -1020,6 +1274,30 @@ function ScanWorkflow() {
                 <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={capturePreview} alt="Captured statement" className="w-full max-h-64 md:max-h-40 object-cover" />
+                  {/* FT focus boxes — tap one to crop, enhance and re-scan just that cell */}
+                  {Object.entries(ftRegions).map(([ft, [x, y, w, h]]) => (
+                    <button
+                      key={ft}
+                      onClick={() => rescanRegion(ft)}
+                      disabled={rescanningFt !== null || scanning}
+                      title={`Focus & re-scan ${ft} precisely`}
+                      className={`absolute rounded-md border-2 transition-all ${
+                        rescanningFt === ft
+                          ? 'border-warning-500 bg-warning-500/20 animate-pulse'
+                          : 'border-brand-500 bg-brand-500/10 hover:bg-brand-500/25 hover:border-brand-600'
+                      }`}
+                      style={{
+                        left: `${x * 100}%`,
+                        top: `${y * 100}%`,
+                        width: `${Math.max(w, 0.04) * 100}%`,
+                        height: `${Math.max(h, 0.025) * 100}%`,
+                      }}
+                    >
+                      <span className="absolute -top-4 left-0 text-[9px] font-bold text-white bg-brand-500 rounded px-1 whitespace-nowrap">
+                        {rescanningFt === ft ? 'scanning…' : ft}
+                      </span>
+                    </button>
+                  ))}
                   {uploadingEvidence && (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <Loader2 className="h-5 w-5 animate-spin text-white" />
@@ -1037,6 +1315,14 @@ function ScanWorkflow() {
                     <Trash2 className="h-3.5 w-3.5 mr-1" /> Discard
                   </Button>
                 </div>
+                {Object.keys(ftRegions).length > 0 && (
+                  <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400 flex items-start gap-1">
+                    <Crosshair className="h-3.5 w-3.5 text-brand-500 flex-shrink-0 mt-px" />
+                    <span>
+                      Tap a highlighted FT box on the photo to crop, enhance and re-scan just that area precisely.
+                    </span>
+                  </p>
+                )}
                 {attached.length > 0 && (
                   <div className="mt-2">
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">
