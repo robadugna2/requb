@@ -15,6 +15,7 @@ import {
   Wallet,
   CircleDollarSign,
   Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -25,6 +26,7 @@ import {
   addMemberToGroup,
   removeMemberFromGroup,
   createMember,
+  updateGroup,
   getGroupMemberDues,
   getMergedGroups,
   getGroupFeeWaivers,
@@ -87,6 +89,8 @@ interface MembersTabProps {
   group: GroupDetail;
   groupId: string;
   canManage: boolean;
+  /** Owner / super-admin — allowed to raise maxMembers when the group is full */
+  canEditGroup: boolean;
   refreshKey: number;
   notifySuccess: (msg: string) => void;
   notifyError: (msg: string) => void;
@@ -97,6 +101,7 @@ export default function MembersTab({
   group,
   groupId,
   canManage,
+  canEditGroup,
   refreshKey,
   notifySuccess,
   notifyError,
@@ -214,9 +219,42 @@ export default function MembersTab({
     }
   };
 
+  /**
+   * A full group never blocks adding a member: when the owner/super-admin
+   * adds past maxMembers, the limit is raised to fit first (headroom of 3 so
+   * the next few adds don't need another raise).
+   */
+  const ensureCapacity = async (): Promise<boolean> => {
+    if (group.membersCount < group.maxMembers) return true;
+    if (!canEditGroup) {
+      notifyError(
+        `This group is full (${group.membersCount}/${group.maxMembers}). Only the group owner can raise the member limit.`,
+      );
+      return false;
+    }
+    try {
+      const newMax = group.membersCount + 3;
+      await updateGroup(groupId, { maxMembers: newMax });
+      notifySuccess(`Member limit raised to ${newMax} to fit the new member`);
+      onGroupChanged();
+      return true;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      notifyError(
+        axiosErr.response?.data?.message ||
+          'Could not raise the member limit. Ask the group owner to raise it in Edit Info.',
+      );
+      return false;
+    }
+  };
+
   const handleAddMember = async (userId: string) => {
     setAddingMemberId(userId);
     try {
+      if (!(await ensureCapacity())) {
+        setAddingMemberId(null);
+        return;
+      }
       await addMemberToGroup(groupId, userId, addMemberShares);
       setShowAddMemberModal(false);
       setAddMemberShares(1);
@@ -235,6 +273,10 @@ export default function MembersTab({
     e.preventDefault();
     setCreatingMember(true);
     try {
+      if (!(await ensureCapacity())) {
+        setCreatingMember(false);
+        return;
+      }
       const result = await createMember({
         name: newMemberForm.name,
         phone: newMemberForm.phone,
@@ -479,13 +521,21 @@ export default function MembersTab({
               <CircleDollarSign className="h-4 w-4 mr-1.5" />
               Waiver
             </Button>
-            {group.membersCount < group.maxMembers && canManage && (
+            {canManage && (
               <Button size="sm" onClick={openAddMemberModal}>
                 <UserPlus className="h-4 w-4 mr-1.5" />
-                Add
+                Add Member
               </Button>
             )}
           </div>
+          {canManage && group.membersCount >= group.maxMembers && (
+            <p className="mt-2 text-xs text-warning-700 dark:text-warning-400 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              {canEditGroup
+                ? `This group is full (${group.membersCount}/${group.maxMembers}). Adding a member will raise the limit automatically.`
+                : `This group is full (${group.membersCount}/${group.maxMembers}). Ask the group owner to raise the member limit.`}
+            </p>
+          )}
         </div>
 
         {sharesLoading ? (

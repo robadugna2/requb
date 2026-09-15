@@ -252,6 +252,7 @@ export default function GroupDetailPage() {
               group={group}
               groupId={groupId}
               canManage={canManageMembers}
+              canEditGroup={isOwnerOrSuper}
               refreshKey={refreshKey}
               notifySuccess={notifySuccess}
               notifyError={notifyError}

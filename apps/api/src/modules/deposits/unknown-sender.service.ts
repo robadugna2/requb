@@ -138,7 +138,7 @@ export class UnknownSenderService {
   async resolve(id: string, adminId: string, data: ResolveUnknownSenderData) {
     const record = await this.prisma.unmatchedDeposit.findUnique({
       where: { id },
-      include: { group: { select: { id: true, name: true } } },
+      include: { group: { select: { id: true, name: true, createdById: true } } },
     });
     if (!record) throw new NotFoundException(`Unknown sender ${id} not found`);
     if (record.status !== UnmatchedStatus.PENDING) {
@@ -212,10 +212,26 @@ export class UnknownSenderService {
         });
         const group = await this.prisma.equbGroup.findUnique({
           where: { id: record.groupId },
-          select: { maxMembers: true },
+          select: { maxMembers: true, createdById: true },
         });
         if (group && activeMembers >= group.maxMembers) {
-          throw new BadRequestException('Group has reached maximum member capacity');
+          // A full group must not dead-end member creation from a scan or the
+          // unknown queue: the owner's / super-admin's resolve action raises
+          // the limit by one and proceeds. Other admins get the explicit error.
+          const admin = await this.prisma.admin.findUnique({
+            where: { id: adminId },
+            select: { role: true },
+          });
+          const isOwnerOrSuper =
+            admin?.role === 'SUPER_ADMIN' || record.group.createdById === adminId;
+          if (!isOwnerOrSuper) {
+            throw new BadRequestException('Group has reached maximum member capacity');
+          }
+          const newMax = activeMembers + 1;
+          await this.prisma.equbGroup.update({
+            where: { id: record.groupId },
+            data: { maxMembers: newMax },
+          });
         }
         membership = await this.prisma.groupMembership.create({
           data: {
