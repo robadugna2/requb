@@ -34,6 +34,12 @@ export interface CreateDepositData {
   confidence?: number;
   /** Present on the admin create path; validated against the cycle's group */
   groupId?: string;
+  /** Internal-only (never accepted from request bodies): the caller has
+   *  already confirmed the transaction against the bank and vouches for it —
+   *  e.g. resolving a queued unknown sender whose CBE lookup succeeded. */
+  verificationStatus?: 'PENDING' | 'VERIFIED';
+  verifiedById?: string;
+  autoVerified?: boolean;
 }
 
 @Injectable()
@@ -340,6 +346,11 @@ export class DepositsService {
         branch: data.branch,
         narrative: data.narrative,
         confidence: data.confidence,
+        // Internal-only callers (unknown-sender resolution) may vouch that the
+        // transaction was already bank-verified; request bodies never reach this.
+        verificationStatus: data.verificationStatus ?? 'PENDING',
+        verifiedById: data.verifiedById,
+        autoVerified: data.autoVerified,
       },
       include: {
         user: true,

@@ -392,6 +392,13 @@ export class UnknownSenderService {
       senderAccount: record.senderAccount || undefined,
       imageUrl: record.imageUrl || undefined,
       ocrData: (record.cbeData as Prisma.InputJsonValue) || undefined,
+      // Queue entries only exist because the CBE lookup already confirmed the
+      // transaction against the bank — the admin's pairing decision above IS
+      // the verification. Creating these PENDING forced a second manual
+      // confirmation for information the system already had.
+      verificationStatus: 'VERIFIED',
+      verifiedById: adminId,
+      autoVerified: true,
     });
 
     await this.prisma.unmatchedDeposit.update({

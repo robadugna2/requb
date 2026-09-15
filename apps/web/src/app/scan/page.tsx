@@ -865,26 +865,17 @@ function ScanWorkflow() {
           governmentId: cmGovernmentId.trim() || undefined,
         },
       });
-      let outcome: ScanItem['outcome'] = 'pending';
-      let outcomeMsg = `New member ${resolved.userId ? 'created' : ''} — deposit recorded`;
-      try {
-        const res = await autoVerifyDepositCbe(resolved.deposit.id, accountNumber || undefined);
-        if (res.verified) {
-          outcome = 'verified';
-          outcomeMsg = `Member "${cmName.trim()}" created — deposit auto-verified against CBE`;
-        } else {
-          outcomeMsg = `Member "${cmName.trim()}" created — deposit PENDING review`;
-        }
-      } catch (err: unknown) {
-        outcomeMsg = `Member "${cmName.trim()}" created — deposit PENDING review (${axiosMessage(err)})`;
-      }
+      // Resolved queue entries are born-verified — the CBE lookup confirmed
+      // the transaction at scan time and the pairing was the only decision.
+      const outcome: ScanItem['outcome'] = 'verified';
+      let outcomeMsg = `Member "${cmName.trim()}" created — deposit verified against CBE`;
       if (resolved.ruleOverrides?.includes('REQUIRE_GUARANTOR')) {
         outcomeMsg += ' — guarantor still required: assign one from the group page (Requests tab)';
       }
       patchItem(it.ftNumber, { creating: false, outcome, outcomeMsg });
       setCreateMemberIndex(null);
       setCmName(''); setCmPhone(''); setCmShares('1'); setCmGovernmentId('');
-      showToast(outcomeMsg, outcome === 'verified' ? 'success' : 'success');
+      showToast(outcomeMsg, 'success');
       await loadExistingFts(selectedGroupId);
     } catch (err: unknown) {
       showToast(axiosMessage(err), 'error');
