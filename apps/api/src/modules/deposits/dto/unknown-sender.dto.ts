@@ -82,6 +82,13 @@ export class CreateMemberFromPayerDto {
   @Min(0.25)
   @Max(10)
   shares?: number;
+
+  /** Groups with requireGovernmentId block members without one — the
+   *  quick-create modal collects it up front so creation never dead-ends. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  governmentId?: string;
 }
 
 export class ResolveUnknownSenderDto {

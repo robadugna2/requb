@@ -32,6 +32,8 @@ export interface ResolveUnknownSenderData {
     name: string;
     phone: string;
     shares?: number;
+    /** Groups requiring a government ID block members without one */
+    governmentId?: string;
   };
 }
 
@@ -147,6 +149,8 @@ export class UnknownSenderService {
 
     let userId: string;
     let createdMember = false;
+    /** Group rules overridden by this owner action (e.g. guarantor pending) */
+    let ruleOverrides: string[] = [];
 
     if (data.createMember) {
       const { name, phone, shares = 1 } = data.createMember;
@@ -172,6 +176,7 @@ export class UnknownSenderService {
           name,
           phone,
           bankAccountName: record.senderName || name,
+          governmentId: data.createMember.governmentId || undefined,
         },
         select: { id: true, name: true },
       });
@@ -203,9 +208,31 @@ export class UnknownSenderService {
         );
         const errors = violations.filter((v) => v.severity === 'ERROR');
         if (errors.length > 0) {
-          throw new BadRequestException(
-            `Cannot add member: ${errors.map((v) => v.message).join(', ')}`,
-          );
+          // The guarantor requirement cannot be satisfied inside a
+          // quick-create (a guarantor must be another member). The owner's /
+          // super-admin's explicit resolve overrides it — surfaced back to
+          // the client as ruleOverrides so the UI can remind about follow-up.
+          const admin = await this.prisma.admin.findUnique({
+            where: { id: adminId },
+            select: { role: true },
+          });
+          const isOwnerOrSuper =
+            admin?.role === 'SUPER_ADMIN' || record.group.createdById === adminId;
+          if (!isOwnerOrSuper) {
+            throw new BadRequestException(
+              `Cannot add member: ${errors.map((v) => v.message).join(', ')}`,
+            );
+          }
+          const overridden = errors
+            .filter((v) => v.rule === 'REQUIRE_GUARANTOR')
+            .map((v) => v.rule);
+          const blocking = errors.filter((v) => v.rule !== 'REQUIRE_GUARANTOR');
+          if (blocking.length > 0) {
+            throw new BadRequestException(
+              `Cannot add member: ${blocking.map((v) => v.message).join(', ')}`,
+            );
+          }
+          ruleOverrides = overridden;
         }
         const activeMembers = await this.prisma.groupMembership.count({
           where: { groupId: record.groupId, status: 'ACTIVE' },
@@ -326,7 +353,7 @@ export class UnknownSenderService {
       }
     }
 
-    return { unknownSender: updated, deposit, userId, createdMember, autoFollowed };
+    return { unknownSender: updated, deposit, userId, createdMember, autoFollowed, ruleOverrides };
   }
 
   /**

@@ -254,6 +254,7 @@ function ScanWorkflow() {
   const [cmName, setCmName] = useState('');
   const [cmPhone, setCmPhone] = useState('');
   const [cmShares, setCmShares] = useState('1');
+  const [cmGovernmentId, setCmGovernmentId] = useState('');
   const [cmSaving, setCmSaving] = useState(false);
   const [expandedRaw, setExpandedRaw] = useState<number | null>(null);
 
@@ -861,6 +862,7 @@ function ScanWorkflow() {
           name: cmName.trim(),
           phone: cmPhone.trim(),
           shares: parseFloat(cmShares) || 1,
+          governmentId: cmGovernmentId.trim() || undefined,
         },
       });
       let outcome: ScanItem['outcome'] = 'pending';
@@ -876,9 +878,12 @@ function ScanWorkflow() {
       } catch (err: unknown) {
         outcomeMsg = `Member "${cmName.trim()}" created — deposit PENDING review (${axiosMessage(err)})`;
       }
+      if (resolved.ruleOverrides?.includes('REQUIRE_GUARANTOR')) {
+        outcomeMsg += ' — guarantor still required: assign one from the group page (Requests tab)';
+      }
       patchItem(it.ftNumber, { creating: false, outcome, outcomeMsg });
       setCreateMemberIndex(null);
-      setCmName(''); setCmPhone(''); setCmShares('1');
+      setCmName(''); setCmPhone(''); setCmShares('1'); setCmGovernmentId('');
       showToast(outcomeMsg, outcome === 'verified' ? 'success' : 'success');
       await loadExistingFts(selectedGroupId);
     } catch (err: unknown) {
@@ -1891,6 +1896,17 @@ function ScanWorkflow() {
                     onChange={(e) => setCmPhone(e.target.value)}
                     placeholder="09xxxxxxxx"
                     inputMode="tel"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Government ID <span className="text-gray-400">(required by this group's rules)</span>
+                  </label>
+                  <input
+                    className="input-field"
+                    value={cmGovernmentId}
+                    onChange={(e) => setCmGovernmentId(e.target.value)}
+                    placeholder="ID number"
                   />
                 </div>
                 <div>

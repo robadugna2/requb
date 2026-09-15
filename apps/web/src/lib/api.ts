@@ -1407,13 +1407,22 @@ export const resolveUnknownSender = async (
   id: string,
   resolution:
     | { userId: string }
-    | { createMember: { name: string; phone: string; shares?: number } },
+    | {
+        createMember: {
+          name: string;
+          phone: string;
+          shares?: number;
+          governmentId?: string;
+        };
+      },
 ): Promise<{
   deposit: { id: string };
   userId: string;
   createdMember: boolean;
   /** Pending entries from the same sender auto-paired by this action */
   autoFollowed?: number;
+  /** Group rules the owner action overrode (e.g. guarantor pending) */
+  ruleOverrides?: string[];
 }> => {
   const response = await api.post(`/deposits/unknown-senders/${id}/resolve`, resolution);
   return response.data as {
@@ -1421,6 +1430,7 @@ export const resolveUnknownSender = async (
     userId: string;
     createdMember: boolean;
     autoFollowed?: number;
+    ruleOverrides?: string[];
   };
 };
 

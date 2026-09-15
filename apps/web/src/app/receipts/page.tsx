@@ -67,6 +67,7 @@ export default function ReceiptsPage() {
   const [pairingMembers, setPairingMembers] = useState<GroupMember[]>([]);
   const [createSender, setCreateSender] = useState<UnknownSenderItem | null>(null);
   const [cmName, setCmName] = useState('');
+  const [cmGovernmentId, setCmGovernmentId] = useState('');
   const [cmPhone, setCmPhone] = useState('');
   const [cmShares, setCmShares] = useState('1');
 
@@ -161,13 +162,19 @@ export default function ReceiptsPage() {
           name: cmName.trim(),
           phone: cmPhone.trim(),
           shares: parseFloat(cmShares) || 1,
+          governmentId: cmGovernmentId.trim() || undefined,
         },
       });
       setCreateSender(null);
+      setCmGovernmentId('');
       setUnknownSenders((prev) => prev.filter((x) => x.id !== createSender.id));
+      const notices: string[] = ['Member created and transaction recorded.'];
+      if (result.ruleOverrides?.includes('REQUIRE_GUARANTOR')) {
+        notices.push('Note: this group requires a guarantor — assign one from the group page (Requests tab).');
+      }
       if (result.autoFollowed && result.autoFollowed > 0) {
-        setSuccess(
-          `Member created. ${result.autoFollowed} more pending entr${result.autoFollowed === 1 ? 'y' : 'ies'} from the same sender was auto-paired to them.`,
+        notices.push(
+          `${result.autoFollowed} more pending entr${result.autoFollowed === 1 ? 'y' : 'ies'} from the same sender was auto-paired to them.`,
         );
         setUnknownSenders((prev) =>
           prev.filter(
@@ -179,6 +186,7 @@ export default function ReceiptsPage() {
           ),
         );
       }
+      setSuccess(notices.join(' '));
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
       }
@@ -794,6 +802,17 @@ export default function ReceiptsPage() {
               onChange={(e) => setCmPhone(e.target.value)}
               placeholder="09xxxxxxxx"
               inputMode="tel"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Government ID <span className="text-xs text-gray-400">(required by this group's rules)</span>
+            </label>
+            <input
+              className="input-field"
+              value={cmGovernmentId}
+              onChange={(e) => setCmGovernmentId(e.target.value)}
+              placeholder="ID number"
             />
           </div>
           <div>
