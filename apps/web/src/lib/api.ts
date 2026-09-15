@@ -282,6 +282,7 @@ export interface ReceiptItem {
   date: string;
   ftNumber?: string;
   receiptImageUrl?: string;
+  senderAccount?: string;
   autoVerified?: boolean;
   ocrData?: {
     bankName: string;
@@ -772,6 +773,7 @@ function mapReceiptItem(raw: Record<string, unknown>): ReceiptItem {
     date: raw.createdAt ? new Date(raw.createdAt as string).toLocaleDateString('en-CA') : 'N/A',
     ftNumber: (raw.ftNumber as string) || undefined,
     receiptImageUrl: raw.imageUrl as string | undefined,
+    senderAccount: (raw.senderAccount as string) || undefined,
     autoVerified: (raw.autoVerified as boolean) || false,
     ocrData,
   };

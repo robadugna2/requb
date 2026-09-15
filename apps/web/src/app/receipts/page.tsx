@@ -17,6 +17,7 @@ import {
   UserRound,
   UserPlus,
   Inbox,
+  RefreshCw,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
@@ -53,6 +54,8 @@ export default function ReceiptsPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reverifyRunning, setReverifyRunning] = useState(false);
+  const [reverifyProgress, setReverifyProgress] = useState({ done: 0, total: 0 });
 
   // Group CBE accounts map: groupId -> cbeAccountNumbers
   const [groupCbeAccounts, setGroupCbeAccounts] = useState<Record<string, string[]>>({});
@@ -197,6 +200,36 @@ export default function ReceiptsPage() {
     } finally {
       setSenderBusy(null);
     }
+  };
+
+  /**
+   * Re-run the CBE check on every pending receipt in the current scope —
+   * one at a time, so the bank API is not hammered and progress is visible.
+   * Deposits whose FT now verifies flip to VERIFIED; the rest stay pending
+   * (a genuine mismatch needs human review).
+   */
+  const reverifyPendingWithCbe = async () => {
+    const pending = receipts.filter((r) => r.status === 'pending');
+    if (pending.length === 0) return;
+    setReverifyRunning(true);
+    setReverifyProgress({ done: 0, total: pending.length });
+    let verified = 0;
+    let failed = 0;
+    for (const r of pending) {
+      try {
+        const res = await autoVerifyDepositCbe(r.id);
+        if (res.verified) verified += 1;
+        else failed += 1;
+      } catch {
+        failed += 1;
+      }
+      setReverifyProgress((p) => ({ ...p, done: p.done + 1 }));
+    }
+    setReverifyRunning(false);
+    setSuccess(
+      `CBE re-verify finished: ${verified} confirmed, ${failed} still pending (mismatch or bank unavailable).`,
+    );
+    await fetchReceipts();
   };
 
   const fetchReceipts = async () => {
@@ -349,6 +382,19 @@ export default function ReceiptsPage() {
           <Button onClick={() => router.push('/scan')} className="gap-2">
             <ScanLine className="h-4 w-4" />
             Scan FT
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void reverifyPendingWithCbe()}
+            disabled={reverifyRunning || pendingCount === 0}
+            loading={reverifyRunning}
+            className="gap-2"
+            title="Run the CBE check again on every pending receipt"
+          >
+            <RefreshCw className={`h-4 w-4 ${reverifyRunning ? 'animate-spin' : ''}`} />
+            {reverifyRunning
+              ? `Re-verifying ${reverifyProgress.done}/${reverifyProgress.total}…`
+              : `Re-verify with CBE${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </Button>
           <Button
             variant="outline"

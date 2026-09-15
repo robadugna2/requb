@@ -4,6 +4,8 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ScanLine,
+  ArrowLeftRight,
+  Send,
   Camera,
   Loader2,
   CheckCircle,
@@ -60,8 +62,12 @@ import type {
 interface ScanItem {
   ftNumber: string;
   status: 'verifying' | 'found' | 'error';
+  /** deposit = member payment; payout/transfer = group-side money movement */
+  kind?: 'deposit' | 'payout' | 'transfer';
   error?: string;
   tx?: CbeTransactionData;
+  /** For payout items: member identified by the receiver's bank account */
+  receiverMember?: { name: string } | null;
   /** Payer name Gemini read from the statement (fallback when the CBE
    *  lookup has no payer field) */
   geminiSender?: string;
@@ -226,6 +232,8 @@ function ScanWorkflow() {
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const bulkFileRef = useRef<HTMLInputElement>(null);
+  /** member name by bank account, learned from the group's past deposits */
+  const [memberAccountByAccount, setMemberAccountByAccount] = useState<Map<string, string>>(new Map());
   const [rules, setRules] = useState<GroupRules | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -343,6 +351,39 @@ function ScanWorkflow() {
     patchItem(ft, { status: 'verifying', error: undefined });
     try {
       const tx = await cbeLookup(ft, account);
+
+      // Admin-side money movements: sender is one of the group's own CBE
+      // accounts. Two cases — both group accounts = the collector account is
+      // being switched mid-cycle; group → a member = the winner receiving a
+      // payout. Neither is a member deposit, so neither enters the pairing
+      // pipeline or the Unknown Senders queue.
+      const groupAccounts = new Set([
+        ...(group?.cbeAccountNumbers ?? []),
+        ...(account ? [account] : []),
+      ]);
+      const payerIsGroup = !!(tx.payerAccount && groupAccounts.has(tx.payerAccount));
+      const receiverIsGroup = !!(tx.receiverAccount && groupAccounts.has(tx.receiverAccount));
+      if (payerIsGroup) {
+        const kind: ScanItem['kind'] = receiverIsGroup ? 'transfer' : 'payout';
+        const receiverMember =
+          kind === 'payout' && tx.receiverAccount
+            ? { name: memberAccountByAccount.get(tx.receiverAccount) ?? '' }
+            : null;
+        patchItem(ft, {
+          status: 'found',
+          kind,
+          tx,
+          receiverMember,
+          member: null,
+          autoPaired: false,
+          suggestions: [],
+          amount: tx.amount ?? 0,
+          depositDate: toInputDate(parseCbeDate(tx.date || '')),
+          cycleId: activeCycle?.id,
+        });
+        return;
+      }
+
       // CBE receipt payer is authoritative; the name Gemini read from the
       // statement is the fallback when the lookup has no payer field.
       const payerName = tx.payer || senderFallback;
@@ -419,6 +460,15 @@ function ScanWorkflow() {
       const deposits = await getDeposits({ groupId: grpId });
       const set = new Set(deposits.map((d) => (d.ftNumber || '').toUpperCase()).filter(Boolean));
       setExistingFts(set);
+      // Members' bank accounts, learned from their past deposits — lets a
+      // detected payout name the winning member by receiver account.
+      setMemberAccountByAccount(
+        new Map(
+          deposits
+            .filter((d) => d.senderAccount && d.memberName)
+            .map((d) => [d.senderAccount as string, d.memberName]),
+        ),
+      );
       return set;
     } catch {
       /* duplicate pre-check is best-effort; server still rejects duplicates */
@@ -635,6 +685,19 @@ function ScanWorkflow() {
 
   const removeItem = (ft: string) => {
     setItems((prev) => prev.filter((it) => it.ftNumber !== ft));
+  };
+
+  /** One-click account migration: register the new receiver account on the group. */
+  const addReceiverAccountToGroup = async (acct: string) => {
+    if (!group) return;
+    try {
+      const updated = [...(group.cbeAccountNumbers ?? []), acct];
+      await updateGroupCbeAccounts(group.id, updated);
+      setGroup({ ...group, cbeAccountNumbers: updated });
+      showToast(`Receiver account ${acct} added to ${group.name}`, 'success');
+    } catch (err: unknown) {
+      showToast(axiosMessage(err), 'error');
+    }
   };
 
   const retryItem = async (ft: string) => {
@@ -887,6 +950,7 @@ function ScanWorkflow() {
   // ─── Confirm & create ───────────────────────────────────────────────────────
 
   const canCreateItem = (it: ScanItem): boolean =>
+    (it.kind ?? 'deposit') === 'deposit' &&
     !it.isDuplicate &&
     !it.creating &&
     !it.outcome &&
@@ -1433,6 +1497,63 @@ function ScanWorkflow() {
 
             {items.map((it, idx) => {
               const ready = canCreateItem(it);
+
+              // Group-side money movement — informational only, never a deposit
+              if (it.status === 'found' && (it.kind === 'payout' || it.kind === 'transfer')) {
+                const isTransfer = it.kind === 'transfer';
+                return (
+                  <div key={it.ftNumber} className="card border-brand-300 dark:border-brand-500/30">
+                    <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-sm font-bold text-blue-700 dark:text-brand-400 bg-blue-50 dark:bg-brand-500/10 px-2 py-0.5 rounded-lg">
+                          {it.ftNumber}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${isTransfer ? 'bg-amber-50 dark:bg-warning-500/10 text-amber-700 dark:text-warning-400' : 'bg-green-50 dark:bg-success-500/10 text-green-700 dark:text-success-400'}`}>
+                          {isTransfer ? <ArrowLeftRight className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+                          {isTransfer ? 'Group account transfer' : 'Payout to member'}
+                        </span>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => removeItem(it.ftNumber)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 mb-2">
+                      <b>ETB {(it.tx?.amount ?? it.amount ?? 0).toLocaleString()}</b>
+                      {it.depositDate && <> · {it.depositDate}</>}
+                    </p>
+                    {isTransfer ? (
+                      <>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                          Money moved between the group&apos;s own accounts
+                          {it.tx?.payerAccount && <> (<b>{it.tx.payerAccount}</b>)</>}
+                          {it.tx?.receiverAccount && <> → (<b>{it.tx.receiverAccount}</b>)</>}
+                          . This usually means the collector account is changing mid-cycle — the transaction is
+                          internal, so it is not recorded as a member deposit.
+                        </p>
+                        {it.tx?.receiverAccount && group && !group.cbeAccountNumbers?.includes(it.tx.receiverAccount) && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void addReceiverAccountToGroup(it.tx!.receiverAccount!)}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Add {it.tx.receiverAccount} to this group&apos;s accounts
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Sent <b>from the group&apos;s collection account</b>
+                        {it.tx?.payerAccount && <> ({it.tx.payerAccount})</>}{' '}
+                        to <b>{it.receiverMember?.name || it.tx?.receiver || it.tx?.receiverAccount || 'a recipient'}</b> —
+                        the winner receiving their payout, not a member deposit. Nothing was recorded; keep this for
+                        your payout records.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={it.ftNumber}
