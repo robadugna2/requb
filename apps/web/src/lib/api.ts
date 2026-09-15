@@ -461,6 +461,8 @@ export interface DashboardStats {
   activeMembers: number;
   pendingReceipts: number;
   totalCollected: string;
+  /** Raw verified sum in ETB — preferred over parsing totalCollected */
+  totalCollectedValue?: number;
   activeGuarantees?: number;
   pendingSwapRequests?: number;
   completedDraws?: number;

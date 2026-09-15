@@ -186,11 +186,15 @@ export default function DashboardPage() {
     max: g.maxMembers,
   })), [groups]);
 
-  const collectedNum = useMemo(
-    () => parseInt(String(stats.totalCollected).replace(/[^0-9]/g, ''), 10) || 0,
-    [stats.totalCollected],
+  // Raw value from the API drives the count-up; fall back to parsing the
+  // legacy formatted string only when the raw field is absent.
+  const collectedValue = useMemo(
+    () =>
+      stats.totalCollectedValue ??
+      (parseInt(String(stats.totalCollected).replace(/[^0-9.]/g, ''), 10) || 0),
+    [stats.totalCollected, stats.totalCollectedValue],
   );
-  const collectedAnim = useCountUp(collectedNum);
+  const collectedAnim = useCountUp(collectedValue);
   const membersAnim = useCountUp(stats.activeMembers, 900);
 
   if (loading) {

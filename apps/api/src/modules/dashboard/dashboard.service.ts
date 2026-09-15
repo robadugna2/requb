@@ -69,6 +69,9 @@ export class DashboardService {
       activeMembers: activeMembers.length,
       pendingReceipts,
       totalCollected,
+      /** Raw verified sum — clients animate/format it without re-parsing the
+       *  display string (which loses precision, e.g. "ETB 1.0M" → 10) */
+      totalCollectedValue: sum,
       activeGuarantees,
       pendingSwapRequests,
       completedDraws,
