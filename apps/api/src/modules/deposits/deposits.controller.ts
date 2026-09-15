@@ -100,17 +100,25 @@ export class DepositsController {
   /**
    * POST /deposits/suggest-members
    * Fuzzy-matches a bank-transaction payer name against the members of a
-   * group. Body: { groupId, payerName }
+   * group. Body: { groupId, payerName, senderAccount? } — a known sender
+   * account is the strongest identity signal and is tried first.
    */
   @Post('suggest-members')
   @RequirePermission('canManageDeposits')
   suggestMembers(
     @Body('groupId') groupId: string,
     @Body('payerName') payerName: string,
+    @Body('senderAccount') senderAccount?: string,
   ) {
     if (!groupId) throw new BadRequestException('groupId is required');
-    if (!payerName) throw new BadRequestException('payerName is required');
-    return this.depositsService.suggestMembersForPayer(groupId, payerName);
+    if (!payerName && !senderAccount) {
+      throw new BadRequestException('payerName or senderAccount is required');
+    }
+    return this.depositsService.suggestMembersForPayer(
+      groupId,
+      payerName,
+      senderAccount,
+    );
   }
 
   // ─── Unknown Senders queue ──────────────────────────────────────────────

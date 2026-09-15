@@ -239,19 +239,13 @@ export class UnknownSenderService {
       );
     }
 
-    const deposit = await this.depositsService.create({
-      cycleId: cycle.id,
-      groupId: record.groupId,
+    const deposit = await this.createDepositForUnknown(
+      record,
+      cycle,
       userId,
-      ftNumber: record.ftNumber || undefined,
-      amount: record.amount,
-      bankName: record.bankName || undefined,
-      depositDate: record.transferDate || undefined,
-      senderName: record.senderName || undefined,
-      senderAccount: record.senderAccount || undefined,
-      imageUrl: record.imageUrl || undefined,
-      ocrData: (record.cbeData as Prisma.InputJsonValue) || undefined,
-    });
+      adminId,
+      createdMember ? 'created-member' : 'paired',
+    );
 
     // Self-learning: register the payer name as an authorized alias so the
     // next payment from this person hits the exact-match tier.
@@ -284,7 +278,91 @@ export class UnknownSenderService {
       },
     });
 
-    return { unknownSender: updated, deposit, userId, createdMember };
+    // Retroactive learning: the admin just identified this sender, so every
+    // OTHER pending queue entry from the same payer name or bank account in
+    // this group is the same person — pair them through the standard pipeline
+    // right now instead of making the admin repeat the action for each one.
+    // Each entry is labeled 'auto-follow' for auditability.
+    let autoFollowed = 0;
+    const nameKey = record.senderName?.trim();
+    const accountKey = record.senderAccount?.trim();
+    if (nameKey || accountKey) {
+      const siblings = await this.prisma.unmatchedDeposit.findMany({
+        where: {
+          id: { not: record.id },
+          groupId: record.groupId,
+          status: UnmatchedStatus.PENDING,
+          OR: [
+            ...(nameKey ? [{ senderName: nameKey }] : []),
+            ...(accountKey ? [{ senderAccount: accountKey }] : []),
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      });
+      for (const sib of siblings) {
+        try {
+          await this.createDepositForUnknown(sib, cycle, userId, adminId, 'auto-follow');
+          autoFollowed += 1;
+        } catch {
+          // Duplicate FT / rule violation — leave it pending for manual review.
+        }
+      }
+    }
+
+    return { unknownSender: updated, deposit, userId, createdMember, autoFollowed };
+  }
+
+  /**
+   * Turn a queued unknown-sender record into a real deposit for `userId`
+   * through the standard pipeline, and mark the queue row resolved.
+   * `resolution` distinguishes the admin's manual action from the automatic
+   * same-sender follow-up for audit purposes.
+   */
+  private async createDepositForUnknown(
+    record: {
+      id: string;
+      groupId: string;
+      ftNumber: string | null;
+      amount: number | null;
+      bankName: string | null;
+      transferDate: Date | null;
+      senderName: string | null;
+      senderAccount: string | null;
+      imageUrl: string | null;
+      cbeData: Prisma.JsonValue;
+    },
+    cycle: { id: string },
+    userId: string,
+    adminId: string,
+    resolution: string,
+  ) {
+    const deposit = await this.depositsService.create({
+      cycleId: cycle.id,
+      groupId: record.groupId,
+      userId,
+      ftNumber: record.ftNumber || undefined,
+      amount: record.amount ?? undefined,
+      bankName: record.bankName || undefined,
+      depositDate: record.transferDate || undefined,
+      senderName: record.senderName || undefined,
+      senderAccount: record.senderAccount || undefined,
+      imageUrl: record.imageUrl || undefined,
+      ocrData: (record.cbeData as Prisma.InputJsonValue) || undefined,
+    });
+
+    await this.prisma.unmatchedDeposit.update({
+      where: { id: record.id },
+      data: {
+        status: UnmatchedStatus.PAIRED,
+        resolvedBy: adminId,
+        resolvedAt: new Date(),
+        resolution,
+        createdUserId: null,
+      },
+    });
+
+    return deposit;
   }
 
   /** Dismiss with an audit note — e.g. duplicate, spam, or non-member transfer. */

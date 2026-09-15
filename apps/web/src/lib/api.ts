@@ -1348,6 +1348,7 @@ export interface UnknownSenderItem {
   bankName: string | null;
   transferDate: string | null;
   imageUrl: string | null;
+  senderAccount?: string | null;
   reason: string | null;
   createdAt: string;
 }
@@ -1405,9 +1406,20 @@ export const resolveUnknownSender = async (
   resolution:
     | { userId: string }
     | { createMember: { name: string; phone: string; shares?: number } },
-): Promise<{ deposit: { id: string }; userId: string; createdMember: boolean }> => {
+): Promise<{
+  deposit: { id: string };
+  userId: string;
+  createdMember: boolean;
+  /** Pending entries from the same sender auto-paired by this action */
+  autoFollowed?: number;
+}> => {
   const response = await api.post(`/deposits/unknown-senders/${id}/resolve`, resolution);
-  return response.data as { deposit: { id: string }; userId: string; createdMember: boolean };
+  return response.data as {
+    deposit: { id: string };
+    userId: string;
+    createdMember: boolean;
+    autoFollowed?: number;
+  };
 };
 
 export const dismissUnknownSender = async (id: string, note?: string): Promise<void> => {
@@ -1464,8 +1476,13 @@ export const scanFtNumbers = async (
 export const suggestMembers = async (
   groupId: string,
   payerName: string,
+  senderAccount?: string,
 ): Promise<SuggestMembersResult> => {
-  const response = await api.post('/deposits/suggest-members', { groupId, payerName });
+  const response = await api.post('/deposits/suggest-members', {
+    groupId,
+    payerName,
+    senderAccount: senderAccount || undefined,
+  });
   return response.data as SuggestMembersResult;
 };
 

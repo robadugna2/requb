@@ -117,8 +117,22 @@ export default function ReceiptsPage() {
     setPairingSender(null);
     setSenderBusy(sender.id);
     try {
-      await resolveUnknownSender(sender.id, { userId: member.id });
+      const result = await resolveUnknownSender(sender.id, { userId: member.id });
       setUnknownSenders((prev) => prev.filter((x) => x.id !== sender.id));
+      if (result.autoFollowed && result.autoFollowed > 0) {
+        setSuccess(
+          `Paired to ${member.name}. ${result.autoFollowed} more pending entr${result.autoFollowed === 1 ? 'y' : 'ies'} from the same sender was auto-paired the same way.`,
+        );
+        setUnknownSenders((prev) =>
+          prev.filter(
+            (x) =>
+              !(
+                (sender.payerName && x.payerName === sender.payerName) ||
+                (sender.senderAccount && x.senderAccount === sender.senderAccount)
+              ),
+          ),
+        );
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
       }
@@ -142,7 +156,7 @@ export default function ReceiptsPage() {
     if (!cmName.trim() || !cmPhone.trim()) return;
     setSenderBusy(createSender.id);
     try {
-      await resolveUnknownSender(createSender.id, {
+      const result = await resolveUnknownSender(createSender.id, {
         createMember: {
           name: cmName.trim(),
           phone: cmPhone.trim(),
@@ -151,6 +165,20 @@ export default function ReceiptsPage() {
       });
       setCreateSender(null);
       setUnknownSenders((prev) => prev.filter((x) => x.id !== createSender.id));
+      if (result.autoFollowed && result.autoFollowed > 0) {
+        setSuccess(
+          `Member created. ${result.autoFollowed} more pending entr${result.autoFollowed === 1 ? 'y' : 'ies'} from the same sender was auto-paired to them.`,
+        );
+        setUnknownSenders((prev) =>
+          prev.filter(
+            (x) =>
+              !(
+                (createSender.payerName && x.payerName === createSender.payerName) ||
+                (createSender.senderAccount && x.senderAccount === createSender.senderAccount)
+              ),
+          ),
+        );
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('unknown-senders-changed'));
       }

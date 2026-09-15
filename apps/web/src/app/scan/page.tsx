@@ -354,7 +354,7 @@ function ScanWorkflow() {
       let suggestCandidate: MemberSuggestion | undefined;
       if (payerName) {
         try {
-          const res = await suggestMembers(grpId, payerName);
+          const res = await suggestMembers(grpId, payerName, tx?.payerAccount);
           tier = res.tier ?? 'UNKNOWN';
           suggestions = res.suggestions;
           // AUTO only: deterministic identity. SUGGEST stays one-click.

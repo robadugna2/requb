@@ -324,7 +324,7 @@ export class DepositsService {
       }
     }
 
-    return this.prisma.deposit.create({
+    const deposit = await this.prisma.deposit.create({
       data: {
         cycleId: data.cycleId,
         userId: data.userId,
@@ -348,6 +348,58 @@ export class DepositsService {
         },
       },
     });
+
+    // Self-learning: every deposit created for a KNOWN member with sender
+    // identity attached teaches the pairing system — the admin's action here
+    // (scan pairing, suggestion accept, unknown-sender resolve, manual entry)
+    // makes the next payment from the same payer name or bank account hit the
+    // exact-match AUTO tier instead of landing in Unknown Senders.
+    await this.learnPayerIdentity(
+      data.userId,
+      data.senderName,
+      data.senderAccount,
+    ).catch(() => undefined);
+
+    return deposit;
+  }
+
+  /**
+   * Register payer-name and sender-account aliases for a member. Best-effort:
+   * never fails the deposit creation that triggered it.
+   */
+  private async learnPayerIdentity(
+    userId: string,
+    senderName?: string | null,
+    senderAccount?: string | null,
+  ) {
+    const name = senderName?.trim();
+    const account = senderAccount?.trim();
+    if (!name && !account) return;
+
+    if (name) {
+      await this.prisma.memberPayerAlias
+        .upsert({
+          where: { userId_name: { userId, name } },
+          create: { userId, name, note: 'Learned from a paired deposit' },
+          update: {},
+        })
+        .catch(() => undefined);
+    }
+    if (account) {
+      // One bank account maps to one member; a newer admin action re-assigns.
+      await this.prisma.memberPayerAlias
+        .upsert({
+          where: { senderAccount: account },
+          create: {
+            userId,
+            name: name || `acct:${account}`,
+            senderAccount: account,
+            note: 'Sender account learned from a paired deposit',
+          },
+          update: { userId },
+        })
+        .catch(() => undefined);
+    }
   }
 
   async getDepositsByCycle(cycleId: string) {
@@ -370,7 +422,11 @@ export class DepositsService {
    *      scanner offers the Unknown Senders actions (pick member, quick-create
    *      member, park in the Unknown Senders queue).
    */
-  async suggestMembersForPayer(groupId: string, payerName: string) {
+  async suggestMembersForPayer(
+    groupId: string,
+    payerName: string,
+    senderAccount?: string,
+  ) {
     const memberships = await this.prisma.groupMembership.findMany({
       where: { groupId, status: { not: 'REMOVED' } },
       select: {
@@ -391,6 +447,55 @@ export class DepositsService {
     const memberByUserId = new Map(
       memberships.map((m) => [m.user.id, m.user]),
     );
+
+    // 0) Sender-account identity — bank account numbers are stable, so a
+    //    learned alias or a previously verified deposit from this exact
+    //    account wins outright, even when the payer name renders differently.
+    const accountKey = senderAccount?.trim();
+    if (accountKey) {
+      let accountHit: { userId: string; matchedVia: 'history' | 'payerAlias' } | null = null;
+
+      const alias = await this.prisma.memberPayerAlias.findFirst({
+        where: {
+          senderAccount: accountKey,
+          user: { memberships: { some: { groupId, status: { not: 'REMOVED' } } } },
+        },
+        select: { userId: true },
+      });
+      if (alias && memberByUserId.has(alias.userId)) {
+        accountHit = { userId: alias.userId, matchedVia: 'payerAlias' };
+      }
+
+      if (!accountHit) {
+        const recent = await this.prisma.deposit.findFirst({
+          where: {
+            cycle: { groupId },
+            verificationStatus: 'VERIFIED',
+            senderAccount: accountKey,
+            userId: { in: [...memberByUserId.keys()] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { userId: true },
+        });
+        if (recent) {
+          accountHit = { userId: recent.userId, matchedVia: 'history' };
+        }
+      }
+
+      if (accountHit) {
+        const user = memberByUserId.get(accountHit.userId)!;
+        const match = {
+          userId: accountHit.userId,
+          name: user.name,
+          phone: user.phone,
+          photoUrl: user.photoUrl ?? undefined,
+          score: 1,
+          matchedVia: accountHit.matchedVia,
+          autoPaired: true,
+        };
+        return { payerName, suggestions: [match], bestMatch: match };
+      }
+    }
 
     // 1) History: the same payer name successfully paired before in this group
     const payerKey = normalizeName(payerName);

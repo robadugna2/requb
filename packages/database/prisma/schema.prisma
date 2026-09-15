@@ -165,12 +165,17 @@ model MemberPayerAlias {
   userId    String   @map("user_id")
   name      String
   note      String?
+  /// Bank sender-account identity learned from an admin action — a stable
+  /// signal that pairs even when the payer name renders differently. Nullable;
+  /// unique so one account maps to one member (admin actions re-assign).
+  senderAccount String? @map("sender_account")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, name])
+  @@unique([senderAccount])
   @@index([name])
   @@map("member_payer_aliases")
 }
