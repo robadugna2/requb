@@ -248,8 +248,7 @@ export class CbeVerificationService {
       );
     }
 
-    const group = deposit.cycle.group;
-    const cbeAccounts: string[] = (group as any).cbeAccountNumbers || [];
+    const cbeAccounts: string[] = ((deposit.cycle.group as any).cbeAccountNumbers) || [];
 
     // Use specific account if provided, otherwise first configured account
     const accountToUse = specificAccount || cbeAccounts[0];
@@ -277,11 +276,15 @@ export class CbeVerificationService {
         transaction.receiverAccount.replace(/\*/g, '').length < 4
       : true; // can't determine if masked
 
-    // Cross-validate: amount should match expected contribution
-    const expectedAmount = group.contributionAmount;
+    // Cross-validate: the recorded deposit amount should equal what the bank
+    // actually received. The member's share multiplier is already reflected in
+    // the recorded amount — comparing against the group's base contribution
+    // falsely flagged every member with shares ≠ 1 (e.g. 1.5 shares paying
+    // ETB 30,000 against a 20,000 base showed as a "mismatch" of 30,000 vs
+    // 30,000).
     const amountMatched =
-      transaction.amount !== undefined
-        ? Math.abs(transaction.amount - expectedAmount) < 0.01
+      transaction.amount !== undefined && deposit.amount != null
+        ? Math.abs(transaction.amount - deposit.amount) < 0.01
         : true;
 
     const result: CbeVerificationResult = {
