@@ -266,7 +266,7 @@ export class DepositsService {
     const ftNumber = normalizeFtNumber(data.ftNumber);
 
     // Verify the cycle exists
-    const cycle = await this.prisma.cycle.findUnique({
+    let cycle = await this.prisma.cycle.findUnique({
       where: { id: data.cycleId },
     });
 
@@ -279,6 +279,28 @@ export class DepositsService {
       throw new BadRequestException(
         'The selected cycle does not belong to the selected group',
       );
+    }
+
+    // Cycle placement follows the BANK date extracted from the FT/receipt —
+    // when the transaction happened decides which cycle the money belongs to,
+    // not when the record was entered. If the bank date falls inside a
+    // different cycle window of the same group, the deposit is filed there.
+    // Falls back to the caller's cycle (usually the ACTIVE one) when no window
+    // contains the date — e.g. historical statements scanned into a new group.
+    if (data.depositDate) {
+      const dateOnly = new Date(data.depositDate);
+      dateOnly.setHours(12, 0, 0, 0); // tolerate same-day boundary differences
+      const containing = await this.prisma.cycle.findFirst({
+        where: {
+          groupId: cycle.groupId,
+          startDate: { lte: dateOnly },
+          endDate: { gte: dateOnly },
+        },
+        orderBy: { cycleNumber: 'asc' },
+      });
+      if (containing && containing.id !== cycle.id) {
+        cycle = containing;
+      }
     }
 
     // Verify the user exists
@@ -332,7 +354,7 @@ export class DepositsService {
 
     const deposit = await this.prisma.deposit.create({
       data: {
-        cycleId: data.cycleId,
+        cycleId: cycle.id,
         userId: data.userId,
         imageUrl: data.imageUrl ?? null,
         ocrData: data.ocrData,
