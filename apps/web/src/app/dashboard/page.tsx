@@ -281,7 +281,7 @@ export default function DashboardPage() {
                     <p className="mt-1 text-3xl md:text-4xl font-extrabold tabular-nums tracking-tight">
                       ETB {collectedAnim.toLocaleString()}
                     </p>
-                    <p className="text-[11px] text-white/70 mt-0.5">Total deposits processed across all groups</p>
+                    <p className="text-[11px] text-white/70 mt-0.5">Verified deposits across all groups (pending receipts excluded)</p>
                   </div>
                   <span className="shrink-0 flex items-center gap-1.5 text-[10px] font-semibold bg-white/15 rounded-full px-2 py-0.5">
                     <span className="relative flex h-1.5 w-1.5">
@@ -350,8 +350,17 @@ export default function DashboardPage() {
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                           <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                          <RechartsTooltip contentStyle={{ borderRadius: '8px' }} />
-                          <Area type="monotone" dataKey="deposits" stroke="#465fff" strokeWidth={2} fillOpacity={1} fill="url(#colorDeposits)" activeDot={{ r: 4 }} />
+                          <RechartsTooltip
+                            contentStyle={{ borderRadius: '8px' }}
+                            formatter={(value: number, name: string) => [
+                              `ETB ${Number(value).toLocaleString()}`,
+                              name === 'verified' ? 'Verified (Total Collected)' : 'All deposits (incl. pending)',
+                            ]}
+                          />
+                          {/* Verified series matches the Total Collected card; the
+                              all-status line shows pending receipts still in review */}
+                          <Area type="monotone" dataKey="verified" stroke="#12b76a" strokeWidth={2} fillOpacity={0} strokeDasharray="" activeDot={{ r: 4 }} name="verified" />
+                          <Area type="monotone" dataKey="deposits" stroke="#465fff" strokeWidth={2} fillOpacity={1} fill="url(#colorDeposits)" activeDot={{ r: 4 }} name="deposits" />
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
