@@ -24,6 +24,7 @@ import { CbeVerificationService } from './cbe-verification.service';
 import { FtDetectionService } from '../ocr/ft-detection.service';
 import { UnknownSenderService } from './unknown-sender.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
+import { BatchCreateDepositDto } from './dto/batch-create-deposit.dto';
 import {
   QueueUnknownSenderDto,
   ResolveUnknownSenderDto,
@@ -67,6 +68,31 @@ export class DepositsController {
       narrative: dto.narrative,
       confidence: dto.confidence,
     });
+  }
+
+  /**
+   * POST /deposits/batch
+   * Starts a background job that creates + CBE-verifies many deposits
+   * (scanner "Confirm & create"). Returns a jobId immediately; the work
+   * continues server-side even if the admin closes the browser. Progress is
+   * polled via GET /deposits/batch/:jobId.
+   */
+  @Post('batch')
+  @HttpCode(201)
+  @RequirePermission('canManageDeposits')
+  startBatch(@Request() req: { user: { id: string } }, @Body() dto: BatchCreateDepositDto) {
+    return this.depositsService.startBatch(req.user.id, {
+      groupId: dto.groupId,
+      accountNumber: dto.accountNumber,
+      items: dto.items,
+    });
+  }
+
+  /** GET /deposits/batch/:jobId — live progress + per-item outcomes. */
+  @Get('batch/:jobId')
+  @RequirePermission('canManageDeposits')
+  getBatch(@Request() req: { user: { id: string } }, @Param('jobId') jobId: string) {
+    return this.depositsService.getBatch(jobId, req.user.id);
   }
 
   /**

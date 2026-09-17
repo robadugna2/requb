@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -7,6 +8,8 @@ import { Prisma, VerificationStatus, PenaltyReason } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
+import { CbeVerificationService } from './cbe-verification.service';
+import { BatchDepositItemDto } from './dto/batch-create-deposit.dto';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 import {
   AMBIGUITY_MARGIN,
@@ -44,10 +47,13 @@ export interface CreateDepositData {
 
 @Injectable()
 export class DepositsService {
+  private readonly logger = new Logger(DepositsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rulesEnforcement: RulesEnforcementService,
     private readonly penaltiesService: PenaltiesService,
+    private readonly cbeVerification: CbeVerificationService,
   ) {}
 
   async findAll(
@@ -643,5 +649,154 @@ export class DepositsService {
     }
 
     return { payerName, tier, suggestions, bestMatch };
+  }
+
+  // ─── Background batch creation (FT scanner "Confirm & create") ─────────────
+
+  /**
+   * Persist a batch job and process it in the background — independent of the
+   * HTTP request and the admin's browser. Each item is created and then
+   * auto-verified against CBE, exactly like the old client-side loop, with
+   * progress persisted after every item so any tab can poll it.
+   */
+  async startBatch(
+    adminId: string,
+    data: {
+      groupId: string;
+      accountNumber?: string;
+      items: BatchDepositItemDto[];
+    },
+  ): Promise<{ jobId: string }> {
+    const job = await this.prisma.depositBatchJob.create({
+      data: {
+        adminId,
+        groupId: data.groupId,
+        total: data.items.length,
+        status: 'RUNNING',
+        results: [],
+      },
+    });
+
+    // Fire-and-forget: the request returns the jobId immediately; failures
+    // are recorded on the job row, never thrown to the caller.
+    void this.processBatch(job.id, adminId, data).catch(async (err) => {
+      this.logger.error(`Batch job ${job.id} crashed: ${err}`);
+      await this.prisma.depositBatchJob
+        .update({
+          where: { id: job.id },
+          data: { status: 'DONE', results: { batchError: String(err) } },
+        })
+        .catch(() => undefined);
+    });
+
+    return { jobId: job.id };
+  }
+
+  private async processBatch(
+    jobId: string,
+    adminId: string,
+    data: {
+      groupId: string;
+      accountNumber?: string;
+      items: BatchDepositItemDto[];
+    },
+  ) {
+    const results: Array<{
+      ftNumber?: string;
+      status: 'verified' | 'pending' | 'failed' | 'duplicate';
+      depositId?: string;
+      message: string;
+    }> = [];
+    let created = 0;
+    let failed = 0;
+
+    for (const [i, raw] of data.items.entries()) {
+      const ftNumber = String(raw.ftNumber ?? '').toUpperCase();
+      let entry: (typeof results)[number];
+      try {
+        const cycleId =
+          (raw.cycleId as string) ||
+          (
+            await this.prisma.cycle.findFirst({
+              where: { groupId: data.groupId, status: 'ACTIVE' },
+              orderBy: { cycleNumber: 'desc' },
+            })
+          )?.id;
+        if (!cycleId) throw new Error('No active cycle in this group');
+
+        const deposit = await this.create({
+          cycleId,
+          groupId: data.groupId,
+          userId: String(raw.userId),
+          ftNumber: ftNumber || undefined,
+          amount: raw.amount != null ? Number(raw.amount) : undefined,
+          depositDate: raw.depositDate ? new Date(String(raw.depositDate)) : undefined,
+          imageUrl: (raw.imageUrl as string) || undefined,
+          bankName: (raw.bankName as string) || 'CBE',
+          senderName: (raw.senderName as string) || undefined,
+          senderAccount: (raw.senderAccount as string) || undefined,
+          receiverAccount: (raw.receiverAccount as string) || undefined,
+          branch: (raw.branch as string) || undefined,
+          narrative: (raw.narrative as string) || undefined,
+        });
+
+        // Same verify flow the scanner used client-side: CBE check decides
+        // verified vs pending; verification failure still leaves a created
+        // deposit for manual review.
+        try {
+          const res = await this.cbeVerification.autoVerifyDeposit(
+            deposit.id,
+            adminId,
+            data.accountNumber,
+          );
+          if (res.verified) {
+            entry = { ftNumber, status: 'verified', depositId: deposit.id, message: 'Created and auto-verified against CBE' };
+          } else {
+            entry = {
+              ftNumber,
+              status: 'pending',
+              depositId: deposit.id,
+              message: `Created — PENDING review (${res.result?.error || 'account or amount mismatch'})`,
+            };
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          entry = { ftNumber, status: 'pending', depositId: deposit.id, message: `Created — PENDING review (${msg})` };
+        }
+        created += 1;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isDup = /already exists/i.test(msg);
+        entry = {
+          ftNumber,
+          status: isDup ? 'duplicate' : 'failed',
+          message: isDup ? `FT ${ftNumber} is already recorded in this group` : msg,
+        };
+        failed += 1;
+      }
+      results.push(entry);
+      await this.prisma.depositBatchJob
+        .update({
+          where: { id: jobId },
+          data: { done: i + 1, created, failed, results },
+        })
+        .catch(() => undefined);
+    }
+
+    await this.prisma.depositBatchJob.update({
+      where: { id: jobId },
+      data: { status: 'DONE', created, failed, results },
+    });
+  }
+
+  /** Poll a batch job's progress. Admins may only read their own jobs. */
+  async getBatch(jobId: string, adminId: string) {
+    const job = await this.prisma.depositBatchJob.findUnique({
+      where: { id: jobId },
+    });
+    if (!job || job.adminId !== adminId) {
+      throw new NotFoundException(`Batch job ${jobId} not found`);
+    }
+    return job;
   }
 }

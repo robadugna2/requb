@@ -159,6 +159,26 @@ model User {
 /// Alternate bank-account holder names that are authorized to pay on a
 /// member's behalf (spouse, sibling, relative). When the FT scanner reads a
 /// payer name matching one of these, the transaction auto-pairs to this
+/// Background batch job for creating many deposits from the FT scanner —
+/// processed server-side so closing the browser never aborts it.
+model DepositBatchJob {
+  id        String   @id @default(cuid())
+  adminId   String   @map("admin_id")
+  groupId   String   @map("group_id")
+  status    String   @default("RUNNING") // RUNNING | DONE
+  total     Int      @default(0)
+  done      Int      @default(0)
+  created   Int      @default(0)
+  failed    Int      @default(0)
+  /// Per-item outcomes: [{ ftNumber, status, depositId?, message }]
+  results   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([adminId])
+  @@map("deposit_batch_jobs")
+}
+
 /// member instead of requiring a manual pick.
 model MemberPayerAlias {
   id        String   @id @default(cuid())

@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { enhanceFile, cropAndEnhance } from '@/lib/imageEnhance';
+import { startBatchDeposit, getBatchDepositJob } from '@/lib/api';
+import type { BatchJobStatus } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/Toast';
 import { CbeTransactionCard } from '@/components/ui/CbeVerifyPanel';
@@ -39,8 +41,6 @@ import {
   suggestMembers,
   queueUnknownSender,
   resolveUnknownSender,
-  createDeposit,
-  autoVerifyDepositCbe,
   updateGroupCbeAccounts,
   normalizeFtNumber,
   getAiSettings,
@@ -268,6 +268,8 @@ function ScanWorkflow() {
 
   // Confirm state
   const [creating, setCreating] = useState(false);
+  /** Live server-side batch job (progress bar + resume across tab closes) */
+  const [batchJob, setBatchJob] = useState<BatchJobStatus | null>(null);
   const [showResults, setShowResults] = useState(false);
 
   const activeCycle = useMemo(
@@ -989,71 +991,108 @@ function ScanWorkflow() {
 
   const eligibleCount = items.filter(canCreateItem).length;
 
+  // ─── Background batch creation ──────────────────────────────────────────────
+  // Submitting a batch hands the work to the server: it keeps running even if
+  // this tab is closed, and the progress bar below polls the job record. The
+  // jobId is stored per-group so a reopened page resumes live progress.
+
+  const batchJobKey = group ? `equb_batch_job_${group.id}` : '';
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const finishBatch = React.useCallback(async () => {
+    stopPolling();
+    setCreating(false);
+    if (batchJobKey) localStorage.removeItem(batchJobKey);
+    await loadExistingFts(selectedGroupId);
+    setItems((prev) => prev.map((it) => ({ ...it, isDuplicate: false })));
+  }, [batchJobKey, selectedGroupId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyJobUpdate = (job: BatchJobStatus) => {
+    setBatchJob(job);
+    for (const r of job.results ?? []) {
+      if (!r.ftNumber) continue;
+      const outcome =
+        r.status === 'verified' ? 'verified' : r.status === 'pending' ? 'pending' : 'failed';
+      patchItem(r.ftNumber, { creating: false, outcome, outcomeMsg: r.message });
+    }
+  };
+
+  const pollJob = React.useCallback((jobId: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const job = await getBatchDepositJob(jobId);
+        applyJobUpdate(job);
+        if (job.status === 'DONE') {
+          stopPolling();
+          setCreating(false);
+          if (batchJobKey) localStorage.removeItem(batchJobKey);
+          const ok = job.created;
+          const bad = job.failed;
+          if (bad === 0) showToast(`${ok} deposit(s) created in the background`, 'success');
+          else showToast(`${ok} created, ${bad} not recorded — review the details below`, 'warning');
+          await loadExistingFts(selectedGroupId);
+          setItems((prev) => prev.map((it) => ({ ...it, isDuplicate: false })));
+        }
+      } catch {
+        /* transient poll errors keep the loop; job state persists server-side */
+      }
+    }, 1500);
+  }, [batchJobKey, selectedGroupId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resume watching a running job after a page reload / tab reopen
+  useEffect(() => {
+    if (!batchJobKey) return;
+    const savedId = localStorage.getItem(batchJobKey);
+    if (savedId) {
+      setCreating(true);
+      pollJob(savedId);
+    }
+    return stopPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchJobKey]);
+
   const confirmCreateAll = async () => {
     if (!group) return;
+    const eligible = items.filter(canCreateItem);
+    if (eligible.length === 0) return;
     setCreating(true);
     setShowResults(true);
-    const eligible = items.filter(canCreateItem);
-    let okCount = 0;
-    let failCount = 0;
     for (const it of eligible) {
       patchItem(it.ftNumber, { creating: true, outcome: undefined, outcomeMsg: undefined });
-      try {
-        const deposit = await createDeposit({
-          cycleId: it.cycleId || activeCycle?.id || '',
-          userId: it.member!.id,
-          groupId: group.id,
-          imageUrl: evidenceUrl || undefined,
+    }
+    try {
+      const { jobId } = await startBatchDeposit({
+        groupId: group.id,
+        accountNumber: accountNumber || undefined,
+        items: eligible.map((it) => ({
           ftNumber: it.ftNumber,
+          userId: it.member!.id,
           amount: it.amount,
-          bankName: 'CBE',
+          cycleId: it.cycleId || activeCycle?.id || undefined,
           depositDate: it.depositDate ? new Date(`${it.depositDate}T12:00:00`).toISOString() : undefined,
+          imageUrl: evidenceUrl || undefined,
+          bankName: 'CBE',
           senderName: it.tx?.payer,
           senderAccount: it.tx?.payerAccount,
           receiverAccount: it.tx?.receiverAccount,
           branch: it.tx?.branch,
           narrative: it.narrative || undefined,
-        });
-        try {
-          const res = await autoVerifyDepositCbe(deposit.id, accountNumber || undefined);
-          okCount++;
-          if (res.verified) {
-            patchItem(it.ftNumber, {
-              creating: false,
-              outcome: 'verified',
-              outcomeMsg: 'Created and auto-verified against CBE',
-            });
-          } else {
-            patchItem(it.ftNumber, {
-              creating: false,
-              outcome: 'pending',
-              outcomeMsg: res.result?.success
-                ? 'Created — PENDING review (account or amount mismatch)'
-                : `Created — PENDING review (${res.result?.error || 'CBE check failed'})`,
-            });
-          }
-        } catch (err: unknown) {
-          okCount++;
-          patchItem(it.ftNumber, {
-            creating: false,
-            outcome: 'pending',
-            outcomeMsg: `Created — PENDING review (auto-verify failed: ${axiosMessage(err)})`,
-          });
-        }
-      } catch (err: unknown) {
-        failCount++;
-        patchItem(it.ftNumber, {
-          creating: false,
-          outcome: 'failed',
-          outcomeMsg: axiosMessage(err),
-        });
-      }
+        })),
+      });
+      if (batchJobKey) localStorage.setItem(batchJobKey, jobId);
+      pollJob(jobId);
+    } catch (err: unknown) {
+      setCreating(false);
+      showToast(axiosMessage(err), 'error');
     }
-    setCreating(false);
-    if (failCount === 0) showToast(`${okCount} deposit(s) created`, 'success');
-    else showToast(`${okCount} created, ${failCount} failed — review the details below`, 'warning');
-    await loadExistingFts(selectedGroupId);
-    setItems((prev) => prev.map((it) => ({ ...it, isDuplicate: false })));
   };
 
   const resetSession = () => {
@@ -1511,6 +1550,33 @@ function ScanWorkflow() {
             <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2 mb-1">
               Members are auto-paired from the CBE payer name — only step in when a name can&apos;t be matched confidently.
             </p>
+
+            {/* Background batch progress — runs server-side, survives tab close */}
+            {batchJob && (
+              <div className="card p-4" data-testid="batch-progress">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {batchJob.status === 'RUNNING' ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 text-success-500" />
+                    )}
+                    {batchJob.status === 'RUNNING'
+                      ? `Recording deposits in the background — ${batchJob.done}/${batchJob.total}`
+                      : `Batch finished — ${batchJob.created} recorded, ${batchJob.failed} not recorded`}
+                  </div>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                    {batchJob.status === 'RUNNING' && 'You can close this tab — the job keeps running'}
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-brand-500 rounded-full transition-all duration-500"
+                    style={{ width: `${batchJob.total > 0 ? (batchJob.done / batchJob.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {items.map((it, idx) => {
               const ready = canCreateItem(it);

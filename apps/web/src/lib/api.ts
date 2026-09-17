@@ -1247,6 +1247,56 @@ export const rejectDeposit = async (id: string, reason?: string) => {
   return response.data;
 };
 
+export interface BatchDepositItemPayload {
+  ftNumber?: string;
+  userId: string;
+  amount?: number;
+  cycleId?: string;
+  depositDate?: string;
+  imageUrl?: string;
+  bankName?: string;
+  senderName?: string;
+  senderAccount?: string;
+  receiverAccount?: string;
+  branch?: string;
+  narrative?: string;
+}
+
+export interface BatchJobStatus {
+  id: string;
+  groupId: string;
+  status: 'RUNNING' | 'DONE';
+  total: number;
+  done: number;
+  created: number;
+  failed: number;
+  results: Array<{
+    ftNumber?: string;
+    status: 'verified' | 'pending' | 'failed' | 'duplicate';
+    depositId?: string;
+    message: string;
+  }> | null;
+}
+
+/**
+ * Start a background batch job that creates + CBE-verifies the given
+ * deposits server-side. The job continues even if the browser closes;
+ * poll getBatchDepositJob for live progress.
+ */
+export const startBatchDeposit = async (payload: {
+  groupId: string;
+  accountNumber?: string;
+  items: BatchDepositItemPayload[];
+}): Promise<{ jobId: string }> => {
+  const response = await api.post('/deposits/batch', payload);
+  return response.data as { jobId: string };
+};
+
+export const getBatchDepositJob = async (jobId: string): Promise<BatchJobStatus> => {
+  const response = await api.get(`/deposits/batch/${jobId}`);
+  return response.data as BatchJobStatus;
+};
+
 export interface CbeAutoVerifyResult {
   verified: boolean;
   result: {
