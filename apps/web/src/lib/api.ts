@@ -283,6 +283,7 @@ export interface ReceiptItem {
   ftNumber?: string;
   receiptImageUrl?: string;
   senderAccount?: string;
+  receiverAccount?: string;
   autoVerified?: boolean;
   ocrData?: {
     bankName: string;
@@ -774,6 +775,7 @@ function mapReceiptItem(raw: Record<string, unknown>): ReceiptItem {
     ftNumber: (raw.ftNumber as string) || undefined,
     receiptImageUrl: raw.imageUrl as string | undefined,
     senderAccount: (raw.senderAccount as string) || undefined,
+    receiverAccount: (raw.receiverAccount as string) || undefined,
     autoVerified: (raw.autoVerified as boolean) || false,
     ocrData,
   };

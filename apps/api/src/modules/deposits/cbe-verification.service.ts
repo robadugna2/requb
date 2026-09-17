@@ -250,29 +250,50 @@ export class CbeVerificationService {
 
     const cbeAccounts: string[] = ((deposit.cycle.group as any).cbeAccountNumbers) || [];
 
-    // Use specific account if provided, otherwise first configured account
-    const accountToUse = specificAccount || cbeAccounts[0];
-    if (!accountToUse) {
+    // The CBE lookup is account-specific (FT + account suffix), so the query
+    // only resolves against the account that actually received the money.
+    // Groups can switch receiver accounts mid-cycle or hold several, so try
+    // the caller's account, then the deposit's recorded receiver, then every
+    // configured account — instead of failing on the first one.
+    const candidates: string[] = [];
+    for (const acct of [specificAccount, (deposit as any).receiverAccount, ...cbeAccounts]) {
+      if (acct && !candidates.includes(acct)) candidates.push(acct);
+    }
+    if (candidates.length === 0) {
       throw new BadRequestException(
         'This group has no CBE account numbers configured. Please set up a CBE receiver account in group settings first.',
       );
     }
 
-    let transaction: CbeTransactionData;
-    try {
-      transaction = await this.verifyByFtNumber(deposit.ftNumber, accountToUse);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+    let transaction: CbeTransactionData | null = null;
+    let matchedAccount = '';
+    let lastError = '';
+    for (const accountToUse of candidates) {
+      try {
+        transaction = await this.verifyByFtNumber(deposit.ftNumber, accountToUse);
+        matchedAccount = accountToUse;
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+    if (!transaction) {
       return {
         verified: false,
-        result: { success: false, error: errMsg },
+        result: {
+          success: false,
+          error:
+            candidates.length > 1
+              ? `Transaction ${deposit.ftNumber} not found under any of the ${candidates.length} candidate accounts (${candidates.join(', ')}).`
+              : lastError,
+        },
         deposit: deposit as unknown as Record<string, unknown>,
       };
     }
 
     // Cross-validate: receiver account should match the group's account
     const accountMatched = transaction.receiverAccount
-      ? accountToUse.includes(transaction.receiverAccount.replace(/\*/g, '')) ||
+      ? matchedAccount.includes(transaction.receiverAccount.replace(/\*/g, '')) ||
         transaction.receiverAccount.replace(/\*/g, '').length < 4
       : true; // can't determine if masked
 

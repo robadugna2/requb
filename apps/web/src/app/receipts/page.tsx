@@ -217,7 +217,9 @@ export default function ReceiptsPage() {
     let failed = 0;
     for (const r of pending) {
       try {
-        const res = await autoVerifyDepositCbe(r.id);
+        // Prefer the receiver account recorded on the deposit (where the money
+        // actually went); the server also falls back to all group accounts.
+        const res = await autoVerifyDepositCbe(r.id, r.receiverAccount || undefined);
         if (res.verified) verified += 1;
         else failed += 1;
       } catch {
