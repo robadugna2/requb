@@ -348,6 +348,13 @@ function ScanWorkflow() {
     account: string,
     senderFallback?: string,
   ) => {
+    // Duplicate pre-check FIRST: an FT already recorded in this group needs
+    // neither the bank lookup nor member pairing — flag it instantly instead
+    // of spending seconds of bank-API round-trips per duplicate.
+    if (existingFtsRef.current.has(ft.toUpperCase())) {
+      patchItem(ft, { status: 'found', isDuplicate: true, error: undefined });
+      return;
+    }
     patchItem(ft, { status: 'verifying', error: undefined });
     try {
       const tx = await cbeLookup(ft, account);
@@ -455,11 +462,19 @@ function ScanWorkflow() {
 
   // ─── Capture & scan ─────────────────────────────────────────────────────────
 
+  /**
+   * Already-recorded FT numbers for the selected group, mirrored in a ref so
+   * the duplicate pre-check reads fresh data even inside tight bulk loops
+   * where the state update hasn't flushed yet.
+   */
+  const existingFtsRef = useRef<Set<string>>(new Set());
+
   const loadExistingFts = async (grpId: string): Promise<Set<string>> => {
     try {
       const deposits = await getDeposits({ groupId: grpId });
       const set = new Set(deposits.map((d) => (d.ftNumber || '').toUpperCase()).filter(Boolean));
       setExistingFts(set);
+      existingFtsRef.current = set;
       // Members' bank accounts, learned from their past deposits — lets a
       // detected payout name the winning member by receiver account.
       setMemberAccountByAccount(
@@ -602,12 +617,14 @@ function ScanWorkflow() {
         setItems(
           fts.map((ft) => ({
             ftNumber: ft,
-            status: 'verifying' as const,
+            // Duplicates skip the bank lookup entirely inside runLookup —
+            // flagged here so they render as recorded immediately.
+            status: (existingFtsRef.current.has(ft) ? 'found' : 'verifying') as ScanItem['status'],
+            isDuplicate: existingFtsRef.current.has(ft),
             member: null,
             autoPaired: false,
             suggestions: [],
             cycleId: activeCycle?.id,
-            isDuplicate: false,
           })),
         );
         const savedAccount = await ensureAccountSaved();
@@ -1575,9 +1592,14 @@ function ScanWorkflow() {
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying with CBE...
                         </span>
                       )}
-                      {it.status === 'found' && (
+                      {it.status === 'found' && !it.isDuplicate && (
                         <span className="text-xs text-green-700 dark:text-success-400 flex items-center gap-1">
                           <CheckCircle className="h-3.5 w-3.5" /> Verified from CBE
+                        </span>
+                      )}
+                      {it.status === 'found' && it.isDuplicate && !it.tx && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                          <CheckCircle className="h-3.5 w-3.5" /> Already in database — bank lookup skipped
                         </span>
                       )}
                       {it.status === 'error' && (
