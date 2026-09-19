@@ -475,6 +475,14 @@ function ScanWorkflow() {
         } catch {
           if (!cancelled) setRules(null);
         }
+        // Preload the group's stored deposits now, so the FT autocomplete
+        // and the receiver-account list are populated before the first scan
+        // (not only after one). Also primes the duplicate pre-check.
+        try {
+          if (!cancelled) await loadExistingFts(detail.id);
+        } catch {
+          /* best-effort: the pre-check falls back to the server */
+        }
       })
       .catch(() => {
         if (!cancelled) showToast('Failed to load group details', 'error');
