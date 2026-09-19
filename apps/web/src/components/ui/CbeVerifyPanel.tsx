@@ -1,10 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Zap, Search, X, CheckCircle, AlertTriangle, Info, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { normalizeFtNumber } from '@/lib/api';
-import type { CbeTransactionData, CbeAutoVerifyResult } from '@/lib/api';
+import type { CbeTransactionData, CbeAutoVerifyResult, ReceiptItem } from '@/lib/api';
+
+/** A receiver account the admin can pick from in the lookup panel. */
+export interface ReceiverAccountOption {
+  account: string;
+  /** Saved on the group's CBE settings. */
+  configured: boolean;
+  /** Times this account was seen on a stored deposit. */
+  count: number;
+}
 
 // ─── CBE Transaction Detail Card ─────────────────────────────────────────────
 
@@ -313,14 +322,45 @@ export function AutoVerifyButton({
 interface CbeLookupPanelProps {
   defaultAccount?: string;
   onLookupFn: (ftNumber: string, accountNumber: string) => Promise<CbeTransactionData>;
+  /** Receiver accounts to list for picking (group settings + seen on stored deposits). */
+  receiverAccounts?: ReceiverAccountOption[];
+  /** Stored deposits, used for FT autocomplete as the admin types. */
+  ftSuggestions?: ReceiptItem[];
 }
 
-export function CbeLookupPanel({ defaultAccount = '', onLookupFn }: CbeLookupPanelProps) {
+export function CbeLookupPanel({
+  defaultAccount = '',
+  onLookupFn,
+  receiverAccounts,
+  ftSuggestions,
+}: CbeLookupPanelProps) {
   const [ftNumber, setFtNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState(defaultAccount);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CbeTransactionData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ftOpen, setFtOpen] = useState(false);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Keep the default account in sync when the parent's account list loads late
+  React.useEffect(() => {
+    if (!accountNumber && defaultAccount) setAccountNumber(defaultAccount);
+  }, [defaultAccount, accountNumber]);
+
+  /** Stored FTs matching what's been typed so far. */
+  const ftMatches = useMemo(() => {
+    const q = ftNumber.trim().toUpperCase();
+    if (q.length < 2 || !ftSuggestions?.length) return [];
+    return ftSuggestions
+      .filter((d) => d.ftNumber && d.ftNumber.toUpperCase().startsWith(q))
+      .slice(0, 8);
+  }, [ftNumber, ftSuggestions]);
+
+  const typedRecorded = useMemo(() => {
+    const q = ftNumber.trim().toUpperCase();
+    if (!q) return undefined;
+    return ftSuggestions?.find((d) => d.ftNumber?.toUpperCase() === q);
+  }, [ftNumber, ftSuggestions]);
 
   const handleLookup = async () => {
     // Extended identifiers ("FT24AB123456\BNK") are stripped before lookup
@@ -345,15 +385,74 @@ export function CbeLookupPanel({ defaultAccount = '', onLookupFn }: CbeLookupPan
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">FT Transaction ID</label>
-          <input
-            type="text"
-            value={ftNumber}
-            onChange={(e) => setFtNumber(e.target.value.toUpperCase())}
-            placeholder="e.g. FT1234567890"
-            onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-            className="w-full text-sm border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-900"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={ftNumber}
+              onChange={(e) => {
+                setFtNumber(e.target.value.toUpperCase());
+                setFtOpen(true);
+              }}
+              onFocus={() => setFtOpen(true)}
+              onBlur={() => {
+                blurTimer.current = setTimeout(() => setFtOpen(false), 150);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setFtOpen(false);
+                  handleLookup();
+                }
+                if (e.key === 'Escape') setFtOpen(false);
+              }}
+              placeholder="e.g. FT1234567890 — type to see stored FTs"
+              className="w-full text-sm border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-900 font-mono"
+            />
+            {ftOpen && ftMatches.length > 0 && (
+              <div className="absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+                {ftMatches.map((s) => {
+                  const isExact = s.ftNumber?.toUpperCase() === ftNumber.trim().toUpperCase();
+                  return (
+                    <button
+                      type="button"
+                      key={s.id}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        clearTimeout(blurTimer.current);
+                        setFtNumber(s.ftNumber!.toUpperCase());
+                        setFtOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700/50 last:border-0"
+                    >
+                      <span className="font-mono text-xs text-gray-900 dark:text-white/90">{s.ftNumber}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {s.memberName} · ETB {s.amount.toLocaleString()}
+                      </span>
+                      <span
+                        className={`ml-auto text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                          s.status === 'verified'
+                            ? 'bg-green-100 text-green-700 dark:bg-success-500/15 dark:text-success-400'
+                            : s.status === 'pending'
+                              ? 'bg-yellow-100 text-yellow-700 dark:bg-warning-500/15 dark:text-warning-400'
+                              : 'bg-red-100 text-red-700 dark:bg-error-500/15 dark:text-error-400'
+                        }`}
+                      >
+                        {isExact ? 'recorded' : s.status}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Format: FT + 10 alphanumeric chars</p>
+          {typedRecorded && (
+            <p className="text-[10px] text-amber-600 dark:text-warning-400 mt-1 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">
+                Already recorded: {typedRecorded.memberName}, ETB {typedRecorded.amount.toLocaleString()} ({typedRecorded.status}) — lookup still runs, but this FT will not be duplicated.
+              </span>
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Receiver Account Number</label>
@@ -363,9 +462,33 @@ export function CbeLookupPanel({ defaultAccount = '', onLookupFn }: CbeLookupPan
             onChange={(e) => setAccountNumber(e.target.value)}
             placeholder="e.g. 1000123456789"
             maxLength={13}
-            className="w-full text-sm border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-900"
+            className="w-full text-sm border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-900 font-mono"
           />
           <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">13-digit CBE account starting with 1000</p>
+          {receiverAccounts && receiverAccounts.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {receiverAccounts.map((opt) => (
+                <button
+                  key={opt.account}
+                  type="button"
+                  onClick={() => setAccountNumber(opt.account)}
+                  title={opt.configured ? 'Saved on this group' : `Seen on ${opt.count} stored deposit${opt.count > 1 ? 's' : ''}`}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border transition-colors ${
+                    accountNumber === opt.account
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-blue-50 dark:bg-blue-light-500/10 text-blue-700 dark:text-blue-light-400 border-blue-200 dark:border-blue-light-500/20 hover:bg-blue-100 dark:hover:bg-blue-light-500/20'
+                  }`}
+                >
+                  {opt.account}
+                  {opt.configured ? (
+                    <span className="text-[9px] font-sans font-bold uppercase opacity-80">saved</span>
+                  ) : (
+                    <span className="text-[9px] font-sans opacity-70">{opt.count}×</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

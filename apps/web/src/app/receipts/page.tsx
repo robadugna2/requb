@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Filter,
@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { AutoVerifyButton, CbeLookupPanel } from '@/components/ui/CbeVerifyPanel';
+import type { ReceiverAccountOption } from '@/components/ui/CbeVerifyPanel';
 import {
   getDeposits,
   verifyDeposit,
@@ -341,6 +342,30 @@ export default function ReceiptsPage() {
   const uniqueGroups = [...new Set(receipts.map((r) => r.groupName))];
   const pendingCount = receipts.filter((r) => r.status === 'pending').length;
 
+  /**
+   * Every receiver account pickable in the FT lookup panel: the group's
+   * configured CBE accounts plus every distinct account seen on a stored
+   * deposit (mid-cycle switches the admin never saved included).
+   */
+  const receiverAccountOptions = useMemo<ReceiverAccountOption[]>(() => {
+    const map = new Map<string, ReceiverAccountOption>();
+    Object.values(groupCbeAccounts)
+      .flat()
+      .forEach((a) => {
+        if (/^1000\d{9}$/.test(a)) map.set(a, { account: a, configured: true, count: 0 });
+      });
+    receipts.forEach((r) => {
+      const a = r.receiverAccount;
+      if (!a || !/^1000\d{9}$/.test(a)) return;
+      const entry = map.get(a);
+      if (entry) entry.count += 1;
+      else map.set(a, { account: a, configured: false, count: 1 });
+    });
+    return [...map.values()].sort(
+      (x, y) => Number(y.configured) - Number(x.configured) || y.count - x.count,
+    );
+  }, [groupCbeAccounts, receipts]);
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -423,8 +448,10 @@ export default function ReceiptsPage() {
             </div>
           </div>
           <CbeLookupPanel
-            defaultAccount={Object.values(groupCbeAccounts)[0]?.[0] || ''}
+            defaultAccount={receiverAccountOptions[0]?.account || ''}
             onLookupFn={cbeLookup}
+            receiverAccounts={receiverAccountOptions}
+            ftSuggestions={receipts}
           />
         </div>
       )}
