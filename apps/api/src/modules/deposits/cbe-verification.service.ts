@@ -332,8 +332,12 @@ export class CbeVerificationService {
         ...(transaction.payerAccount && !deposit.senderAccount && {
           senderAccount: transaction.payerAccount,
         }),
-        ...(transaction.receiverAccount && !deposit.receiverAccount && {
-          receiverAccount: transaction.receiverAccount,
+        // The PDF masks the receiver account (e.g. "1000******31"), which is
+        // useless for later lookups. The full account this transaction was
+        // resolved against is known — matchedAccount — and the cross-check
+        // above already confirmed it belongs to this transaction. Prefer it.
+        ...(!deposit.receiverAccount && {
+          receiverAccount: matchedAccount || transaction.receiverAccount || undefined,
         }),
         ...(transaction.branch && !deposit.branch && { branch: transaction.branch }),
         // Auto-verify if all checks pass
