@@ -55,6 +55,7 @@ import type {
   MemberSuggestion,
   FtScanResult,
   GroupRules,
+  ReceiptItem,
 } from '@/lib/api';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -97,6 +98,112 @@ interface ScanItem {
 
 const FT_REGEX = /^FT\w{10}$/i;
 const ACCOUNT_REGEX = /^1000\d{9}$/;
+
+/**
+ * FT input with as-you-type suggestions pulled from the group's already
+ * recorded deposits. Selecting a match fills the input and, when the FT is
+ * already stored, flags it as a duplicate so the admin stops instead of
+ * spending a bank round-trip the pre-check would reject anyway.
+ */
+function FtInput({
+  value,
+  onChange,
+  onSubmit,
+  suggestions,
+  duplicate,
+  placeholder,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  suggestions: ReceiptItem[];
+  duplicate: ReceiptItem | undefined;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  return (
+    <div className="relative flex-1">
+      <input
+        className="input-field font-mono w-full"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value.toUpperCase());
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          // delay so a click on a suggestion lands before the list unmounts
+          blurTimer.current = setTimeout(() => setOpen(false), 150);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            setOpen(false);
+            onSubmit();
+          }
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        disabled={disabled}
+        maxLength={40}
+      />
+
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-30 left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
+          {suggestions.map((s) => {
+            const isDup = s.ftNumber?.toUpperCase() === value.trim().toUpperCase();
+            return (
+              <button
+                type="button"
+                key={s.id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  clearTimeout(blurTimer.current);
+                  onChange(s.ftNumber!.toUpperCase());
+                  setOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2 border-b border-gray-100 dark:border-gray-700/50 last:border-0"
+              >
+                <span className="font-mono text-xs text-gray-900 dark:text-white/90">
+                  {s.ftNumber}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {s.memberName} · ETB {s.amount.toLocaleString()}
+                </span>
+                <span
+                  className={`ml-auto text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                    s.status === 'verified'
+                      ? 'bg-success-100 text-success-700 dark:bg-success-500/15 dark:text-success-400'
+                      : s.status === 'pending'
+                        ? 'bg-warning-100 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400'
+                        : 'bg-error-100 text-error-700 dark:bg-error-500/15 dark:text-error-400'
+                  }`}
+                >
+                  {isDup ? 'recorded' : s.status}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {duplicate && (
+        <p className="text-xs text-error-600 dark:text-error-400 mt-1 flex items-center gap-1">
+          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="truncate">
+            Already recorded: {duplicate.ftNumber} — {duplicate.memberName}, ETB{' '}
+            {duplicate.amount.toLocaleString()} ({duplicate.status}). Duplicates are
+            never created twice.
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 function axiosMessage(err: unknown): string {
   const axiosErr = err as { response?: { data?: { message?: string } }; message?: string };
@@ -256,6 +363,8 @@ function ScanWorkflow() {
   // Review state
   const [items, setItems] = useState<ScanItem[]>([]);
   const [existingFts, setExistingFts] = useState<Set<string>>(new Set());
+  /** Full rows behind `existingFts` — feed the FT autocomplete + receiver list. */
+  const [existingDeposits, setExistingDeposits] = useState<ReceiptItem[]>([]);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   // Quick-create a brand-new member from an unknown payer (scan flow)
   const [createMemberIndex, setCreateMemberIndex] = useState<number | null>(null);
@@ -278,6 +387,44 @@ function ScanWorkflow() {
   );
   const accountReady =
     (group?.cbeAccountNumbers?.length ?? 0) > 0 || ACCOUNT_REGEX.test(accountNumber);
+
+  /**
+   * Receiver accounts the admin can pick from: the group's saved accounts
+   * first, then every distinct account seen on a past deposit in this group
+   * (covers mid-cycle account switches the admin never saved explicitly).
+   */
+  const receiverOptions = useMemo(() => {
+    const map = new Map<string, { account: string; count: number; configured: boolean }>();
+    (group?.cbeAccountNumbers ?? []).forEach((a) =>
+      map.set(a, { account: a, count: 0, configured: true }),
+    );
+    existingDeposits.forEach((d) => {
+      const a = d.receiverAccount;
+      if (!a || !ACCOUNT_REGEX.test(a)) return;
+      const entry = map.get(a);
+      if (entry) entry.count += 1;
+      else map.set(a, { account: a, count: 1, configured: false });
+    });
+    return [...map.values()].sort(
+      (x, y) => Number(y.configured) - Number(x.configured) || y.count - x.count,
+    );
+  }, [group, existingDeposits]);
+
+  /** FT autocomplete matches from the group's stored deposits. */
+  const ftSuggestions = useMemo(() => {
+    const q = manualFt.trim().toUpperCase();
+    if (q.length < 2) return [];
+    return existingDeposits
+      .filter((d) => d.ftNumber && d.ftNumber.toUpperCase().startsWith(q))
+      .slice(0, 8);
+  }, [manualFt, existingDeposits]);
+
+  /** Exact stored match for the FT currently typed — drives the duplicate warn. */
+  const typedDuplicate = useMemo(() => {
+    const q = manualFt.trim().toUpperCase();
+    if (!q) return undefined;
+    return existingDeposits.find((d) => d.ftNumber?.toUpperCase() === q);
+  }, [manualFt, existingDeposits]);
 
   // AI detection needs at least one provider (Gemini Web proxy or Gemini key)
   useEffect(() => {
@@ -308,6 +455,9 @@ function ScanWorkflow() {
   useEffect(() => {
     if (!selectedGroupId) {
       setGroup(null);
+      setExistingDeposits([]);
+      setExistingFts(new Set());
+      existingFtsRef.current = new Set();
       return;
     }
     let cancelled = false;
@@ -474,6 +624,7 @@ function ScanWorkflow() {
   const loadExistingFts = async (grpId: string): Promise<Set<string>> => {
     try {
       const deposits = await getDeposits({ groupId: grpId });
+      setExistingDeposits(deposits);
       const set = new Set(deposits.map((d) => (d.ftNumber || '').toUpperCase()).filter(Boolean));
       setExistingFts(set);
       existingFtsRef.current = set;
@@ -1175,16 +1326,17 @@ function ScanWorkflow() {
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   CBE Receiver Account
                 </label>
-                {group?.cbeAccountNumbers?.length && !addingAccount ? (
+                {receiverOptions.length > 0 && !addingAccount ? (
                   <div className="flex gap-2">
                     <select
                       className="input-field font-mono"
                       value={accountNumber}
                       onChange={(e) => setAccountNumber(e.target.value)}
                     >
-                      {group.cbeAccountNumbers.map((acc) => (
-                        <option key={acc} value={acc}>
-                          {acc}
+                      {receiverOptions.map((opt) => (
+                        <option key={opt.account} value={opt.account}>
+                          {opt.account}
+                          {opt.configured ? ' (saved)' : ` — seen on ${opt.count} deposit${opt.count > 1 ? 's' : ''}`}
                         </option>
                       ))}
                     </select>
@@ -1277,19 +1429,14 @@ function ScanWorkflow() {
                 Or enter FT numbers manually — same CBE verification and member pairing, no photo needed
               </label>
               <div className="flex gap-2">
-                <input
-                  className="input-field font-mono flex-1"
-                  placeholder="FT + 10 characters (e.g. FT253126QXMJ)"
+                <FtInput
                   value={manualFt}
-                  onChange={(e) => setManualFt(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addManualFt();
-                    }
-                  }}
+                  onChange={setManualFt}
+                  onSubmit={addManualFt}
+                  suggestions={ftSuggestions}
+                  duplicate={typedDuplicate}
+                  placeholder="FT + 10 characters (e.g. FT253126QXMJ) — start typing to see stored FTs"
                   disabled={!selectedGroupId || !accountReady || loadingGroup}
-                  maxLength={40}
                 />
                 <Button
                   variant="secondary"
@@ -1300,9 +1447,11 @@ function ScanWorkflow() {
                   <Plus className="h-4 w-4 mr-1" /> Add FT
                 </Button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Each FT is verified against CBE and auto-paired instantly. Duplicates are flagged and never recorded twice.
-              </p>
+              {!typedDuplicate && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Each FT is verified against CBE and auto-paired instantly. Duplicates are flagged and never recorded twice.
+                </p>
+              )}
             </div>
 
             {/* Bulk FT import — one number per line, verified one at a time */}
@@ -1525,14 +1674,16 @@ function ScanWorkflow() {
                 )}
 
                 <div className="flex gap-2 mt-4">
-                  <input
-                    className="input-field font-mono flex-1"
-                    placeholder="Add FT number manually (e.g. FT24AB12345)"
+                  <FtInput
                     value={manualFt}
-                    onChange={(e) => setManualFt(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addManualFt())}
+                    onChange={setManualFt}
+                    onSubmit={addManualFt}
+                    suggestions={ftSuggestions}
+                    duplicate={typedDuplicate}
+                    placeholder="Add FT number manually (e.g. FT24AB12345) — start typing to see stored FTs"
+                    disabled={scanning || !accountReady}
                   />
-                  <Button variant="secondary" onClick={addManualFt} disabled={scanning || !accountReady}>
+                  <Button variant="secondary" onClick={addManualFt} disabled={scanning || !accountReady} className="flex-shrink-0">
                     <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
                 </div>
