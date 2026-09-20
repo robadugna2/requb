@@ -241,69 +241,163 @@ export default function ReportsTab({ groupId, group }: ReportsTabProps) {
   const coverage = scope === 'cycle' ? cycleRows : scope === 'monthly' ? monthMemberRows : null;
 
   // ─── Print ──────────────────────────────────────────────────────────────────
+  const fmt = (n: number): string => n.toLocaleString();
+
   const printReport = () => {
-    const today = new Date().toLocaleString();
+    const now = new Date();
+    const today = now.toLocaleString();
+    const ref = `EQB-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${scope.toUpperCase()}`;
+    const initial = (group.name || 'E').trim().charAt(0).toUpperCase();
+
+    const pill = (s: string) => `<span class="pill ${s}">${s}</span>`;
+    const balTd = (b: number) =>
+      `<td class="num ${b > 1 ? 'owes' : b < -1 ? 'ahead' : ''}">${b.toLocaleString()}</td>`;
+
     let title = '';
-    let subtitle = '';
-    let headHtml = '';
+    let periodNote = '';
+    let statsHtml = '';
+    let tableHead = '';
     let rowsHtml = '';
     let totalsHtml = '';
+    let ledgerHtml = '';
 
     if (scope === 'alltime') {
-      title = 'All-Time Contribution Summary (Since Start)';
-      subtitle = `${group.name} — ${cyclesSoFar} cycle(s) so far, ETB ${contribution.toLocaleString()} per member per cycle`;
-      headHtml =
-        '<th>Member</th><th class="num">Shares</th><th class="num">Paid (ETB)</th><th class="num">Expected To Date (ETB)</th><th class="num">Balance (ETB)</th><th>Standing</th>';
       const totPaid = allTimeRows.reduce((s, r) => s + r.totalPaid, 0);
       const totExp = allTimeRows.reduce((s, r) => s + r.expectedToDate, 0);
+      const totShares = allTimeRows.reduce((s, r) => s + r.shares, 0);
+      const settled = allTimeRows.filter((r) => r.status !== 'OWES').length;
+      const owing = allTimeRows.length - settled;
+      const outstanding = totExp - totPaid;
+
+      title = 'All-Time Contribution Summary';
+      periodNote = `since start · ${cyclesSoFar} cycle${cyclesSoFar > 1 ? 's' : ''} · base ETB ${fmt(contribution)} per member per cycle`;
+      statsHtml = `
+        <div class="stat"><div class="k">Total collected</div><div class="v">ETB ${fmt(totPaid)}</div><div class="s">${allTimeRows.length} members · verified + pending</div></div>
+        <div class="stat ${outstanding > 1 ? 'red' : 'green'}"><div class="k">Outstanding balance</div><div class="v">ETB ${fmt(outstanding)}</div><div class="s">${outstanding > 1 ? 'still to collect' : 'nothing outstanding'}</div></div>
+        <div class="stat green"><div class="k">Settled / ahead</div><div class="v">${settled}<span class="of"> / ${allTimeRows.length}</span></div><div class="s">members on target</div></div>
+        <div class="stat ${owing > 0 ? 'red' : ''}"><div class="k">Owing</div><div class="v">${owing}</div><div class="s">members below target</div></div>`;
+      tableHead =
+        '<th>Member</th><th class="num">Shares</th><th class="num">Paid (ETB)</th><th class="num">Balance (ETB)</th><th>Standing</th>';
       rowsHtml = allTimeRows
         .map(
           (r) =>
-            `<tr><td>${esc(r.name)}</td><td class="num">${r.shares}</td><td class="num">${r.totalPaid.toLocaleString()}</td><td class="num">${r.expectedToDate.toLocaleString()}</td><td class="num">${r.balance.toLocaleString()}</td><td>${r.status}</td></tr>`,
+            `<tr><td>${esc(r.name)}</td><td class="num">${r.shares}</td><td class="num">${fmt(r.totalPaid)}</td>${balTd(r.balance)}<td>${pill(r.status)}</td></tr>`,
         )
         .join('');
-      totalsHtml = `<tr class="totals"><td>Total (${allTimeRows.length} members)</td><td></td><td class="num">${totPaid.toLocaleString()}</td><td class="num">${totExp.toLocaleString()}</td><td class="num">${(totPaid - totExp).toLocaleString()}</td><td></td></tr>`;
+      totalsHtml = `<tr class="totals"><td>Total — ${allTimeRows.length} members</td><td class="num">${totShares}</td><td class="num">${fmt(totPaid)}</td><td class="num ${totPaid - totExp > 1 ? 'owes' : totPaid - totExp < -1 ? 'ahead' : ''}">${fmt(totPaid - totExp)}</td><td></td></tr>`;
     } else {
-      title = scope === 'cycle' ? `Cycle ${cycleNumber} Contribution Report` : `Monthly Payment Coverage — ${month}`;
-      subtitle = `${group.name} — expected ETB ${contribution.toLocaleString()} per member per cycle`;
-      headHtml =
-        '<th>Member</th><th class="num">Expected (ETB)</th><th class="num">Verified (ETB)</th><th class="num">Pending (ETB)</th><th class="num">#</th><th>Status</th>';
       const rows = coverage ?? [];
-      const totExp = rows.reduce((s, r) => s + r.expected, 0);
-      const totVer = rows.reduce((s, r) => s + r.verified, 0);
-      const totPen = rows.reduce((s, r) => s + r.pending, 0);
-      const totCnt = rows.reduce((s, r) => s + r.count, 0);
+      const total = rows.length;
+      title = scope === 'cycle' ? `Cycle ${cycleNumber} Contribution Report` : 'Monthly Payment Coverage';
+      periodNote =
+        scope === 'cycle'
+          ? `expected ETB ${fmt(contribution)} per member per cycle · shares applied`
+          : `calendar month ${month}`;
+      statsHtml = `
+        <div class="stat"><div class="k">Expected</div><div class="v">ETB ${fmt(summary.expected)}</div><div class="s">${total} members</div></div>
+        <div class="stat green"><div class="k">Collected</div><div class="v">ETB ${fmt(summary.collected)}</div><div class="s">bank-verified</div></div>
+        <div class="stat ${summary.pending > 0 ? 'amber' : ''}"><div class="k">Pending</div><div class="v">ETB ${fmt(summary.pending)}</div><div class="s">${summary.pending > 0 ? 'awaiting verification' : 'none outstanding'}</div></div>
+        <div class="stat ${summary.bad > 0 ? 'red' : 'green'}"><div class="k">Paid in full</div><div class="v">${summary.good}<span class="of"> / ${total}</span></div><div class="s">${summary.partial} partial · ${summary.bad} unpaid</div></div>`;
+      tableHead =
+        '<th>Member</th><th class="num">Expected (ETB)</th><th class="num">Verified (ETB)</th><th class="num">Pending (ETB)</th><th class="num">#</th><th>Status</th>';
       rowsHtml = rows
         .map(
           (r) =>
-            `<tr><td>${esc(r.name)}</td><td class="num">${r.expected.toLocaleString()}</td><td class="num">${r.verified.toLocaleString()}</td><td class="num">${r.pending ? r.pending.toLocaleString() : '—'}</td><td class="num">${r.count}</td><td>${r.status}</td></tr>`,
+            `<tr><td>${esc(r.name)}</td><td class="num">${fmt(r.expected)}</td><td class="num">${fmt(r.verified)}</td><td class="num">${r.pending ? fmt(r.pending) : '—'}</td><td class="num">${r.count}</td><td>${pill(r.status)}</td></tr>`,
         )
         .join('');
-      totalsHtml = `<tr class="totals"><td>Total (${rows.length} members)</td><td class="num">${totExp.toLocaleString()}</td><td class="num">${totVer.toLocaleString()}</td><td class="num">${totPen ? totPen.toLocaleString() : '—'}</td><td class="num">${totCnt}</td><td></td></tr>`;
+      const totCnt = rows.reduce((s, r) => s + r.count, 0);
+      totalsHtml = `<tr class="totals"><td>Total — ${total} members</td><td class="num">${fmt(summary.expected)}</td><td class="num">${fmt(summary.collected)}</td><td class="num">${summary.pending ? fmt(summary.pending) : '—'}</td><td class="num">${totCnt}</td><td></td></tr>`;
+
+      if (scope === 'monthly' && monthRows.length > 0) {
+        const tot = monthRows.filter((d) => d.status !== 'rejected').reduce((s, d) => s + (d.amount || 0), 0);
+        ledgerHtml = `
+      <h2 class="section">Transaction ledger — ${esc(month)}</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Member</th><th>FT reference</th><th>Status</th><th class="num">Amount (ETB)</th></tr></thead>
+        <tbody>
+          ${monthRows
+            .map(
+              (d) =>
+                `<tr><td class="mono">${esc(String(d.transferDate || d.date).slice(0, 10))}</td><td>${esc(d.memberName)}</td><td class="mono">${esc(d.ftNumber || '—')}</td><td>${pill(d.status.toUpperCase())}</td><td class="num">${fmt(d.amount || 0)}</td></tr>`,
+            )
+            .join('')}
+          <tr class="totals"><td colspan="4">Total — ${monthRows.length} transactions</td><td class="num">${fmt(tot)}</td></tr>
+        </tbody>
+      </table>`;
+      }
     }
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} — ${esc(group.name)}</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; margin: 28px 34px; }
-  .head { border-bottom: 3px solid #465fff; padding-bottom: 12px; margin-bottom: 6px; }
-  .head h1 { margin: 0; font-size: 22px; color: #1a2231; }
-  .head .sub { color: #555; font-size: 13px; margin-top: 4px; }
-  .meta { display: flex; justify-content: space-between; font-size: 11px; color: #777; margin: 8px 0 18px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { border: 1px solid #d9dce3; padding: 6px 9px; text-align: left; }
-  th { background: #f0f2f7; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: 'Segoe UI', -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #161b26; margin: 0; padding: 34px 40px 70px; font-size: 12px; }
+  .letterhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 3px solid #465fff; padding-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 13px; }
+  .mark { width: 42px; height: 42px; border-radius: 10px; background: #465fff; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 800; }
+  .brand h1 { margin: 0; font-size: 20px; letter-spacing: .2px; color: #111827; }
+  .brand .tag { margin-top: 3px; font-size: 11px; color: #6b7280; }
+  .meta { text-align: right; font-size: 10px; color: #6b7280; line-height: 1.7; white-space: nowrap; }
+  .meta b { color: #374151; font-weight: 600; }
+  .stats { display: flex; gap: 10px; margin: 18px 0 4px; }
+  .stat { flex: 1; border: 1px solid #e5e8f0; border-top: 3px solid #465fff; border-radius: 8px; padding: 10px 12px 9px; background: #fafbff; }
+  .stat .k { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: #8a90a2; }
+  .stat .v { margin-top: 4px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; color: #111827; }
+  .stat .v .of { font-size: 11px; font-weight: 600; color: #9ca3af; }
+  .stat .s { margin-top: 2px; font-size: 9px; color: #9ca3af; }
+  .stat.green { border-top-color: #16a34a; }
+  .stat.amber { border-top-color: #d97706; }
+  .stat.red { border-top-color: #dc2626; }
+  h2.section { margin: 24px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .9px; color: #374151; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  thead { display: table-header-group; }
+  thead th { padding: 7px 10px; background: #f4f5fa; border-bottom: 1.5px solid #c9cfdd; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; text-align: left; }
+  tbody td { padding: 6px 10px; border-bottom: 1px solid #edeff5; }
+  tbody tr:nth-child(even) td { background: #fafbfd; }
+  tr { page-break-inside: avoid; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  tr.totals td { font-weight: 700; background: #f6f7fb; border-top: 2px solid #465fff; }
-  .foot { margin-top: 26px; font-size: 10px; color: #999; border-top: 1px solid #e3e3e3; padding-top: 8px;
-          display: flex; justify-content: space-between; }
-  @page { size: A4; margin: 14mm; }
+  td.owes { color: #b91c1c; font-weight: 600; }
+  td.ahead { color: #15803d; font-weight: 600; }
+  tr.totals td { border-top: 1.5px solid #465fff; border-bottom: 3px double #465fff; background: #f1f3fa !important; font-weight: 700; padding: 8px 10px; }
+  .mono { font-family: Consolas, 'Courier New', monospace; font-size: 10.5px; color: #4b5563; }
+  .pill { display: inline-block; min-width: 52px; text-align: center; padding: 2px 8px; border-radius: 999px; font-size: 8.5px; font-weight: 700; letter-spacing: .5px; }
+  .pill.PAID, .pill.AHEAD, .pill.VERIFIED { background: #e7f6ec; color: #15803d; }
+  .pill.PARTIAL, .pill.PENDING { background: #fdf3e3; color: #b45309; }
+  .pill.UNPAID, .pill.OWES { background: #fdeaea; color: #b91c1c; }
+  .pill.SETTLED, .pill.REJECTED { background: #eef0f4; color: #4b5563; }
+  .sign { display: flex; gap: 56px; margin-top: 52px; page-break-inside: avoid; }
+  .sign .slot { flex: 1; font-size: 10px; color: #6b7280; }
+  .sign .ln { height: 34px; border-bottom: 1px solid #9ca3af; margin-bottom: 7px; }
+  .sign .dt { display: block; margin-top: 4px; color: #9ca3af; }
+  .foot { position: fixed; left: 0; right: 0; bottom: 0; padding: 7px 40px 10px; display: flex; justify-content: space-between; font-size: 9px; color: #9ca3af; border-top: 1px solid #e5e7eb; background: #fff; }
+  @page { size: A4; margin: 12mm 11mm 16mm; }
 </style></head><body>
-<div class="head"><h1>${esc(group.name)}</h1><div class="sub">${esc(title)}</div></div>
-<div class="meta"><span>${esc(subtitle)}</span><span>Generated ${esc(today)}</span></div>
-<table><thead><tr>${headHtml}</tr></thead>
-<tbody>${rowsHtml}${totalsHtml}</tbody></table>
-<div class="foot"><span>Generated by the Equb Platform</span><span>${esc(today)}</span></div>
+<div class="letterhead">
+  <div class="brand">
+    <div class="mark">${esc(initial)}</div>
+    <div>
+      <h1>${esc(group.name)}</h1>
+      <div class="tag">${esc(title)} · ${esc(periodNote)}</div>
+    </div>
+  </div>
+  <div class="meta">
+    <b>Ref</b> ${ref}<br>
+    <b>Generated</b> ${esc(today)}<br>
+    <b>Members</b> ${group.members.length} &nbsp;·&nbsp; <b>Cycles</b> ${cycles.length} &nbsp;·&nbsp; <b>Base</b> ETB ${fmt(contribution)}
+  </div>
+</div>
+<div class="stats">${statsHtml}</div>
+<h2 class="section">${scope === 'alltime' ? 'Member balances' : 'Member coverage'}</h2>
+<table>
+  <thead><tr>${tableHead}</tr></thead>
+  <tbody>${rowsHtml}${totalsHtml}</tbody>
+</table>
+${ledgerHtml}
+<div class="sign">
+  <div class="slot"><div class="ln"></div>Prepared by — Administrator<span class="dt">Date: ____________________</span></div>
+  <div class="slot"><div class="ln"></div>Approved by — Chairperson<span class="dt">Date: ____________________</span></div>
+</div>
+<div class="foot"><span>Equb Platform · auto-generated financial report</span><span>${esc(group.name)} — ${esc(title)}</span></div>
 <script>window.onload = function () { setTimeout(function () { window.print(); }, 250); };</script>
 </body></html>`;
 
