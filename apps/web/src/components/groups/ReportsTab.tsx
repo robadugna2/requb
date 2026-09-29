@@ -331,6 +331,8 @@ export default function ReportsTab({ groupId, group }: ReportsTabProps) {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} — ${esc(group.name)}</title>
 <style>
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Paper-white regardless of the browser's dark mode — this is a printed document */
+  html, body { background: #ffffff !important; }
   body { font-family: 'Segoe UI', -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #161b26; margin: 0; padding: 34px 40px 70px; font-size: 12px; }
   .letterhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 3px solid #465fff; padding-bottom: 14px; }
   .brand { display: flex; align-items: center; gap: 13px; }
