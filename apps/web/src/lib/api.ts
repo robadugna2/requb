@@ -1335,6 +1335,145 @@ export const cbeLookup = async (
   return response.data as CbeTransactionData;
 };
 
+// ─── Multi-Bank Receipt Verification ─────────────────────────────────────────
+//
+// Backed by the `bank-verification` module. Every provider below is checked
+// against its OWN public receipt endpoint; the server normalises the answer.
+// `/verification/lookup` is read-only — it never creates or modifies a deposit.
+// Only `/verification/deposit/:id/auto` writes, and only to the deposit named.
+
+/** Every provider the backend can check right now. */
+export type BankCode =
+  | 'cbe'
+  | 'boa'
+  | 'telebirr'
+  | 'mpesa'
+  | 'cbebirr'
+  | 'dashen'
+  | 'awash'
+  | 'siinqee'
+  | 'kaafiebirr'
+  | 'coopayebirr';
+
+export interface VerificationBank {
+  bank: BankCode;
+  label: string;
+}
+
+/** Which identifier fields a request carries. Banks differ in what they need. */
+export interface BankIdentifiersInput {
+  /** CBE legacy FT reference, BOA/Dashen reference. */
+  referenceNumber?: string;
+  /** CBE "Receipt ID", CBE Birr transaction id. */
+  receiptNumber?: string;
+  /** Telebirr / M-Pesa / Awash transaction number. */
+  transactionNumber?: string;
+  /** CBE needs the last 8 digits, BOA exactly 5. */
+  accountSuffix?: string;
+  /** CBE Birr / eBirr wallets. */
+  phone?: string;
+}
+
+/** One normalised answer, whichever provider produced it. */
+export interface BankVerificationResult {
+  bank: BankCode;
+  status: 'success' | 'not_found' | 'failed';
+  verified: boolean;
+  amount?: number;
+  currency?: string;
+  senderName?: string;
+  senderAccount?: string;
+  receiverName?: string;
+  receiverAccount?: string;
+  referenceNumber?: string;
+  receiptNumber?: string;
+  transactionNumber?: string;
+  timestamp?: string;
+  extra?: Record<string, unknown>;
+  error?: { code: string; message: string; retryable: boolean };
+  source: string;
+  durationMs: number;
+}
+
+/** Result of turning a pasted link / SMS into bank + identifiers. */
+export interface ParsedReceipt {
+  recognised: boolean;
+  message?: string;
+  bank?: BankCode;
+  identifiers?: BankIdentifiersInput;
+  confidence?: number;
+  normalizedUrl?: string;
+  matchedBy?: 'rule' | 'host-only';
+}
+
+/** Why a deposit-level check did or did not approve the deposit. */
+export type AutoVerifyReason =
+  | 'verified'
+  | 'already_decided'
+  | 'no_reference'
+  | 'bank_unresolved'
+  | 'bank_not_supported'
+  | 'invalid_input'
+  | 'not_found'
+  | 'upstream_failed'
+  | 'amount_mismatch'
+  | 'receiver_mismatch'
+  | 'duplicate_reference';
+
+export interface DepositAutoVerifyOutcome {
+  verified: boolean;
+  reason: AutoVerifyReason;
+  message: string;
+  bank?: BankCode;
+  result?: BankVerificationResult;
+  checks?: {
+    amountMatched?: boolean;
+    receiverMatched?: boolean;
+    duplicateReference?: boolean;
+  };
+  verificationStatus?: string;
+}
+
+/** GET /verification/banks — the providers enabled on the server. */
+export const getVerificationBanks = async (): Promise<VerificationBank[]> => {
+  const response = await api.get('/verification/banks');
+  return response.data as VerificationBank[];
+};
+
+/** POST /verification/parse — turn a pasted link or SMS into bank + fields. */
+export const parseReceipt = async (rawInput: string): Promise<ParsedReceipt> => {
+  const response = await api.post('/verification/parse', { rawInput });
+  return response.data as ParsedReceipt;
+};
+
+/**
+ * POST /verification/lookup — check a payment against its bank.
+ * Read-only: no deposit is created or modified.
+ */
+export const verifyBankPayment = async (input: {
+  bank?: BankCode;
+  identifiers?: BankIdentifiersInput;
+  rawInput?: string;
+}): Promise<BankVerificationResult> => {
+  const response = await api.post('/verification/lookup', input);
+  return response.data as BankVerificationResult;
+};
+
+/**
+ * POST /verification/deposit/:id/auto — check ONE deposit and auto-approve it
+ * only when the amount, the receiver account and the reference all match.
+ */
+export const autoVerifyDepositWithBank = async (
+  depositId: string,
+  opts?: { bank?: BankCode; accountNumber?: string },
+): Promise<DepositAutoVerifyOutcome> => {
+  const response = await api.post(`/verification/deposit/${depositId}/auto`, {
+    bank: opts?.bank,
+    accountNumber: opts?.accountNumber,
+  });
+  return response.data as DepositAutoVerifyOutcome;
+};
+
 // ─── Camera FT Scanner ────────────────────────────────────────────────────────
 
 /**

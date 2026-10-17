@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { AutoVerifyButton } from '@/components/ui/CbeVerifyPanel';
+import { BankVerifyButton } from '@/components/ui/MultiBankVerifyPanel';
 import {
   getGroupDeposits,
   verifyDeposit,
@@ -116,6 +117,13 @@ export default function DepositsTab({
     } finally {
       setVerifyingDepositId(null);
     }
+  };
+
+  /** Applied after a multi-bank check auto-approves the deposit. */
+  const handleBankVerified = (depositId: string) => {
+    setDeposits(deposits.map((d) => d.id === depositId ? { ...d, status: 'verified' as const } : d));
+    if (previewDeposit?.id === depositId) setPreviewDeposit({ ...previewDeposit, status: 'verified' });
+    notifySuccess('Verified with the bank and approved.');
   };
 
   const handleReject = async (depositId: string, reason?: string) => {
@@ -437,6 +445,14 @@ export default function DepositsTab({
                       >
                         <CheckCircle className="h-4 w-4" />
                       </button>
+                      <BankVerifyButton
+                        depositId={deposit.id}
+                        iconOnly
+                        onVerified={() => handleBankVerified(deposit.id)}
+                        onOutcome={(outcome) => {
+                          if (!outcome.verified) notifyError(outcome.message);
+                        }}
+                      />
                       <button
                         onClick={() => handleReject(deposit.id)}
                         disabled={rejectingDepositId === deposit.id}
@@ -554,6 +570,14 @@ export default function DepositsTab({
                               >
                                 <CheckCircle className="h-4 w-4" />
                               </button>
+                              <BankVerifyButton
+                                depositId={deposit.id}
+                                iconOnly
+                                onVerified={() => handleBankVerified(deposit.id)}
+                                onOutcome={(outcome) => {
+                                  if (!outcome.verified) notifyError(outcome.message);
+                                }}
+                              />
                               <button
                                 onClick={() => handleReject(deposit.id)}
                                 disabled={rejectingDepositId === deposit.id}

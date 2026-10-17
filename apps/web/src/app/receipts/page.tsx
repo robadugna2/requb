@@ -18,6 +18,7 @@ import {
   UserPlus,
   Inbox,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useLanguage } from '@/components/layout/LanguageContext';
@@ -26,6 +27,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { AutoVerifyButton, CbeLookupPanel } from '@/components/ui/CbeVerifyPanel';
 import type { ReceiverAccountOption } from '@/components/ui/CbeVerifyPanel';
+import { BankVerifyButton, MultiBankVerifyPanel } from '@/components/ui/MultiBankVerifyPanel';
 import {
   getDeposits,
   verifyDeposit,
@@ -63,6 +65,8 @@ export default function ReceiptsPage() {
 
   // Manual FT lookup panel
   const [showLookupPanel, setShowLookupPanel] = useState(false);
+  // Multi-bank lookup panel (CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, …)
+  const [showBankPanel, setShowBankPanel] = useState(false);
   // Unknown Senders queue
   const [unknownSenders, setUnknownSenders] = useState<UnknownSenderItem[]>([]);
   const [showUnknown, setShowUnknown] = useState(true);
@@ -432,6 +436,15 @@ export default function ReceiptsPage() {
           FT Lookup
           {showLookupPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowBankPanel((v) => !v)}
+            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+          >
+          <ShieldCheck className="h-4 w-4" />
+          All Banks
+          {showBankPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
@@ -453,6 +466,25 @@ export default function ReceiptsPage() {
             receiverAccounts={receiverAccountOptions}
             ftSuggestions={receipts}
           />
+        </div>
+      )}
+
+      {/* Multi-bank lookup panel — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash,
+          Siinqee, CBE Birr, Kaafi eBirr, Coopay eBirr. Read-only. */}
+      {showBankPanel && (
+        <div className="mb-6 p-5 bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <ShieldCheck className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-indigo-900">Multi-Bank Lookup</h3>
+              <p className="text-xs text-indigo-600 dark:text-blue-light-400">
+                Check any bank or wallet receipt — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash and more
+              </p>
+            </div>
+          </div>
+          <MultiBankVerifyPanel />
         </div>
       )}
 
@@ -800,6 +832,34 @@ export default function ReceiptsPage() {
                   onManualVerify={() => handleVerify(selectedReceipt.id)}
                   onManualReject={() => handleReject(selectedReceipt.id)}
                   canManage={hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits')}
+                />
+              </div>
+            )}
+
+            {/* ─── Multi-bank verification (any provider, not just CBE) ─── */}
+            {selectedReceipt.status === 'pending' && (
+              <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 bg-indigo-600 rounded-md flex items-center justify-center">
+                    <ShieldCheck className="h-3.5 w-3.5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-indigo-900">Verify with the bank</h4>
+                    <p className="text-xs text-indigo-600 dark:text-blue-light-400">
+                      Any provider — auto-approves only when amount, account and reference all match
+                    </p>
+                  </div>
+                </div>
+                <BankVerifyButton
+                  depositId={selectedReceipt.id}
+                  onVerified={() => handleAutoVerified(selectedReceipt.id)}
+                  onOutcome={(outcome) => {
+                    if (outcome.verified) {
+                      setSuccess(`✅ Verified via ${outcome.bank?.toUpperCase() ?? 'the bank'}`);
+                    } else {
+                      setError(outcome.message);
+                    }
+                  }}
                 />
               </div>
             )}
