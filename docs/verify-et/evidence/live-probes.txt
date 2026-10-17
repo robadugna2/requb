@@ -1,0 +1,120 @@
+# Live probe transcript — https://verify.et
+# Captured: 2026-10-16 ~13:36–13:48 UTC  (from a single client IP)
+# Method: curl, no credentials unless stated.
+
+================================================================================
+[1] POST /api/verify            (no x-api-key)
+--------------------------------------------------------------------------------
+HTTP/1.1 401 Unauthorized
+Date: Fri, 16 Oct 2026 13:36:38 GMT
+Content-Type: application/json
+Content-Length: 42
+Server: cloudflare
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: x-request-id,X-Verify-Cache,Retry-After
+Vary: Origin
+x-request-id: 418fc889-230c-479c-be98-ff6557e646dd
+X-Robots-Tag: noindex, nofollow
+Strict-Transport-Security: max-age=31536000
+
+{"success":false,"message":"Unauthorized"}
+
+NOTE: Access-Control-Expose-Headers confirms x-request-id / X-Verify-Cache /
+      Retry-After are real, client-readable response headers.
+
+================================================================================
+[2] GET probes (no credentials)
+--------------------------------------------------------------------------------
+GET /api/uptime                                         -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/metrics                                        -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/verify/history                                 -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/webhook-endpoints                              -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/bank-accounts                                  -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/verify/550e8400-e29b-41d4-a716-446655440000     -> HTTP 401  {"success":false,"message":"Unauthorized"}
+GET /api/reports/summary                                -> HTTP 404  404 Not Found          <-- NO SUCH ROUTE
+                                                                       (docs claim /api/reports/* exists)
+
+================================================================================
+[3] POST probes with an INVALID x-api-key
+--------------------------------------------------------------------------------
+POST /api/verify            + x-api-key: VERIFY_BANK_ET_probe_invalid -> HTTP 401 {"success":false,"message":"Invalid API key."}
+POST /api/api-keys          + x-api-key: VERIFY_BANK_ET_probe_invalid -> HTTP 401 {"success":false,"message":"Invalid API key."}
+POST /api/webhook-endpoints + x-api-key: VERIFY_BANK_ET_probe_invalid -> HTTP 401 {"success":false,"message":"Invalid API key."}
+
+NOTE: distinct bodies — missing key => "Unauthorized"; bad key => "Invalid API key."
+
+================================================================================
+[4] POST /api/public/verify   (NO API KEY — public path, discovered in lib-*.js)
+--------------------------------------------------------------------------------
+Request: {"bank":"cbe","reference":"INVALIDTEST123"}
+HTTP 202, headers of interest:
+  X-RateLimit-Limit: 5
+  X-RateLimit-Remaining: 0
+  x-request-id: a14ca685-7f73-44b4-81bc-15cf2c596bf5
+
+{"success":true,"message":"Verification queued.","data":[],
+ "requestId":"327654e4-ca56-426a-aed1-f68918f6f62f",
+ "statusUrl":"/api/public/verify/327654e4-ca56-426a-aed1-f68918f6f62f",
+ "estimatedWaitMs":5000,
+ "verification":{"requestId":"327654e4-ca56-426a-aed1-f68918f6f62f","bank":"cbe",
+                 "processingStatus":"queued","status":"pending","verified":false},
+ "links":{"statusUrl":"/api/public/verify/327654e4-ca56-426a-aed1-f68918f6f62f",
+          "pollAfterMs":1500}}
+
+================================================================================
+[5] POST /api/public/verify   {reference} ONLY — universal smart router
+--------------------------------------------------------------------------------
+Request: {"reference":"INVALIDTEST123"}
+HTTP 202
+
+{"success":true,"message":"Verification queued.","data":[],
+ "requestId":"f10e5092-307f-43ff-9b2f-6096c3fa6f3d",
+ "statusUrl":"/api/public/verify/f10e5092-307f-43ff-9b2f-6096c3fa6f3d",
+ "estimatedWaitMs":5000,
+ "verification":{"requestId":"f10e5092-307f-43ff-9b2f-6096c3fa6f3d","bank":"cbe",
+                 "processingStatus":"queued","status":"pending","verified":false},
+ "links":{...}}
+
+NOTE: bank was INFERRED as "cbe" from the identifier shape alone. Universal
+      routing is real and server-side.
+
+================================================================================
+[6] POST /api/public/verify   {} — empty body
+--------------------------------------------------------------------------------
+{"success":false,
+ "message":"Missing `reference` for universal verification. Provide `reference` or use explicit `bank` payload fields.",
+ "data":[]}
+
+================================================================================
+[7] Poll status — GET /api/public/verify/327654e4-ca56-426a-aed1-f68918f6f62f
+    (6 seconds after submit)
+--------------------------------------------------------------------------------
+{"success":true,"message":"Verification status.",
+ "data":{"requestId":"327654e4-ca56-426a-aed1-f68918f6f62f",
+         "bank":"cbe",
+         "processingStatus":"completed",
+         "status":"not_found",
+         "verified":false,
+         "result":{"bank":"cbe","status":"not_found","verified":false,
+                   "receiptNumber":"INVALIDTEST123"},
+         "errorMessage":"No CBE transaction found.",
+         "error":{"code":"not_found","message":"No CBE transaction found.","retryable":false},
+         "queuedAt":"2026-10-16T13:46:45.513Z",
+         "startedAt":"2026-10-16T13:46:45.547Z",
+         "completedAt":"2026-10-16T13:46:45.985Z"}}
+
+NOTE: full lifecycle in ~470 ms. Response SHAPE for poll = data is an OBJECT
+      with a nested `result`. For submit, data is an ARRAY. Handle both.
+
+================================================================================
+[8] Rate limit reached on the public path (subsequent attempts)
+--------------------------------------------------------------------------------
+{"success":false,
+ "message":"You have reached the free receipt check limit. Sign in to keep checking receipts.",
+ "data":[],
+ "retryAfterSeconds":713,
+ "error":{"code":"PUBLIC_VERIFY_RATE_LIMITED","retryAfterSeconds":713}}
+
+NOTE: observed retryAfterSeconds values 713, 3228, 711 across attempts ->
+      a rolling window. Public endpoint = 5 checks per window per client.
+      NOT viable for automated production verification. Use x-api-key.

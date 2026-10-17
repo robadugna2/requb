@@ -6,6 +6,7 @@ import { UsersModule } from './modules/users/users.module';
 import { AdminsModule } from './modules/admins/admins.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { DepositsModule } from './modules/deposits/deposits.module';
+import { BankVerificationModule } from './modules/bank-verification/bank-verification.module';
 import { LotteryModule } from './modules/lottery/lottery.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { OcrModule } from './modules/ocr/ocr.module';
@@ -27,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     UsersModule,
     GroupsModule,
     DepositsModule,
+    BankVerificationModule,
     LotteryModule,
     TelegramModule,
     OcrModule,

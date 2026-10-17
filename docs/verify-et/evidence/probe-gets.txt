@@ -1,0 +1,28 @@
+########## GET /api/uptime
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/metrics
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/verify/history
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/webhook-endpoints
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/bank-accounts
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/verify/550e8400-e29b-41d4-a716-446655440000
+HTTP 401 | ct=application/json | 42B
+{"success":false,"message":"Unauthorized"}
+
+########## GET /api/reports/summary
+HTTP 404 | ct=text/plain; charset=UTF-8 | 13B
+404 Not Found
+

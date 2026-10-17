@@ -14,3 +14,12 @@ nul
 /backups/
 .zcode/
 apps/api/uploads/
+
+# local agent workspace / scratch (never committed)
+.scratch/
+.workbuddy-ai/
+
+# bulky raw browser captures of third-party sites (kept local: contain
+# captured header values; the summaries in docs/verify-et/ are committed instead)
+docs/verify-et/evidence/rea-*.json
+docs/verify-et/evidence/*-dom.html

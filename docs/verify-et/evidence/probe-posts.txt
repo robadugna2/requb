@@ -1,0 +1,12 @@
+########## POST /api/verify (bad key)
+HTTP 401
+{"success":false,"message":"Invalid API key."}
+
+########## POST /api/api-keys (bad key)
+HTTP 401
+{"success":false,"message":"Invalid API key."}
+
+########## POST /api/webhook-endpoints (bad key)
+HTTP 401
+{"success":false,"message":"Invalid API key."}
+
