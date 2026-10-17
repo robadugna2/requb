@@ -20,6 +20,9 @@ import {
   Sparkles,
   Crosshair,
   FileUp,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { enhanceFile, cropAndEnhance } from '@/lib/imageEnhance';
@@ -28,6 +31,7 @@ import type { BatchJobStatus } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/Toast';
 import { CbeTransactionCard } from '@/components/ui/CbeVerifyPanel';
+import { MultiBankVerifyPanel } from '@/components/ui/MultiBankVerifyPanel';
 import FtScannerCamera from '@/components/scan/FtScannerCamera';
 import FtImageCropper from '@/components/scan/FtImageCropper';
 import MemberPickerModal from '@/components/scan/MemberPickerModal';
@@ -359,6 +363,8 @@ function ScanWorkflow() {
   const [scanSenders, setScanSenders] = useState<Record<string, string>>({});
   const [scanNotice, setScanNotice] = useState('');
   const [manualFt, setManualFt] = useState('');
+  /** Multi-bank lookup: check any provider's reference without creating a deposit. */
+  const [showBankLookup, setShowBankLookup] = useState(false);
 
   // Review state
   const [items, setItems] = useState<ScanItem[]>([]);
@@ -1459,6 +1465,36 @@ function ScanWorkflow() {
                 <p className="text-xs text-gray-400 mt-1">
                   Each FT is verified against CBE and auto-paired instantly. Duplicates are flagged and never recorded twice.
                 </p>
+              )}
+            </div>
+
+            {/* Multi-bank lookup — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, … */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <button
+                onClick={() => setShowBankLookup((v) => !v)}
+                className="flex w-full items-center gap-2 text-left"
+              >
+                <span className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-3.5 w-3.5 text-white" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-semibold text-gray-900 dark:text-white/90">
+                    Check a receipt from any bank
+                  </span>
+                  <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                    CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, Siinqee, CBE Birr, Kaafi &amp; Coopay eBirr
+                  </span>
+                </span>
+                {showBankLookup ? (
+                  <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+                )}
+              </button>
+              {showBankLookup && (
+                <div className="mt-3">
+                  <MultiBankVerifyPanel />
+                </div>
               )}
             </div>
 
