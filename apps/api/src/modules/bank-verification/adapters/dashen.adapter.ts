@@ -47,11 +47,19 @@ export class DashenAdapter implements BankAdapter {
       : ['reference (the Dashen reference number printed on the receipt)'];
   }
 
+  /**
+   * The reference as Dashen stores it.
+   *
+   * The receipt endpoint is CASE-SENSITIVE: "082WDTS262290003" resolves while
+   * "082wdts262290003" comes back "Transaction not found". Dashen references are
+   * always upper-case, so normalising here makes a typed-in or OCR-read
+   * reference work instead of reporting a false negative on a real payment.
+   */
   private referenceOf(identifiers: BankIdentifiers): string | undefined {
     const value =
       identifiers.referenceNumber ?? identifiers.transactionNumber ?? identifiers.receiptNumber;
     const trimmed = value?.trim();
-    return trimmed ? trimmed : undefined;
+    return trimmed ? trimmed.toUpperCase() : undefined;
   }
 
   async verify(identifiers: BankIdentifiers): Promise<BankVerificationResult> {

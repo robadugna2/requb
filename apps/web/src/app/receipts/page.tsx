@@ -31,7 +31,7 @@ import {
   verifyDeposit,
   rejectDeposit,
   getMediaUrl,
-  autoVerifyDepositCbe,
+  autoVerifyDepositWithBank,
   getGroup,
   getUnknownSenders,
   resolveUnknownSender,
@@ -199,12 +199,16 @@ export default function ReceiptsPage() {
   };
 
   /**
-   * Re-run the CBE check on every pending receipt in the current scope —
+   * Re-run the bank check on every pending receipt in the current scope —
    * one at a time, so the bank API is not hammered and progress is visible.
-   * Deposits whose FT now verifies flip to VERIFIED; the rest stay pending
-   * (a genuine mismatch needs human review).
+   * Deposits whose reference now verifies flip to VERIFIED; the rest stay
+   * pending (a genuine mismatch needs human review).
+   *
+   * Uses the multi-bank endpoint, not the CBE-only one: each deposit is checked
+   * against the provider that issued its reference, so a pending Dashen or
+   * Telebirr receipt is not asked of CBE and reported as "not found".
    */
-  const reverifyPendingWithCbe = async () => {
+  const reverifyPendingWithBank = async () => {
     const pending = receipts.filter((r) => r.status === 'pending');
     if (pending.length === 0) return;
     setReverifyRunning(true);
@@ -215,7 +219,9 @@ export default function ReceiptsPage() {
       try {
         // Prefer the receiver account recorded on the deposit (where the money
         // actually went); the server also falls back to all group accounts.
-        const res = await autoVerifyDepositCbe(r.id, r.receiverAccount || undefined);
+        const res = await autoVerifyDepositWithBank(r.id, {
+          accountNumber: r.receiverAccount || undefined,
+        });
         if (res.verified) verified += 1;
         else failed += 1;
       } catch {
@@ -225,7 +231,7 @@ export default function ReceiptsPage() {
     }
     setReverifyRunning(false);
     setSuccess(
-      `CBE re-verify finished: ${verified} confirmed, ${failed} still pending (mismatch or bank unavailable).`,
+      `Re-verify finished: ${verified} confirmed, ${failed} still pending (mismatch or bank unavailable).`,
     );
     await fetchReceipts();
   };
@@ -367,7 +373,7 @@ export default function ReceiptsPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => void reverifyPendingWithCbe()}
+            onClick={() => void reverifyPendingWithBank()}
             disabled={reverifyRunning || pendingCount === 0}
             loading={reverifyRunning}
             className="gap-2"

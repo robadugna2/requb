@@ -133,6 +133,12 @@ export class CbeVerificationService {
    * Delegates to the shared deposit verifier so CBE and every other bank apply
    * the same three checks (amount, receiver account, duplicate reference) and
    * write the same evidence. Returns the legacy shape the admin UI reads.
+   *
+   * The provider is NOT forced here. The route that reaches this method is
+   * named for CBE, but the deposit may hold a Dashen or Telebirr reference, and
+   * asking CBE about it produces a misleading "not found". Leaving `bank`
+   * unset lets the verifier use the deposit's own bank name and then the
+   * reference's shape, exactly as the multi-bank path does.
    */
   async autoVerifyDeposit(
     depositId: string,
@@ -146,7 +152,7 @@ export class CbeVerificationService {
     const outcome = await this.depositVerification.autoVerifyWithProvider(
       depositId,
       adminId,
-      { bank: 'cbe', accountNumber: specificAccount },
+      { accountNumber: specificAccount },
     );
 
     const deposit = await this.prisma.deposit.findUnique({

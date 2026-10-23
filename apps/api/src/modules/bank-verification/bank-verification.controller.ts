@@ -8,7 +8,15 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { BankVerificationService } from './bank-verification.service';
@@ -16,17 +24,32 @@ import { DepositVerificationService } from './deposit-verification.service';
 import { BANK_CODES, BANK_LABELS } from './bank-rules';
 import type { BankCode, BankIdentifiers } from './types';
 
-/** Request body for a standalone multi-bank lookup. */
-class BankLookupDto {
-  @IsOptional()
-  @IsIn(BANK_CODES as unknown as string[])
-  bank?: BankCode;
-
+/** The identifier slots a caller may supply, flat or nested. */
+class BankIdentifiersDto {
   @IsOptional() @IsString() @MaxLength(200) referenceNumber?: string;
   @IsOptional() @IsString() @MaxLength(200) receiptNumber?: string;
   @IsOptional() @IsString() @MaxLength(200) transactionNumber?: string;
   @IsOptional() @IsString() @MaxLength(20) accountSuffix?: string;
   @IsOptional() @IsString() @MaxLength(20) phone?: string;
+}
+
+/** Request body for a standalone multi-bank lookup. */
+class BankLookupDto extends BankIdentifiersDto {
+  @IsOptional()
+  @IsIn(BANK_CODES as unknown as string[])
+  bank?: BankCode;
+
+  /**
+   * The web client sends identifiers as one nested object. Accepting it is not
+   * cosmetic: the global ValidationPipe runs with `forbidNonWhitelisted`, so an
+   * undeclared `identifiers` key rejected the whole request with HTTP 400 —
+   * every standalone lookup failed, for every provider, before reaching a bank.
+   */
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => BankIdentifiersDto)
+  identifiers?: BankIdentifiersDto;
 
   /** Alternatively paste a receipt link or SMS and let the router work it out. */
   @IsOptional() @IsString() @MaxLength(4096) rawInput?: string;
@@ -98,17 +121,20 @@ export class BankVerificationController {
    * Standalone verification. Does NOT touch any deposit record.
    *
    * Body: { bank?, referenceNumber?, receiptNumber?, transactionNumber?,
-   *         accountSuffix?, phone?, rawInput? }
+   *         accountSuffix?, phone?, identifiers?, rawInput? }
+   *
+   * Identifiers may arrive flat or nested under `identifiers`; the nested form
+   * wins because that is what the admin UI sends.
    */
   @Post('lookup')
   @HttpCode(200)
   lookup(@Body() dto: BankLookupDto) {
     const identifiers: BankIdentifiers = {
-      referenceNumber: dto.referenceNumber,
-      receiptNumber: dto.receiptNumber,
-      transactionNumber: dto.transactionNumber,
-      accountSuffix: dto.accountSuffix,
-      phone: dto.phone,
+      referenceNumber: dto.identifiers?.referenceNumber ?? dto.referenceNumber,
+      receiptNumber: dto.identifiers?.receiptNumber ?? dto.receiptNumber,
+      transactionNumber: dto.identifiers?.transactionNumber ?? dto.transactionNumber,
+      accountSuffix: dto.identifiers?.accountSuffix ?? dto.accountSuffix,
+      phone: dto.identifiers?.phone ?? dto.phone,
     };
 
     return this.verification.verify({

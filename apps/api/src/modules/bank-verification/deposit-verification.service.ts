@@ -163,12 +163,11 @@ export class DepositVerificationService {
 
     const group = deposit.cycle.group;
     const candidateAccounts = this.resolveCandidateAccounts(deposit, options, group);
-    const expectedAccount = candidateAccounts[0];
 
     // ── Which bank? ────────────────────────────────────────────────────────
     const bank = options.bank ?? this.bankFromName(deposit.bankName) ?? undefined;
     const identifiers = bank
-      ? this.buildIdentifiers(bank, reference, expectedAccount)
+      ? this.buildIdentifiers(bank, reference, candidateAccounts[0])
       : { referenceNumber: reference };
 
     const resolvedBank =
@@ -239,9 +238,16 @@ export class DepositVerificationService {
     // checking the receipt against a different account would reject a genuine
     // payment. Falls back to the first candidate when no account was used
     // (providers whose lookup is not account-specific).
-    const receiverAccountToCheck = matchedAccount ?? expectedAccount;
+    //
+    // The candidates are the GROUP's accounts, which are CBE numbers in
+    // practice. A Dashen receipt prints the Dashen account the money landed in,
+    // and no CBE number can ever match it — so the comparison is only meaningful
+    // for a provider the group actually banks with. Skipping it otherwise keeps
+    // the check honest: an unjudgeable comparison must not reject a real payment.
+    const receiverAccountToCheck = matchedAccount ?? candidateAccounts[0];
 
-    const receiverMatched = this.receiverMatches(
+    const receiverMatched = this.receiverMatchesForBank(
+      resolvedBank,
       result.receiverAccount,
       receiverAccountToCheck,
     );
@@ -432,6 +438,35 @@ export class DepositVerificationService {
       default:
         return { referenceNumber: ref };
     }
+  }
+
+  /**
+   * Compare the receipt's receiver account, but only when the account we hold
+   * could actually belong to the bank that answered.
+   *
+   * WHY THE BANK MATTERS
+   * --------------------
+   * A group's saved receivers live in `cbeAccountNumbers` — CBE accounts by
+   * definition. A Dashen receipt prints the Dashen account the money landed in
+   * (e.g. "5400******011"). Comparing the two can only ever produce a mismatch,
+   * so every genuine Dashen payment was rejected as `receiver_mismatch` and left
+   * PENDING even though the bank had confirmed it.
+   *
+   * When the group has not declared that provider there is no expectation to
+   * compare against, and "cannot judge" must read as true — the same rule this
+   * check already applies to an unreadable account. Approval still requires the
+   * amount to match and the reference to be unused, and the payer is paired by
+   * the usual pipeline, so this does not open the door to a wrong approval.
+   */
+  private receiverMatchesForBank(
+    bank: BankCode,
+    receiptAccount?: string,
+    expectedAccount?: string,
+  ): boolean {
+    // `cbeAccountNumbers` holds CBE accounts. Only CBE can be compared to them.
+    if (bank !== 'cbe') return true;
+
+    return this.receiverMatches(receiptAccount, expectedAccount);
   }
 
   /**
