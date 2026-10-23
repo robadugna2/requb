@@ -58,7 +58,11 @@ function readLabel(
   const stops = [...stopLabels].sort((a, b) => b.length - a.length).map(escape);
 
   for (const label of labels) {
-    const found = new RegExp(`${escape(label)}\\s*[:\\-]?\\s*`, 'i').exec(text);
+    // The label must start at a word boundary, otherwise a short label matches
+    // the tail of a longer one: on a real Dashen receipt the bare label "Date"
+    // matched inside "VAT Reg. Date: 23/04/1995" (the bank's incorporation
+    // date) and shadowed the genuine "Transaction Date" further down the page.
+    const found = new RegExp(`(?<![A-Za-z])${escape(label)}\\s*[:\\-]?\\s*`, 'i').exec(text);
     if (!found) continue;
 
     const rest = text.slice(found.index + found[0].length);
@@ -250,17 +254,36 @@ export function extractReceiptFields(
 /**
  * Best-effort date parse. Ethiopian receipt pages use several formats, so we
  * try the platform parser first and only then fall back to DD/MM/YYYY.
+ *
+ * The raw value often carries trailing page furniture — a real Dashen receipt
+ * yields "Aug 15, 2026, 09:52:47 pm Transaction Details", which `new Date()`
+ * rejects outright. So the date-shaped prefix is extracted before parsing,
+ * rather than handing the whole string to the platform parser.
  */
 export function parseReceiptDate(raw?: string): string | undefined {
   if (!raw) return undefined;
-  const direct = new Date(raw);
-  if (!Number.isNaN(direct.getTime())) return direct.toISOString();
 
-  const parts = raw.replace(/,/g, ' ').trim().match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-  if (!parts) return undefined;
-  const [, first, second, year] = parts;
-  const candidate = new Date(
-    `${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}T00:00:00Z`,
+  const text = raw.trim();
+
+  // "Aug 15, 2026, 09:52:47 pm" — month name, day, year, optional time.
+  const named = /([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}(?:,?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?)?)/i.exec(
+    text,
   );
-  return Number.isNaN(candidate.getTime()) ? undefined : candidate.toISOString();
+  if (named) {
+    const parsed = new Date(named[1].replace(/,/g, ' '));
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  // "15/08/2026" (DD/MM/YYYY) — unambiguous enough to construct directly.
+  const numeric = /(\d{1,2})[/-](\d{1,2})[/-](\d{4})/.exec(text);
+  if (numeric) {
+    const [, first, second, year] = numeric;
+    const candidate = new Date(
+      `${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}T00:00:00Z`,
+    );
+    if (!Number.isNaN(candidate.getTime())) return candidate.toISOString();
+  }
+
+  const direct = new Date(text);
+  return Number.isNaN(direct.getTime()) ? undefined : direct.toISOString();
 }
