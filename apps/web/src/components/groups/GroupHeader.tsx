@@ -13,6 +13,7 @@ import {
   Trash2,
   Ticket,
   Zap,
+  RotateCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -20,7 +21,13 @@ import Modal from '@/components/ui/Modal';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import LocationPicker from '@/components/ui/LocationPicker';
 import { CbeAccountSettings } from '@/components/ui/CbeVerifyPanel';
-import { updateGroup, softDeleteGroup, updateGroupCbeAccounts, getMediaUrl } from '@/lib/api';
+import {
+  updateGroup,
+  softDeleteGroup,
+  updateGroupCbeAccounts,
+  getMediaUrl,
+  createCycle,
+} from '@/lib/api';
 import type { GroupDetail } from '@/lib/api';
 
 interface GroupHeaderProps {
@@ -95,6 +102,7 @@ export default function GroupHeader({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [startingCycle, setStartingCycle] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
@@ -159,6 +167,37 @@ export default function GroupHeader({
       notifyError(axiosErr.response?.data?.message || 'Failed to update group information.');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  /**
+   * Start the next cycle.
+   *
+   * Deposits must belong to a cycle, and the scanner refuses to record anything
+   * while the group has no ACTIVE one — it points here. Until now nothing here
+   * could actually do it: the endpoint existed but no control called it, so a
+   * group whose cycles had all completed was stuck.
+   */
+  const handleStartCycle = async () => {
+    const next = (group.currentCycle ?? 0) + 1;
+    if (
+      !window.confirm(
+        `Start cycle ${next} for "${group.name}"?\n\nThe current cycle will be marked completed and new deposits will be recorded against cycle ${next}.`,
+      )
+    ) {
+      return;
+    }
+    setStartingCycle(true);
+    try {
+      await createCycle(groupId);
+      notifySuccess(`Cycle ${next} started. New deposits can now be recorded.`);
+      router.refresh();
+      window.location.reload();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      notifyError(axiosErr.response?.data?.message || 'Failed to start a new cycle.');
+    } finally {
+      setStartingCycle(false);
     }
   };
 
@@ -265,6 +304,18 @@ export default function GroupHeader({
               <Button onClick={onDrawLottery} loading={drawLoading} className="flex-1 min-w-[9.5rem] justify-center md:flex-none md:min-w-0">
                 <Ticket className="h-4 w-4 mr-2" />
                 Draw Lottery
+              </Button>
+            )}
+            {canTriggerLottery && (
+              <Button
+                variant="secondary"
+                onClick={() => void handleStartCycle()}
+                loading={startingCycle}
+                className="flex-1 min-w-[9.5rem] justify-center md:flex-none md:min-w-0"
+                title="Close the current cycle and open the next one so new deposits can be recorded"
+              >
+                <RotateCw className="h-4 w-4 mr-2" />
+                Start New Cycle
               </Button>
             )}
           </div>
