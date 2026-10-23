@@ -17,19 +17,17 @@ import {
   TrendingUp,
   AlertTriangle,
   Ban,
-  Zap,
+  ShieldCheck,
   ScanLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
-import { AutoVerifyButton } from '@/components/ui/CbeVerifyPanel';
 import { BankVerifyButton } from '@/components/ui/MultiBankVerifyPanel';
 import {
   getGroupDeposits,
   verifyDeposit,
   rejectDeposit,
-  autoVerifyDepositCbe,
   getGroupPenalties,
   payPenalty,
   waivePenalty,
@@ -42,7 +40,6 @@ const DEPOSITS_PER_PAGE = 25;
 interface DepositsTabProps {
   groupId: string;
   group: GroupDetail;
-  groupCbeAccounts: string[];
   canManageDeposits: boolean;
   refreshKey: number;
   notifySuccess: (msg: string) => void;
@@ -52,7 +49,6 @@ interface DepositsTabProps {
 export default function DepositsTab({
   groupId,
   group,
-  groupCbeAccounts,
   canManageDeposits,
   refreshKey,
   notifySuccess,
@@ -437,14 +433,9 @@ export default function DepositsTab({
                   </div>
                   {deposit.status === 'pending' && canManageDeposits && (
                     <div className="flex flex-col gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => handleVerify(deposit.id)}
-                        disabled={verifyingDepositId === deposit.id}
-                        className="p-1.5 text-green-600 dark:text-success-400 bg-green-50 dark:bg-success-500/10 rounded-lg disabled:opacity-40 active:scale-95 transition-all"
-                        title="Verify"
-                      >
-                        <CheckCircle className="h-4 w-4" />
-                      </button>
+                      {/* One verification action per row. The multi-bank check
+                          covers CBE too, so a second CBE-only button here was
+                          two ways to do the same job. */}
                       <BankVerifyButton
                         depositId={deposit.id}
                         iconOnly
@@ -562,14 +553,6 @@ export default function DepositsTab({
                           </button>
                           {deposit.status === 'pending' && canManageDeposits && (
                             <>
-                              <button
-                                onClick={() => handleVerify(deposit.id)}
-                                disabled={verifyingDepositId === deposit.id}
-                                className="p-1.5 text-green-600 dark:text-success-400 hover:bg-green-50 dark:hover:bg-success-500/10 rounded-lg transition-colors disabled:opacity-40"
-                                title="Verify"
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                              </button>
                               <BankVerifyButton
                                 depositId={deposit.id}
                                 iconOnly
@@ -792,32 +775,46 @@ export default function DepositsTab({
               </div>
             )}
 
-            {previewDeposit.status === 'pending' && (
+            {previewDeposit.status === 'pending' && canManageDeposits && (
               <div className="border-t border-blue-100 pt-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 -mx-1 mt-2">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center">
-                    <Zap className="h-3 w-3 text-white" />
+                    <ShieldCheck className="h-3 w-3 text-white" />
                   </div>
-                  <h4 className="text-sm font-bold text-blue-900">CBE Auto-Verification</h4>
+                  <h4 className="text-sm font-bold text-blue-900">Verify with the bank</h4>
                 </div>
-                <AutoVerifyButton
-                  depositId={previewDeposit.id}
-                  ftNumber={previewDeposit.ftNumber}
-                  groupId={groupId}
-                  cbeAccountNumbers={groupCbeAccounts}
-                  expectedAmount={previewDeposit.amount}
-                  onVerified={() => {
-                    setDeposits((prev) =>
-                      prev.map((d) => d.id === previewDeposit.id ? { ...d, status: 'verified' as const, autoVerified: true } : d)
-                    );
-                    setPreviewDeposit({ ...previewDeposit, status: 'verified' });
-                    notifySuccess('✅ Deposit auto-verified via CBE Direct!');
-                  }}
-                  onAutoVerifyFn={autoVerifyDepositCbe}
-                  onManualVerify={() => handleVerify(previewDeposit.id)}
-                  onManualReject={() => handleReject(previewDeposit.id)}
-                  canManage={canManageDeposits}
-                />
+                {/* One verification surface for every provider — CBE, BOA,
+                    Dashen, Telebirr, M-Pesa, Awash and the rest. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <BankVerifyButton
+                    depositId={previewDeposit.id}
+                    onVerified={() => handleBankVerified(previewDeposit.id)}
+                    onOutcome={(outcome) => {
+                      if (!outcome.verified) notifyError(outcome.message);
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleVerify(previewDeposit.id)}
+                    loading={verifyingDepositId === previewDeposit.id}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve manually
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReject(previewDeposit.id)}
+                    className="text-red-600 dark:text-error-400 border-red-200 hover:bg-red-50 dark:hover:bg-error-500/10"
+                  >
+                    <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                  </Button>
+                </div>
+                {!previewDeposit.ftNumber && (
+                  <p className="mt-2 text-[11px] text-amber-700 dark:text-warning-400">
+                    No reference number on this deposit, so it cannot be checked against a bank.
+                  </p>
+                )}
               </div>
             )}
 

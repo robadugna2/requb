@@ -96,8 +96,25 @@ export function isValidReferenceForBank(bank: BankCode, value: string): boolean 
   }
 }
 
-/** A single receipt-URL routing rule. */
-export interface ReceiptUrlRule {
+/**
+ * True when a value could plausibly be a transaction reference from ANY
+ * supported provider.
+ *
+ * Used by the camera scanner, which reads whatever document the admin
+ * photographs and cannot know the bank up front. Deliberately permissive —
+ * the per-bank adapters do the strict validation, and a false positive here
+ * costs one failed lookup, while a false negative silently drops a real
+ * member payment.
+ */
+export function isPlausibleReference(value: string): boolean {
+  const v = (value ?? '').trim();
+  if (v.length < 6 || v.length > 128) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(v)) return false;
+  // Reject anything with no letters and no obvious transaction shape.
+  return /[A-Za-z]/.test(v) || /^\d{10,}$/.test(v);
+}
+
+/** A single receipt-URL routing rule. */export interface ReceiptUrlRule {
   bank: BankCode;
   /** Hosts that identify this bank. */
   hostPatterns: string[];

@@ -99,7 +99,7 @@ export class FtDetectionService {
         : [...(extraErrors ?? []), ...(r.errors ?? [])].filter(Boolean).length
           ? [...(extraErrors ?? []), ...(r.errors ?? [])].filter(Boolean)
           : [
-              'No CBE FT numbers were detected. Try a closer, well-lit photo, or add the FT number manually below.',
+              'No transaction reference numbers were detected. Try a closer, well-lit photo, or add the reference manually below.',
             ];
     return {
       ftNumbers: r.ftNumbers,

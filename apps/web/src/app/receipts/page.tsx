@@ -25,8 +25,6 @@ import { useLanguage } from '@/components/layout/LanguageContext';
 import { Button } from '@/components/ui/button';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
-import { AutoVerifyButton, CbeLookupPanel } from '@/components/ui/CbeVerifyPanel';
-import type { ReceiverAccountOption } from '@/components/ui/CbeVerifyPanel';
 import { BankVerifyButton, MultiBankVerifyPanel } from '@/components/ui/MultiBankVerifyPanel';
 import {
   getDeposits,
@@ -34,14 +32,12 @@ import {
   rejectDeposit,
   getMediaUrl,
   autoVerifyDepositCbe,
-  cbeLookup,
-  getGroups,
   getGroup,
   getUnknownSenders,
   resolveUnknownSender,
   dismissUnknownSender,
 } from '@/lib/api';
-import type { ReceiptItem, GroupListItem, UnknownSenderItem, GroupMember } from '@/lib/api';
+import type { ReceiptItem, UnknownSenderItem, GroupMember } from '@/lib/api';
 import MemberPickerModal from '@/components/scan/MemberPickerModal';
 import { useAdminPermissions, hasPermission } from '@/lib/useAdminPermissions';
 
@@ -60,12 +56,7 @@ export default function ReceiptsPage() {
   const [reverifyRunning, setReverifyRunning] = useState(false);
   const [reverifyProgress, setReverifyProgress] = useState({ done: 0, total: 0 });
 
-  // Group CBE accounts map: groupId -> cbeAccountNumbers
-  const [groupCbeAccounts, setGroupCbeAccounts] = useState<Record<string, string[]>>({});
-
-  // Manual FT lookup panel
-  const [showLookupPanel, setShowLookupPanel] = useState(false);
-  // Multi-bank lookup panel (CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, …)
+  // One lookup panel for every provider (CBE included)
   const [showBankPanel, setShowBankPanel] = useState(false);
   // Unknown Senders queue
   const [unknownSenders, setUnknownSenders] = useState<UnknownSenderItem[]>([]);
@@ -255,21 +246,6 @@ export default function ReceiptsPage() {
     }
   };
 
-  const fetchGroupCbeAccounts = async () => {
-    try {
-      const groups = await getGroups();
-      const map: Record<string, string[]> = {};
-      groups.forEach((g: GroupListItem & { cbeAccountNumbers?: string[] }) => {
-        if (g.cbeAccountNumbers?.length) {
-          map[g.id] = g.cbeAccountNumbers;
-        }
-      });
-      setGroupCbeAccounts(map);
-    } catch {
-      // silently fail - CBE accounts are optional
-    }
-  };
-
   useEffect(() => {
     fetchUnknownSenders();
     const onQueueChange = () => void fetchUnknownSenders();
@@ -280,7 +256,6 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     fetchReceipts();
-    fetchGroupCbeAccounts();
   }, [statusFilter]);
 
   const handleVerify = async (id: string) => {
@@ -346,30 +321,6 @@ export default function ReceiptsPage() {
   const uniqueGroups = [...new Set(receipts.map((r) => r.groupName))];
   const pendingCount = receipts.filter((r) => r.status === 'pending').length;
 
-  /**
-   * Every receiver account pickable in the FT lookup panel: the group's
-   * configured CBE accounts plus every distinct account seen on a stored
-   * deposit (mid-cycle switches the admin never saved included).
-   */
-  const receiverAccountOptions = useMemo<ReceiverAccountOption[]>(() => {
-    const map = new Map<string, ReceiverAccountOption>();
-    Object.values(groupCbeAccounts)
-      .flat()
-      .forEach((a) => {
-        if (/^1000\d{9}$/.test(a)) map.set(a, { account: a, configured: true, count: 0 });
-      });
-    receipts.forEach((r) => {
-      const a = r.receiverAccount;
-      if (!a || !/^1000\d{9}$/.test(a)) return;
-      const entry = map.get(a);
-      if (entry) entry.count += 1;
-      else map.set(a, { account: a, configured: false, count: 1 });
-    });
-    return [...map.values()].sort(
-      (x, y) => Number(y.configured) - Number(x.configured) || y.count - x.count,
-    );
-  }, [groupCbeAccounts, receipts]);
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -408,7 +359,7 @@ export default function ReceiptsPage() {
           </p>
         </div>
 
-        {/* Camera FT scanner + Manual FT Lookup toggle */}
+        {/* Scanner + one consolidated lookup panel */}
         <div className="flex gap-2">
           <Button onClick={() => router.push('/scan')} className="gap-2">
             <ScanLine className="h-4 w-4" />
@@ -420,21 +371,12 @@ export default function ReceiptsPage() {
             disabled={reverifyRunning || pendingCount === 0}
             loading={reverifyRunning}
             className="gap-2"
-            title="Run the CBE check again on every pending receipt"
+            title="Run the bank check again on every pending receipt"
           >
             <RefreshCw className={`h-4 w-4 ${reverifyRunning ? 'animate-spin' : ''}`} />
             {reverifyRunning
               ? `Re-verifying ${reverifyProgress.done}/${reverifyProgress.total}…`
-              : `Re-verify with CBE${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowLookupPanel((v) => !v)}
-            className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
-          >
-          <Search className="h-4 w-4" />
-          FT Lookup
-          {showLookupPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              : `Re-verify with bank${pendingCount > 0 ? ` (${pendingCount})` : ''}`}
           </Button>
           <Button
             variant="outline"
@@ -442,35 +384,14 @@ export default function ReceiptsPage() {
             className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
           >
           <ShieldCheck className="h-4 w-4" />
-          All Banks
+          Look Up a Receipt
           {showBankPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>
       </div>
 
-      {/* CBE Manual FT Lookup Panel */}
-      {showLookupPanel && (
-        <div className="mb-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-blue-900">CBE Direct — Manual FT Lookup</h3>
-              <p className="text-xs text-blue-600 dark:text-blue-light-400">Verify any transaction using FT number + CBE account</p>
-            </div>
-          </div>
-          <CbeLookupPanel
-            defaultAccount={receiverAccountOptions[0]?.account || ''}
-            onLookupFn={cbeLookup}
-            receiverAccounts={receiverAccountOptions}
-            ftSuggestions={receipts}
-          />
-        </div>
-      )}
-
-      {/* Multi-bank lookup panel — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash,
-          Siinqee, CBE Birr, Kaafi eBirr, Coopay eBirr. Read-only. */}
+      {/* One lookup panel for every provider — CBE included, so a separate
+          CBE-only panel would just be a second way to do the same job. */}
       {showBankPanel && (
         <div className="mb-6 p-5 bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -478,9 +399,9 @@ export default function ReceiptsPage() {
               <ShieldCheck className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-indigo-900">Multi-Bank Lookup</h3>
+              <h3 className="text-sm font-bold text-indigo-900">Check a Bank Receipt</h3>
               <p className="text-xs text-indigo-600 dark:text-blue-light-400">
-                Check any bank or wallet receipt — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash and more
+                CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, Siinqee, CBE Birr, Kaafi &amp; Coopay eBirr
               </p>
             </div>
           </div>
@@ -624,7 +545,7 @@ export default function ReceiptsPage() {
               {/* Auto-verified badge */}
               {receipt.autoVerified && (
                 <div className="absolute top-2 right-2 flex items-center gap-1 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
-                  <Zap className="h-2.5 w-2.5" /> CBE Auto
+                  <Zap className="h-2.5 w-2.5" /> Auto-verified
                 </div>
               )}
 
@@ -807,32 +728,49 @@ export default function ReceiptsPage() {
               </div>
             )}
 
-            {/* ─── CBE Auto-Verification Section ─── */}
+            {/* ─── Verification Section ─── */}
             {selectedReceipt.status === 'pending' && (
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
-                    <Zap className="h-3.5 w-3.5 text-white" />
+                    <ShieldCheck className="h-3.5 w-3.5 text-white" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-blue-900">CBE Auto-Verification</h4>
+                    <h4 className="text-sm font-bold text-blue-900">Verify with the bank</h4>
                     <p className="text-xs text-blue-600 dark:text-blue-light-400">
-                      Verify via CBE Direct API using the FT number
+                      Any supported provider — CBE, BOA, Dashen, Telebirr and more
                     </p>
                   </div>
                 </div>
-                <AutoVerifyButton
-                  depositId={selectedReceipt.id}
-                  ftNumber={selectedReceipt.ftNumber}
-                  groupId={selectedReceipt.groupId}
-                  cbeAccountNumbers={groupCbeAccounts[selectedReceipt.groupId] || []}
-                  expectedAmount={selectedReceipt.amount}
-                  onVerified={() => handleAutoVerified(selectedReceipt.id)}
-                  onAutoVerifyFn={autoVerifyDepositCbe}
-                  onManualVerify={() => handleVerify(selectedReceipt.id)}
-                  onManualReject={() => handleReject(selectedReceipt.id)}
-                  canManage={hasPermission(permissions, selectedReceipt.groupId, 'canManageDeposits')}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <BankVerifyButton
+                    depositId={selectedReceipt.id}
+                    onVerified={() => handleAutoVerified(selectedReceipt.id)}
+                    onOutcome={(outcome) => {
+                      if (!outcome.verified) setError(outcome.message);
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleVerify(selectedReceipt.id)}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve manually
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReject(selectedReceipt.id)}
+                    className="text-red-600 dark:text-error-400 border-red-200 hover:bg-red-50 dark:hover:bg-error-500/10"
+                  >
+                    <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                  </Button>
+                </div>
+                {!selectedReceipt.ftNumber && (
+                  <p className="mt-2 text-[11px] text-amber-700 dark:text-warning-400">
+                    No reference number on this deposit, so it cannot be checked against a bank.
+                  </p>
+                )}
               </div>
             )}
 
@@ -871,7 +809,7 @@ export default function ReceiptsPage() {
                 <StatusBadge status={selectedReceipt.status} />
                 {selectedReceipt.autoVerified && (
                   <span className="text-xs bg-blue-100 dark:bg-blue-light-500/20 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <Zap className="h-3 w-3" /> CBE Auto-Verified
+                    <Zap className="h-3 w-3" /> Auto-verified
                   </span>
                 )}
               </div>

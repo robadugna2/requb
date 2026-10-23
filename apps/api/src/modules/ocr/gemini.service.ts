@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { SettingsService } from '../settings/settings.service';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
+import { isPlausibleReference } from '../bank-verification/bank-rules';
 import { throttled } from '../../common/utils/ai-throttle';
 import { GEMINI_MODELS_URL, pickBestGeminiModel } from '../../common/utils/gemini-models';
 import type { FtScanResult } from './ocr.service';
@@ -14,16 +15,26 @@ import type { FtScanResult } from './ocr.service';
  */
 export const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank documents. Read this bank statement / transfer receipt photo and extract every transaction reference number AND the payer (sender) name printed with it.
 
+Reference formats differ per bank — recognise ALL of these:
+- CBE (Commercial Bank of Ethiopia): "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. Labels: "Reference No.", "FT No", "Transaction Ref", "VSC No".
+- Bank of Abyssinia: also FT-prefixed with the same shape as CBE. Use the bank name printed on the document to tell them apart.
+- Dashen Bank: a 3-digit prefix followed by 13 alphanumeric characters, e.g. 123ABCDEFGHIJKLM. Labels: "Transaction Reference", "Transfer Reference".
+- Awash Bank: an alphanumeric transaction number, usually labelled "Transaction No." or "Txn Ref".
+- Telebirr / M-Pesa: a 10-character alphanumeric transaction number, labelled "Transaction No." or "Txn ID".
+- Siinqee: an "E" followed by 11 or more alphanumeric characters.
+- CBE Birr / Kaafi eBirr / Coopay eBirr: an alphanumeric receipt or transaction id, labelled "Transaction ID", "Receipt No." or "Txn Ref".
+
 Rules:
-- CBE (Commercial Bank of Ethiopia) transaction references look like "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. They appear next to labels like "Reference No.", "FT No", "Transaction Ref", "VSC No", or in statement rows. References may be wrapped across two lines inside one table cell — read them as one. Some have extended identifiers after "\\", "/", or "|" (e.g. FT24AB123456\\BNK) — return only the FT part.
-- For each FT number, also read the payer / sender / account-holder name printed nearest to it (same row or adjacent cell), if visible. Map it as senders: { "FT...": "PAYER FULL NAME" }.
-- Also report which bank the document is from.
-- Additionally report the pixel location of each FT number as regions: { "FT...": [x, y, width, height] } with all four values normalized 0.0–1.0 relative to the image dimensions (x, y = top-left corner of the tight box around the reference text).
+- References may be wrapped across two lines inside one table cell — read them as one.
+- Some have extended identifiers after "\\", "/", or "|" (e.g. FT24AB123456\\BNK) — return only the reference part.
+- For each reference, also read the payer / sender / account-holder name printed nearest to it (same row or adjacent cell), if visible. Map it as senders: { "<reference>": "PAYER FULL NAME" }.
+- Report which bank the document is from, using one of: CBE, BOA, Dashen, Awash, Telebirr, M-Pesa, Siinqee, CBE Birr, Kaafi eBirr, Coopay eBirr.
+- Additionally report the pixel location of each reference as regions: { "<reference>": [x, y, width, height] } with all four values normalized 0.0–1.0 relative to the image dimensions (x, y = top-left corner of the tight box around the reference text).
 
 Return ONLY valid JSON in this exact shape:
-{ "ftNumbers": ["FT...", "..."], "senders": { "FT...": "Payer Full Name" }, "regions": { "FT...": [0.12, 0.34, 0.20, 0.02] }, "bankName": "CBE", "confidence": 0.9 }`;
+{ "ftNumbers": ["<reference>", "..."], "senders": { "<reference>": "Payer Full Name" }, "regions": { "<reference>": [0.12, 0.34, 0.20, 0.02] }, "bankName": "CBE", "confidence": 0.9 }`;
 
-export const FT_USER_PROMPT = 'Find all transaction / FT reference numbers in this bank document photo:';
+export const FT_USER_PROMPT = 'Find all transaction reference numbers in this bank document photo:';
 
 /** Normalized (0–1) top-left box: [x, y, width, height] relative to the image */
 export type FtRegion = [number, number, number, number];
@@ -61,7 +72,7 @@ export function parseFtScanJson(content: string): {
     new Set(
       (Array.isArray(parsed.ftNumbers) ? parsed.ftNumbers : [])
         .map((ft: unknown) => normalizeFtNumber(String(ft ?? '')) ?? '')
-        .filter((ft: string) => /^FT\w{10}$/.test(ft)),
+        .filter((ft: string) => isPlausibleReference(ft)),
     ),
   );
 
@@ -69,7 +80,7 @@ export function parseFtScanJson(content: string): {
   for (const [ft, name] of Object.entries(parsed.senders ?? {})) {
     const clean = normalizeFtNumber(String(ft ?? ''));
     const cleanName = String(name ?? '').trim();
-    if (clean && cleanName && /^FT\w{10}$/.test(clean)) senders[clean] = cleanName;
+    if (clean && cleanName && isPlausibleReference(clean)) senders[clean] = cleanName;
   }
 
   // Optional per-FT bounding boxes: keep only sane normalized boxes for FTs

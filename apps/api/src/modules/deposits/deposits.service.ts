@@ -8,7 +8,8 @@ import { Prisma, VerificationStatus, PenaltyReason } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RulesEnforcementService } from '../groups/rules-enforcement.service';
 import { PenaltiesService } from '../groups/penalties.service';
-import { CbeVerificationService } from './cbe-verification.service';
+import { DepositVerificationService } from '../bank-verification/deposit-verification.service';
+import type { BankCode } from '../bank-verification/types';
 import { BatchDepositItemDto } from './dto/batch-create-deposit.dto';
 import { normalizeFtNumber } from '../../common/utils/ft-number';
 import {
@@ -53,7 +54,7 @@ export class DepositsService {
     private readonly prisma: PrismaService,
     private readonly rulesEnforcement: RulesEnforcementService,
     private readonly penaltiesService: PenaltiesService,
-    private readonly cbeVerification: CbeVerificationService,
+    private readonly depositVerification: DepositVerificationService,
   ) {}
 
   async findAll(
@@ -740,23 +741,26 @@ export class DepositsService {
           narrative: (raw.narrative as string) || undefined,
         });
 
-        // Same verify flow the scanner used client-side: CBE check decides
-        // verified vs pending; verification failure still leaves a created
-        // deposit for manual review.
+        // Same verify flow the scanner used client-side, but through the
+        // multi-bank engine: the deposit's own bank decides which provider is
+        // asked, and CBE remains the default for records that do not say.
         try {
-          const res = await this.cbeVerification.autoVerifyDeposit(
+          const res = await this.depositVerification.autoVerifyWithProvider(
             deposit.id,
             adminId,
-            data.accountNumber,
+            {
+              accountNumber: data.accountNumber,
+              bank: this.bankCodeFor(raw.bankName),
+            },
           );
           if (res.verified) {
-            entry = { ftNumber, status: 'verified', depositId: deposit.id, message: 'Created and auto-verified against CBE' };
+            entry = { ftNumber, status: 'verified', depositId: deposit.id, message: 'Created and auto-verified against the bank' };
           } else {
             entry = {
               ftNumber,
               status: 'pending',
               depositId: deposit.id,
-              message: `Created — PENDING review (${res.result?.error || 'account or amount mismatch'})`,
+              message: `Created — PENDING review (${res.message})`,
             };
           }
         } catch (err) {
@@ -798,5 +802,41 @@ export class DepositsService {
       throw new NotFoundException(`Batch job ${jobId} not found`);
     }
     return job;
+  }
+
+  /**
+   * Turn a free-text bank name from a scanner item into a provider code.
+   * Returns undefined when the name is absent or unrecognised, letting the
+   * verifier fall back to the deposit's stored bank and then to reference
+   * shape inference.
+   */
+  private bankCodeFor(name?: unknown): BankCode | undefined {
+    const value = typeof name === 'string' ? name.trim() : '';
+    if (!value) return undefined;
+
+    const normalised = value.toLowerCase().replace(/[^a-z]/g, '');
+    const aliases: Record<string, BankCode> = {
+      cbe: 'cbe',
+      commercialbankofethiopia: 'cbe',
+      cbebirr: 'cbebirr',
+      telebirr: 'telebirr',
+      ethiotelecom: 'telebirr',
+      mpesa: 'mpesa',
+      safaricom: 'mpesa',
+      dashen: 'dashen',
+      dashenbank: 'dashen',
+      awash: 'awash',
+      awashbank: 'awash',
+      boa: 'boa',
+      bankofabyssinia: 'boa',
+      abyssinia: 'boa',
+      siinqee: 'siinqee',
+      kaafiebirr: 'kaafiebirr',
+      kaafi: 'kaafiebirr',
+      coopayebirr: 'coopayebirr',
+      coopay: 'coopayebirr',
+    };
+
+    return aliases[normalised];
   }
 }

@@ -235,7 +235,6 @@ export default function GroupDetailPage() {
             <DepositsTab
               groupId={groupId}
               group={group}
-              groupCbeAccounts={group.cbeAccountNumbers || []}
               canManageDeposits={canManageDeposits}
               refreshKey={refreshKey}
               notifySuccess={notifySuccess}

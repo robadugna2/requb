@@ -162,7 +162,8 @@ export class DepositVerificationService {
     }
 
     const group = deposit.cycle.group;
-    const expectedAccount = this.resolveExpectedAccount(deposit, options, group);
+    const candidateAccounts = this.resolveCandidateAccounts(deposit, options, group);
+    const expectedAccount = candidateAccounts[0];
 
     // ── Which bank? ────────────────────────────────────────────────────────
     const bank = options.bank ?? this.bankFromName(deposit.bankName) ?? undefined;
@@ -185,20 +186,16 @@ export class DepositVerificationService {
       };
     }
 
-    const finalIdentifiers =
-      bank === resolvedBank
-        ? identifiers
-        : this.buildIdentifiers(resolvedBank, reference, expectedAccount);
-
     // ── Ask the bank ───────────────────────────────────────────────────────
     this.logger.log(
       `Auto-verifying deposit ${depositId} against ${BANK_LABELS[resolvedBank] ?? resolvedBank}`,
     );
 
-    const result = await this.verification.verify({
-      bank: resolvedBank,
-      identifiers: finalIdentifiers,
-    });
+    const { result, matchedAccount } = await this.queryBank(
+      resolvedBank,
+      reference,
+      candidateAccounts,
+    );
 
     if (result.status === 'failed') {
       // Transport / configuration problem. Nothing is decided; the deposit
@@ -237,9 +234,16 @@ export class DepositVerificationService {
         ? Math.abs(result.amount - deposit.amount) < 0.01
         : true;
 
+    // Compare against the account the transaction actually resolved against.
+    // With several candidate accounts the lookup may have hit a later one, and
+    // checking the receipt against a different account would reject a genuine
+    // payment. Falls back to the first candidate when no account was used
+    // (providers whose lookup is not account-specific).
+    const receiverAccountToCheck = matchedAccount ?? expectedAccount;
+
     const receiverMatched = this.receiverMatches(
       result.receiverAccount,
-      expectedAccount,
+      receiverAccountToCheck,
     );
 
     const duplicateReference = await this.isReferenceAlreadyUsed(
@@ -250,7 +254,16 @@ export class DepositVerificationService {
     const checks = { amountMatched, receiverMatched, duplicateReference };
     const shouldApprove = amountMatched && receiverMatched && !duplicateReference;
 
-    await this.persistVerification(depositId, adminId, resolvedBank, result, checks, shouldApprove, deposit);
+    await this.persistVerification(
+      depositId,
+      adminId,
+      resolvedBank,
+      result,
+      checks,
+      shouldApprove,
+      deposit,
+      matchedAccount,
+    );
 
     if (!shouldApprove) {
       const reason: AutoVerifyReason = duplicateReference
@@ -262,7 +275,7 @@ export class DepositVerificationService {
       return {
         verified: false,
         reason,
-        message: this.mismatchMessage(reason, result, deposit, expectedAccount),
+        message: this.mismatchMessage(reason, result, deposit, receiverAccountToCheck),
         bank: resolvedBank,
         result,
         checks,
@@ -284,21 +297,75 @@ export class DepositVerificationService {
   // ─── helpers ─────────────────────────────────────────────────────────────
 
   /**
-   * The account we expect the money to have landed in.
+   * Every account the money could plausibly have landed in, best first.
    * Caller override → deposit's own receiver → the group's configured accounts.
+   *
+   * Groups switch receiver accounts mid-cycle and hold several, and CBE's
+   * legacy lookup is account-specific (FT + last 8 digits), so a single guess
+   * produces false "Transaction not found" results. The caller walks this list.
    */
-  private resolveExpectedAccount(
+  private resolveCandidateAccounts(
     deposit: { receiverAccount: string | null },
     options: AutoVerifyOptions,
     group: { bankAccount: string | null; cbeAccountNumbers: string[] },
-  ): string | undefined {
+  ): string[] {
     const candidates = [
       options.accountNumber,
       deposit.receiverAccount ?? undefined,
       ...(group.cbeAccountNumbers ?? []),
       group.bankAccount ?? undefined,
     ];
-    return candidates.find((value) => !!value && String(value).trim() !== '');
+
+    const unique: string[] = [];
+    for (const value of candidates) {
+      const clean = value ? String(value).trim() : '';
+      if (clean && !unique.includes(clean)) unique.push(clean);
+    }
+    return unique;
+  }
+
+  /**
+   * Ask the bank, retrying across candidate receiver accounts for providers
+   * whose lookup is account-specific.
+   *
+   * Only "not found" triggers a retry: a transport failure or an unreachable
+   * host will fail identically for every account, so retrying would just
+   * multiply the timeout. The account that produced the hit is returned so it
+   * can be persisted — bank receipts mask the middle of the account, and the
+   * masked form is useless for later lookups.
+   */
+  private async queryBank(
+    bank: BankCode,
+    reference: string,
+    candidateAccounts: string[],
+  ): Promise<{ result: BankVerificationResult; matchedAccount?: string }> {
+    // Only CBE's legacy FT path and BOA's onlineslip resolve per account. Every
+    // other provider answers from the reference alone, so trying the same
+    // lookup once per group account would just repeat an identical request.
+    const accountSpecific = bank === 'cbe' || bank === 'boa';
+    const accounts = accountSpecific
+      ? candidateAccounts.length > 0
+        ? candidateAccounts
+        : [undefined]
+      : [candidateAccounts[0]];
+
+    let last: { result: BankVerificationResult; matchedAccount?: string } | null = null;
+
+    for (const account of accounts) {
+      const result = await this.verification.verify({
+        bank,
+        identifiers: this.buildIdentifiers(bank, reference, account),
+      });
+
+      if (result.status !== 'not_found') {
+        // Only an account-specific lookup genuinely "resolved against" the
+        // account it was given; for the rest the account played no part.
+        return { result, matchedAccount: accountSpecific ? account : undefined };
+      }
+      last = { result, matchedAccount: accountSpecific ? account : undefined };
+    }
+
+    return last!;
   }
 
   /** Map the deposit's free-text bank name onto a code we support. */
@@ -517,6 +584,8 @@ export class DepositVerificationService {
       branch: string | null;
       cbeVerificationData?: Prisma.JsonValue | null;
     },
+    /** The account the transaction actually resolved against, when known. */
+    matchedAccount?: string,
   ): Promise<void> {
     const depositDate = result.timestamp ? new Date(result.timestamp) : undefined;
     const hasValidDate = !!depositDate && !Number.isNaN(depositDate.getTime());
@@ -544,9 +613,15 @@ export class DepositVerificationService {
         ...(result.senderAccount && !deposit.senderAccount && {
           senderAccount: result.senderAccount,
         }),
-        ...(result.receiverAccount && !deposit.receiverAccount && {
-          receiverAccount: result.receiverAccount,
-        }),
+        // Prefer the account this transaction actually resolved against: bank
+        // receipts mask the middle digits ("1000******31"), and a masked value
+        // cannot be reused for the next lookup.
+        ...(matchedAccount || result.receiverAccount
+          ? {
+              receiverAccount:
+                deposit.receiverAccount ?? matchedAccount ?? result.receiverAccount,
+            }
+          : {}),
         ...(result.extra?.branch && !deposit.branch
           ? { branch: String(result.extra.branch) }
           : {}),

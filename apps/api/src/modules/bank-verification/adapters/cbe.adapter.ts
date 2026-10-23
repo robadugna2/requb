@@ -240,6 +240,9 @@ export class CbeAdapter implements BankAdapter {
       receiptNumber: identity.receiptNumber,
       timestamp: parsedDate?.toISOString(),
       extra: {
+        // Kept so the admin UI can still show the receipt's raw text, which the
+        // legacy CBE service exposed directly on its transaction object.
+        rawText,
         branch: group(
           /Branch:(?:[^_]*_(?:[^_]*_)*)?(?<value>[A-Za-z\s]+?)(?=\s*Payment|\s*Transaction)/i,
         ),

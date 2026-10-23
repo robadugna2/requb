@@ -1474,6 +1474,57 @@ export const autoVerifyDepositWithBank = async (
   return response.data as DepositAutoVerifyOutcome;
 };
 
+/** The pairing decision the server made for a reference's payer. */
+export interface ReferenceIntakePairing {
+  payerName: string;
+  tier?: 'AUTO' | 'SUGGEST' | 'UNKNOWN';
+  suggestions?: Array<{
+    userId: string;
+    name: string;
+    phone?: string;
+    photoUrl?: string;
+    score?: number;
+    matchedVia?: string;
+    autoPaired?: boolean;
+  }>;
+  bestMatch?: {
+    userId: string;
+    name: string;
+    phone?: string;
+    photoUrl?: string;
+    score?: number;
+    matchedVia?: string;
+    autoPaired?: boolean;
+    suggested?: boolean;
+  } | null;
+}
+
+export interface ReferenceIntakeResult {
+  found: boolean;
+  result: BankVerificationResult;
+  pairing: ReferenceIntakePairing | null;
+}
+
+/**
+ * POST /deposits/reference-intake
+ *
+ * Bank-aware counterpart to the CBE-only lookup: give it a reference from any
+ * supported bank (or a pasted receipt link / SMS) plus a group, and it returns
+ * both the transaction and the member pairing decision. Read-only.
+ */
+export const referenceIntake = async (input: {
+  groupId: string;
+  bank?: BankCode;
+  referenceNumber?: string;
+  receiptNumber?: string;
+  transactionNumber?: string;
+  accountNumber?: string;
+  rawInput?: string;
+}): Promise<ReferenceIntakeResult> => {
+  const response = await api.post('/deposits/reference-intake', input);
+  return response.data as ReferenceIntakeResult;
+};
+
 // ─── Camera FT Scanner ────────────────────────────────────────────────────────
 
 /**
@@ -1493,6 +1544,19 @@ export const normalizeFtNumber = (ft?: string | null): string | undefined => {
   const base = lastSeparator >= 0 ? trimmed.slice(0, lastSeparator) : trimmed;
   const clean = base.trim();
   return clean || undefined;
+};
+
+/**
+ * True when a value could plausibly be a transaction reference from ANY
+ * supported provider. Deliberately permissive: the per-bank adapters do the
+ * strict validation, and a false negative here would silently drop a real
+ * member payment.
+ */
+export const isPlausibleReference = (value?: string | null): boolean => {
+  const v = (value ?? '').trim();
+  if (v.length < 6 || v.length > 128) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(v)) return false;
+  return /[A-Za-z]/.test(v) || /^\d{10,}$/.test(v);
 };
 
 export interface FtScanResult {

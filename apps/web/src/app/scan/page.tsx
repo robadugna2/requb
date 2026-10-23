@@ -20,7 +20,6 @@ import {
   Sparkles,
   Crosshair,
   FileUp,
-  ShieldCheck,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ import type { BatchJobStatus } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/Toast';
 import { CbeTransactionCard } from '@/components/ui/CbeVerifyPanel';
-import { MultiBankVerifyPanel } from '@/components/ui/MultiBankVerifyPanel';
 import FtScannerCamera from '@/components/scan/FtScannerCamera';
 import FtImageCropper from '@/components/scan/FtImageCropper';
 import MemberPickerModal from '@/components/scan/MemberPickerModal';
@@ -41,12 +39,12 @@ import {
   getDeposits,
   uploadPhoto,
   scanFtNumbers,
-  cbeLookup,
-  suggestMembers,
+  referenceIntake,
   queueUnknownSender,
   resolveUnknownSender,
   updateGroupCbeAccounts,
   normalizeFtNumber,
+  isPlausibleReference,
   getAiSettings,
   addPayerAlias,
   getGroupRules,
@@ -60,6 +58,8 @@ import type {
   FtScanResult,
   GroupRules,
   ReceiptItem,
+  BankCode,
+  BankVerificationResult,
 } from '@/lib/api';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -71,6 +71,10 @@ interface ScanItem {
   kind?: 'deposit' | 'payout' | 'transfer';
   error?: string;
   tx?: CbeTransactionData;
+  /** Provider the reference resolved to, once the bank has answered. */
+  bank?: BankCode;
+  /** Display label for that provider (e.g. "Dashen Bank"). */
+  bankName?: string;
   /** For payout items: member identified by the receiver's bank account */
   receiverMember?: { name: string } | null;
   /** Payer name Gemini read from the statement (fallback when the CBE
@@ -100,8 +104,50 @@ interface ScanItem {
   registeringAlias?: boolean;
 }
 
-const FT_REGEX = /^FT\w{10}$/i;
 const ACCOUNT_REGEX = /^1000\d{9}$/;
+
+/** Display names for the providers the verifier can reach. */
+const BANK_LABEL: Record<BankCode, string> = {
+  cbe: 'CBE',
+  boa: 'Bank of Abyssinia',
+  dashen: 'Dashen Bank',
+  awash: 'Awash Bank',
+  telebirr: 'Telebirr',
+  mpesa: 'M-Pesa',
+  cbebirr: 'CBE Birr',
+  siinqee: 'Siinqee',
+  kaafiebirr: 'Kaafi eBirr',
+  coopayebirr: 'Coopay eBirr',
+};
+
+/**
+ * Adapt a normalised bank result to the transaction shape the scan UI and the
+ * rest of the admin screens already render. Every provider is mapped onto the
+ * same fields, so a Dashen row looks exactly like a CBE row.
+ */
+function toTransactionData(result: BankVerificationResult): CbeTransactionData {
+  const extra = (result.extra ?? {}) as Record<string, unknown>;
+  const asText = (value: unknown): string | undefined =>
+    value === undefined || value === null || value === '' ? undefined : String(value);
+
+  return {
+    ftNumber: result.referenceNumber ?? result.receiptNumber ?? result.transactionNumber ?? '',
+    amount: result.amount,
+    payer: result.senderName,
+    payerAccount: result.senderAccount,
+    receiver: result.receiverName,
+    receiverAccount: result.receiverAccount,
+    date: result.timestamp,
+    reference: result.referenceNumber ?? result.receiptNumber ?? result.transactionNumber,
+    reason: asText(extra.reason),
+    branch: asText(extra.branch),
+    commission: asText(extra.commission),
+    vatOnCommission: asText(extra.vatOnCommission),
+    totalDebited: asText(extra.totalDebited),
+    amountInWords: asText(extra.amountInWords),
+    rawText: asText(extra.rawText) ?? '',
+  };
+}
 
 /**
  * FT input with as-you-type suggestions pulled from the group's already
@@ -364,7 +410,6 @@ function ScanWorkflow() {
   const [scanNotice, setScanNotice] = useState('');
   const [manualFt, setManualFt] = useState('');
   /** Multi-bank lookup: check any provider's reference without creating a deposit. */
-  const [showBankLookup, setShowBankLookup] = useState(false);
 
   // Review state
   const [items, setItems] = useState<ScanItem[]>([]);
@@ -391,8 +436,22 @@ function ScanWorkflow() {
     () => group?.cycles?.find((c) => c.status === 'ACTIVE'),
     [group],
   );
-  const accountReady =
+  const hasCbeAccount =
     (group?.cbeAccountNumbers?.length ?? 0) > 0 || ACCOUNT_REGEX.test(accountNumber);
+
+  /**
+   * Whether a reference can be looked up as things stand.
+   *
+   * Only CBE's legacy FT lookup is account-specific (FT + last 8 digits). Every
+   * other provider resolves from the reference alone, so a group that banks
+   * with Dashen must not be blocked just because it has no CBE account.
+   */
+  const canLookup = (reference?: string): boolean => {
+    if (hasCbeAccount) return true;
+    const value = (reference ?? '').trim();
+    if (!value) return false;
+    return !/^FT[A-Za-z0-9]{10}$/i.test(value);
+  };
 
   /**
    * Receiver accounts the admin can pick from: the group's saved accounts
@@ -513,6 +572,7 @@ function ScanWorkflow() {
     grpId: string,
     account: string,
     senderFallback?: string,
+    bankHint?: BankCode,
   ) => {
     // Duplicate pre-check FIRST: an FT already recorded in this group needs
     // neither the bank lookup nor member pairing — flag it instantly instead
@@ -523,13 +583,34 @@ function ScanWorkflow() {
     }
     patchItem(ft, { status: 'verifying', error: undefined });
     try {
-      const tx = await cbeLookup(ft, account);
+      // One call answers both questions: which bank says this reference is
+      // real, and which member the payer belongs to. The server pairs with the
+      // same brain for every provider, so a Dashen reference pairs exactly the
+      // way a CBE FT does.
+      const intake = await referenceIntake({
+        groupId: grpId,
+        bank: bankHint,
+        referenceNumber: ft,
+        accountNumber: account || undefined,
+      });
 
-      // Admin-side money movements: sender is one of the group's own CBE
-      // accounts. Two cases — both group accounts = the collector account is
-      // being switched mid-cycle; group → a member = the winner receiving a
-      // payout. Neither is a member deposit, so neither enters the pairing
-      // pipeline or the Unknown Senders queue.
+      if (!intake.found) {
+        patchItem(ft, {
+          status: 'error',
+          error: intake.result?.error?.message ?? 'The bank has no transaction with that reference.',
+          cycleId: activeCycle?.id,
+        });
+        return;
+      }
+
+      const tx = toTransactionData(intake.result);
+      const bankLabel = BANK_LABEL[intake.result.bank] ?? intake.result.bank;
+
+      // Admin-side money movements: sender is one of the group's own accounts.
+      // Two cases — both group accounts = the collector account is being
+      // switched mid-cycle; group → a member = the winner receiving a payout.
+      // Neither is a member deposit, so neither enters the pairing pipeline or
+      // the Unknown Senders queue.
       const groupAccounts = new Set([
         ...(group?.cbeAccountNumbers ?? []),
         ...(account ? [account] : []),
@@ -546,6 +627,8 @@ function ScanWorkflow() {
           status: 'found',
           kind,
           tx,
+          bank: intake.result.bank,
+          bankName: bankLabel,
           receiverMember,
           member: null,
           autoPaired: false,
@@ -557,9 +640,9 @@ function ScanWorkflow() {
         return;
       }
 
-      // CBE receipt payer is authoritative; the name Gemini read from the
+      // The bank's payer name is authoritative; the name read from the
       // statement is the fallback when the lookup has no payer field.
-      const payerName = tx.payer || senderFallback;
+      const pairing = intake.pairing;
       let member: ScanItem['member'] = null;
       let autoPaired = false;
       let matchScore: number | undefined;
@@ -567,24 +650,22 @@ function ScanWorkflow() {
       let suggestions: MemberSuggestion[] = [];
       let tier: 'AUTO' | 'SUGGEST' | 'UNKNOWN' = 'UNKNOWN';
       let suggestCandidate: MemberSuggestion | undefined;
-      if (payerName) {
-        try {
-          const res = await suggestMembers(grpId, payerName, tx?.payerAccount);
-          tier = res.tier ?? 'UNKNOWN';
-          suggestions = res.suggestions;
-          // AUTO only: deterministic identity. SUGGEST stays one-click.
-          if (res.bestMatch && res.bestMatch.autoPaired) {
-            member = { id: res.bestMatch.userId, name: res.bestMatch.name };
-            autoPaired = true;
-            matchScore = res.bestMatch.score;
-            matchVia = res.bestMatch.matchedVia;
-          } else if (res.bestMatch && res.tier === 'SUGGEST') {
-            suggestCandidate = res.bestMatch;
-          }
-        } catch {
-          /* suggestions are best-effort */
+
+      if (pairing) {
+        tier = pairing.tier ?? 'UNKNOWN';
+        suggestions = (pairing.suggestions ?? []) as MemberSuggestion[];
+        // AUTO only: deterministic identity. SUGGEST stays one-click.
+        if (pairing.bestMatch && pairing.bestMatch.autoPaired) {
+          member = { id: pairing.bestMatch.userId, name: pairing.bestMatch.name };
+          autoPaired = true;
+          matchScore = pairing.bestMatch.score;
+          matchVia = pairing.bestMatch.matchedVia as ScanItem['matchVia'];
+        } else if (pairing.bestMatch && pairing.tier === 'SUGGEST') {
+          suggestCandidate = pairing.bestMatch as MemberSuggestion;
         }
       }
+
+      const payerName = tx.payer || senderFallback;
       setItems((prev) =>
         prev.map((it) =>
           it.ftNumber === ft
@@ -592,6 +673,9 @@ function ScanWorkflow() {
                 ...it,
                 status: 'found',
                 tx,
+                bank: intake.result.bank,
+                bankName: bankLabel,
+                geminiSender: it.geminiSender ?? payerName,
                 member,
                 autoPaired,
                 matchScore,
@@ -776,7 +860,7 @@ function ScanWorkflow() {
         if (fts.length === 0) {
           setScanNotice(
             result.errors?.[0] ||
-              'No CBE FT numbers were detected. Try better lighting or a closer photo, or add the FT number manually below.',
+              'No transaction reference numbers were detected. Try better lighting or a closer photo, or add the reference manually below.',
           );
           return;
         }
@@ -821,8 +905,11 @@ function ScanWorkflow() {
   const addManualFt = async (): Promise<boolean> => {
     // Accept extended identifiers ("FT24AB123456\BNK") — the suffix is dropped
     const ft = (normalizeFtNumber(manualFt) ?? '').toUpperCase();
-    if (!FT_REGEX.test(ft)) {
-      showToast('Invalid FT format. Expected: FT followed by 10 alphanumeric characters', 'error');
+    if (!isPlausibleReference(ft)) {
+      showToast(
+        'That does not look like a transaction reference. Paste the reference number from the receipt.',
+        'error',
+      );
       return false;
     }
     if (items.some((it) => it.ftNumber === ft)) {
@@ -833,8 +920,11 @@ function ScanWorkflow() {
       showToast('Select the equb group first', 'error');
       return false;
     }
-    if (!accountReady) {
-      showToast('Select or enter the CBE receiver account first', 'error');
+    if (!canLookup(ft)) {
+      showToast(
+        'This looks like a CBE FT reference, so enter the receiving CBE account first.',
+        'error',
+      );
       return false;
     }
 
@@ -897,7 +987,7 @@ function ScanWorkflow() {
   const rescanRegion = async (ft: string) => {
     const region = ftRegions[ft];
     if (!lastCaptureFile || !region) return;
-    if (!selectedGroupId || !accountReady) {
+    if (!selectedGroupId || !canLookup(ft)) {
       showToast('Select the equb group and receiver account first', 'error');
       return;
     }
@@ -959,7 +1049,7 @@ function ScanWorkflow() {
         text
           .split(/[\r\n,;\t]+/)
           .map((line) => (normalizeFtNumber(line.trim()) ?? '').toUpperCase())
-          .filter((ft) => FT_REGEX.test(ft)),
+          .filter((ft) => isPlausibleReference(ft)),
       ),
     );
 
@@ -986,8 +1076,11 @@ function ScanWorkflow() {
       showToast('Select the equb group first', 'error');
       return;
     }
-    if (!accountReady) {
-      showToast('Select or enter the CBE receiver account first', 'error');
+    if (!canLookup(fts[0])) {
+      showToast(
+        'These look like CBE FT references, so enter the receiving CBE account first.',
+        'error',
+      );
       return;
     }
 
@@ -1032,7 +1125,7 @@ function ScanWorkflow() {
       if (isDuplicate) {
         showToast(`FT ${ft} is already recorded in this group — flagged as duplicate`, 'warning');
       }
-      // One at a time — each FT gets a clean, precise CBE lookup + pairing
+      // One at a time — each reference gets a clean, precise bank lookup + pairing
       await runLookup(ft, selectedGroupId, savedAccount);
       done += 1;
       setBulkProgress({ done, total: queue.length });
@@ -1069,7 +1162,9 @@ function ScanWorkflow() {
       ? new Date(`${it.depositDate}T12:00:00`).toISOString()
       : undefined,
     senderAccount: it.tx?.payerAccount,
-    bankName: 'CBE',
+    // Record the provider the reference actually resolved to — the queue is
+    // used for every bank, not just CBE.
+    bankName: it.bankName ?? (it.bank ? BANK_LABEL[it.bank] : 'CBE'),
     imageUrl: evidenceUrl || undefined,
     reason,
     cbeData: (it.tx ?? {}) as unknown as Record<string, unknown>,
@@ -1115,7 +1210,7 @@ function ScanWorkflow() {
       // Resolved queue entries are born-verified — the CBE lookup confirmed
       // the transaction at scan time and the pairing was the only decision.
       const outcome: ScanItem['outcome'] = 'verified';
-      let outcomeMsg = `Member "${cmName.trim()}" created — deposit verified against CBE`;
+      let outcomeMsg = `Member "${cmName.trim()}" created — deposit verified against the bank`;
       if (resolved.ruleOverrides?.includes('REQUIRE_GUARANTOR')) {
         outcomeMsg += ' — guarantor still required: assign one from the group page (Requests tab)';
       }
@@ -1146,8 +1241,8 @@ function ScanWorkflow() {
   const itemBlockers = (it: ScanItem): string[] => {
     const b: string[] = [];
     if (it.isDuplicate) b.push('already recorded — duplicate');
-    if (it.status === 'verifying') b.push('verifying with CBE…');
-    if (it.status === 'error') b.push('CBE lookup failed');
+    if (it.status === 'verifying') b.push('verifying with the bank…');
+    if (it.status === 'error') b.push('bank lookup failed');
     if (!it.member) b.push('member not paired');
     if (!it.cycleId && !activeCycle) b.push('no cycle selected');
     if (it.amount === undefined || it.amount <= 0) b.push('amount missing');
@@ -1244,7 +1339,9 @@ function ScanWorkflow() {
           cycleId: it.cycleId || activeCycle?.id || undefined,
           depositDate: it.depositDate ? new Date(`${it.depositDate}T12:00:00`).toISOString() : undefined,
           imageUrl: evidenceUrl || undefined,
-          bankName: 'CBE',
+          // Each item carries the provider its reference resolved to, so the
+          // server verifies it against the right bank instead of assuming CBE.
+          bankName: it.bankName ?? (it.bank ? BANK_LABEL[it.bank] : 'CBE'),
           senderName: it.tx?.payer,
           senderAccount: it.tx?.payerAccount,
           receiverAccount: it.tx?.receiverAccount,
@@ -1298,7 +1395,7 @@ function ScanWorkflow() {
               Scan FT Numbers
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Photograph hardcopy bank statements — FT numbers are detected, verified against CBE, and paired to members automatically.
+              Photograph hardcopy bank statements — reference numbers are detected, verified against the bank, and paired to members automatically.
             </p>
           </div>
           {sessionActive && (
@@ -1414,10 +1511,10 @@ function ScanWorkflow() {
             )}
 
             <div className="mt-5 flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => setCameraOpen(true)} disabled={!selectedGroupId || loadingGroup || !accountReady}>
+              <Button onClick={() => setCameraOpen(true)} disabled={!selectedGroupId || loadingGroup}>
                 <Camera className="h-4 w-4 mr-1" /> Open Camera
               </Button>
-              <Button variant="secondary" onClick={() => galleryRef.current?.click()} disabled={!selectedGroupId || loadingGroup || !accountReady}>
+              <Button variant="secondary" onClick={() => galleryRef.current?.click()} disabled={!selectedGroupId || loadingGroup}>
                 <ImageIcon className="h-4 w-4 mr-1" /> Upload Statement Photo
               </Button>
               <Button variant="secondary" onClick={() => extraGalleryRef.current?.click()}>
@@ -1450,12 +1547,12 @@ function ScanWorkflow() {
                   suggestions={ftSuggestions}
                   duplicate={typedDuplicate}
                   placeholder="FT + 10 characters (e.g. FT253126QXMJ) — start typing to see stored FTs"
-                  disabled={!selectedGroupId || !accountReady || loadingGroup}
+                  disabled={!selectedGroupId || loadingGroup}
                 />
                 <Button
                   variant="secondary"
                   onClick={() => addManualFt()}
-                  disabled={!selectedGroupId || !accountReady || loadingGroup || !manualFt.trim()}
+                  disabled={!selectedGroupId || loadingGroup || !manualFt.trim()}
                   className="flex-shrink-0"
                 >
                   <Plus className="h-4 w-4 mr-1" /> Add FT
@@ -1463,38 +1560,8 @@ function ScanWorkflow() {
               </div>
               {!typedDuplicate && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Each FT is verified against CBE and auto-paired instantly. Duplicates are flagged and never recorded twice.
+                  Each reference is verified against its bank and auto-paired instantly. Duplicates are flagged and never recorded twice.
                 </p>
-              )}
-            </div>
-
-            {/* Multi-bank lookup — CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, … */}
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <button
-                onClick={() => setShowBankLookup((v) => !v)}
-                className="flex w-full items-center gap-2 text-left"
-              >
-                <span className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="h-3.5 w-3.5 text-white" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold text-gray-900 dark:text-white/90">
-                    Check a receipt from any bank
-                  </span>
-                  <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                    CBE, BOA, Dashen, Telebirr, M-Pesa, Awash, Siinqee, CBE Birr, Kaafi &amp; Coopay eBirr
-                  </span>
-                </span>
-                {showBankLookup ? (
-                  <ChevronUp className="h-4 w-4 text-gray-400 shrink-0" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
-                )}
-              </button>
-              {showBankLookup && (
-                <div className="mt-3">
-                  <MultiBankVerifyPanel />
-                </div>
               )}
             </div>
 
@@ -1545,7 +1612,7 @@ function ScanWorkflow() {
                 <Button
                   onClick={processBulkFts}
                   loading={bulkRunning}
-                  disabled={bulkRunning || !parseBulkFts(bulkText).length || !selectedGroupId || !accountReady}
+                  disabled={bulkRunning || !parseBulkFts(bulkText).length || !selectedGroupId}
                   size="sm"
                   className="flex-shrink-0"
                 >
@@ -1725,9 +1792,9 @@ function ScanWorkflow() {
                     suggestions={ftSuggestions}
                     duplicate={typedDuplicate}
                     placeholder="Add FT number manually (e.g. FT24AB12345) — start typing to see stored FTs"
-                    disabled={scanning || !accountReady}
+                    disabled={scanning}
                   />
-                  <Button variant="secondary" onClick={addManualFt} disabled={scanning || !accountReady} className="flex-shrink-0">
+                  <Button variant="secondary" onClick={addManualFt} disabled={scanning} className="flex-shrink-0">
                     <Plus className="h-4 w-4 mr-1" /> Add
                   </Button>
                 </div>
@@ -1743,7 +1810,7 @@ function ScanWorkflow() {
               Review Transactions
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 -mt-2 mb-1">
-              Members are auto-paired from the CBE payer name — only step in when a name can&apos;t be matched confidently.
+              Members are auto-paired from the payer name on the receipt — only step in when a name can&apos;t be matched confidently.
             </p>
 
             {/* Background batch progress — runs server-side, survives tab close */}
@@ -1850,12 +1917,12 @@ function ScanWorkflow() {
                       )}
                       {it.status === 'verifying' && (
                         <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying with CBE...
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Verifying with the bank...
                         </span>
                       )}
                       {it.status === 'found' && !it.isDuplicate && (
                         <span className="text-xs text-green-700 dark:text-success-400 flex items-center gap-1">
-                          <CheckCircle className="h-3.5 w-3.5" /> Verified from CBE
+                          <CheckCircle className="h-3.5 w-3.5" /> Verified by the bank
                         </span>
                       )}
                       {it.status === 'found' && it.isDuplicate && !it.tx && (

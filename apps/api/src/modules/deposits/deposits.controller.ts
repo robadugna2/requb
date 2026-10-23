@@ -21,6 +21,9 @@ import { GroupPermissionsGuard } from '../../common/guards/group-permissions.gua
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { DepositsService } from './deposits.service';
 import { CbeVerificationService } from './cbe-verification.service';
+import { BankVerificationService } from '../bank-verification/bank-verification.service';
+import { BANK_CODES } from '../bank-verification/bank-rules';
+import type { BankCode, BankIdentifiers } from '../bank-verification/types';
 import { FtDetectionService } from '../ocr/ft-detection.service';
 import { UnknownSenderService } from './unknown-sender.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
@@ -41,6 +44,7 @@ export class DepositsController {
     private readonly cbeVerificationService: CbeVerificationService,
     private readonly ftDetectionService: FtDetectionService,
     private readonly unknownSenderService: UnknownSenderService,
+    private readonly bankVerification: BankVerificationService,
   ) {}
 
   /**
@@ -251,6 +255,96 @@ export class DepositsController {
     @Body('reason') reason?: string,
   ) {
     return this.depositsService.reject(id, req.user.id, reason);
+  }
+
+  /**
+   * POST /deposits/reference-intake
+   *
+   * The bank-aware counterpart to the CBE-only lookup: hand it a reference
+   * from ANY supported bank (or a pasted receipt link / SMS) plus a group, and
+   * it answers with the transaction AND the member pairing decision.
+   *
+   * This is what lets a Dashen reference travel the same path a CBE FT does:
+   * the bank lookup supplies payer + amount, and the existing pairing brain
+   * (history → alias → fuzzy, with Unknown Senders as the fallback) decides
+   * who it belongs to. Read-only — it never creates a deposit.
+   *
+   * Body: { groupId, bank?, referenceNumber?, receiptNumber?,
+   *         transactionNumber?, accountNumber?, rawInput? }
+   */
+  @Post('reference-intake')
+  @HttpCode(200)
+  @RequirePermission('canManageDeposits')
+  async referenceIntake(
+    @Body()
+    body: {
+      groupId?: string;
+      bank?: string;
+      referenceNumber?: string;
+      receiptNumber?: string;
+      transactionNumber?: string;
+      accountNumber?: string;
+      rawInput?: string;
+    },
+  ) {
+    if (!body?.groupId) throw new BadRequestException('groupId is required');
+
+    const reference =
+      body.referenceNumber?.trim() ||
+      body.receiptNumber?.trim() ||
+      body.transactionNumber?.trim() ||
+      body.rawInput?.trim();
+
+    if (!reference) {
+      throw new BadRequestException(
+        'Provide a reference number, or paste the receipt link / SMS.',
+      );
+    }
+
+    const bank = this.normaliseBank(body.bank);
+
+    // Every identifier slot carries the reference: each adapter reads its own
+    // slot, and the router reports "ambiguous" rather than guessing when the
+    // shape genuinely matches more than one provider.
+    const accountDigits = (body.accountNumber ?? '').replace(/\D/g, '');
+    const identifiers: BankIdentifiers = {
+      referenceNumber: body.referenceNumber?.trim() || reference,
+      receiptNumber: body.receiptNumber?.trim() || undefined,
+      transactionNumber: body.transactionNumber?.trim() || undefined,
+      accountSuffix: accountDigits.length >= 5 ? accountDigits.slice(-8) : undefined,
+    };
+
+    const result = await this.bankVerification.verify({
+      bank,
+      identifiers,
+      rawInput: body.rawInput?.trim() || undefined,
+    });
+
+    if (!result.verified) {
+      return {
+        found: false,
+        result,
+        pairing: null,
+      };
+    }
+
+    // Pairing is provider-agnostic — it only needs a payer identity.
+    const pairing = await this.depositsService.suggestMembersForPayer(
+      body.groupId,
+      result.senderName ?? '',
+      result.senderAccount,
+    );
+
+    return { found: true, result, pairing };
+  }
+
+  /** Accept a bank code from the client, or nothing. */
+  private normaliseBank(value?: string): BankCode | undefined {
+    const clean = value?.trim().toLowerCase();
+    if (!clean) return undefined;
+    return (BANK_CODES as readonly string[]).includes(clean)
+      ? (clean as BankCode)
+      : undefined;
   }
 
   // ─── CBE Auto-Verification Endpoints ──────────────────────────────

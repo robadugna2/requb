@@ -5,9 +5,10 @@ import { CbeVerificationService } from './cbe-verification.service';
 import { UnknownSenderService } from './unknown-sender.service';
 import { RulesModule } from '../groups/rules.module';
 import { OcrModule } from '../ocr/ocr.module';
+import { BankVerificationModule } from '../bank-verification/bank-verification.module';
 
 @Module({
-  imports: [RulesModule, OcrModule],
+  imports: [RulesModule, OcrModule, BankVerificationModule],
   controllers: [DepositsController],
   providers: [DepositsService, CbeVerificationService, UnknownSenderService],
   exports: [DepositsService, CbeVerificationService],
