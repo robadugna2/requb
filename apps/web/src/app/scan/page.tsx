@@ -45,6 +45,7 @@ import {
   updateGroupCbeAccounts,
   normalizeFtNumber,
   isPlausibleReference,
+  getVerificationBanks,
   getAiSettings,
   addPayerAlias,
   getGroupRules,
@@ -60,6 +61,7 @@ import type {
   ReceiptItem,
   BankCode,
   BankVerificationResult,
+  VerificationBank,
 } from '@/lib/api';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -119,6 +121,14 @@ const BANK_LABEL: Record<BankCode, string> = {
   kaafiebirr: 'Kaafi eBirr',
   coopayebirr: 'Coopay eBirr',
 };
+
+/**
+ * The dropdown's contents when the server's provider list has not loaded yet
+ * (or the request failed). Keeps the control usable offline rather than empty.
+ */
+const DEFAULT_BANKS: VerificationBank[] = (
+  Object.keys(BANK_LABEL) as BankCode[]
+).map((bank) => ({ bank, label: BANK_LABEL[bank] }));
 
 /**
  * Adapt a normalised bank result to the transaction shape the scan UI and the
@@ -409,7 +419,19 @@ function ScanWorkflow() {
   const [scanSenders, setScanSenders] = useState<Record<string, string>>({});
   const [scanNotice, setScanNotice] = useState('');
   const [manualFt, setManualFt] = useState('');
-  /** Multi-bank lookup: check any provider's reference without creating a deposit. */
+
+  /**
+   * The provider every reference in this session belongs to.
+   *
+   * 'auto' lets the server work the bank out from the reference's shape, which
+   * is what a mixed CBE statement needs. Picking a bank explicitly overrides
+   * that — required when a reference shape is ambiguous (an FT reference is
+   * valid for both CBE and Bank of Abyssinia) or when the whole statement is
+   * from one bank such as Dashen.
+   */
+  const [selectedBank, setSelectedBank] = useState<BankCode | 'auto'>('auto');
+  /** Providers the server can actually reach, from GET /verification/banks. */
+  const [bankOptions, setBankOptions] = useState<VerificationBank[]>([]);
 
   // Review state
   const [items, setItems] = useState<ScanItem[]>([]);
@@ -500,6 +522,14 @@ function ScanWorkflow() {
       .catch(() => setAiConfigured(null));
   }, []);
 
+  // Which providers the server can actually reach right now. The dropdown is
+  // driven by this list so it can never offer a bank the backend cannot check.
+  useEffect(() => {
+    getVerificationBanks()
+      .then(setBankOptions)
+      .catch(() => setBankOptions([]));
+  }, []);
+
   // Fetch groups on mount
   useEffect(() => {
     let cancelled = false;
@@ -567,12 +597,24 @@ function ScanWorkflow() {
 
   // ─── Lookup pipeline ────────────────────────────────────────────────────────
 
+  /**
+   * Resolve which provider to ask for a reference.
+   *
+   * An explicit per-item override wins (the admin fixed one row), then the
+   * session-wide dropdown, then nothing — meaning the server infers the bank
+   * from the reference's shape.
+   */
+  const bankFor = (override?: BankCode | 'auto'): BankCode | undefined => {
+    const choice = override ?? selectedBank;
+    return choice === 'auto' ? undefined : choice;
+  };
+
   const runLookup = async (
     ft: string,
     grpId: string,
     account: string,
     senderFallback?: string,
-    bankHint?: BankCode,
+    bankOverride?: BankCode | 'auto',
   ) => {
     // Duplicate pre-check FIRST: an FT already recorded in this group needs
     // neither the bank lookup nor member pairing — flag it instantly instead
@@ -589,15 +631,19 @@ function ScanWorkflow() {
       // way a CBE FT does.
       const intake = await referenceIntake({
         groupId: grpId,
-        bank: bankHint,
+        bank: bankFor(bankOverride),
         referenceNumber: ft,
         accountNumber: account || undefined,
       });
 
       if (!intake.found) {
+        // Remember which provider was asked, so the row can offer a one-click
+        // "try another bank" instead of leaving the admin to guess.
         patchItem(ft, {
           status: 'error',
           error: intake.result?.error?.message ?? 'The bank has no transaction with that reference.',
+          bank: intake.result?.bank,
+          bankName: intake.result?.bank ? BANK_LABEL[intake.result.bank] : undefined,
           cycleId: activeCycle?.id,
         });
         return;
@@ -702,10 +748,14 @@ function ScanWorkflow() {
     account: string,
     senders?: Record<string, string>,
   ) => {
-    // Two lookups at a time — CBE and the suggestion endpoint are both IO bound
+    // Two lookups at a time — the bank call and the pairing query are both IO
+    // bound, so a small amount of concurrency keeps a long statement moving
+    // without hammering the bank.
     for (let i = 0; i < fts.length; i += 2) {
       await Promise.all(
-        fts.slice(i, i + 2).map((ft) => runLookup(ft, grpId, account, senders?.[ft])),
+        fts
+          .slice(i, i + 2)
+          .map((ft) => runLookup(ft, grpId, account, senders?.[ft], selectedBank)),
       );
     }
   };
@@ -953,7 +1003,7 @@ function ScanWorkflow() {
       showToast(`FT ${ft} is already recorded in this group — flagged as duplicate, it will not be created`, 'warning');
     }
     const savedAccount = await ensureAccountSaved();
-    await runLookup(ft, selectedGroupId, savedAccount);
+    await runLookup(ft, selectedGroupId, savedAccount, undefined, selectedBank);
     return true;
   };
 
@@ -974,8 +1024,12 @@ function ScanWorkflow() {
     }
   };
 
-  const retryItem = async (ft: string) => {
-    await runLookup(ft, selectedGroupId, accountNumber, scanSenders[ft]);
+  /**
+   * Re-run one lookup. `bankOverride` lets a row be retried against a specific
+   * provider without changing the session-wide choice.
+   */
+  const retryItem = async (ft: string, bankOverride?: BankCode | 'auto') => {
+    await runLookup(ft, selectedGroupId, accountNumber, scanSenders[ft], bankOverride);
   };
 
   /**
@@ -1011,7 +1065,7 @@ function ScanWorkflow() {
       // Merge: re-verify the tapped FT and add any new ones read from the crop
       for (const foundFt of found) {
         if (items.some((it) => it.ftNumber === foundFt)) {
-          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt]);
+          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt], selectedBank);
         } else {
           const fresh = sessionActive ? existingFts : await loadExistingFts(selectedGroupId);
           setItems((prev) => [
@@ -1026,7 +1080,7 @@ function ScanWorkflow() {
               isDuplicate: fresh.has(foundFt),
             },
           ]);
-          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt]);
+          await runLookup(foundFt, selectedGroupId, savedAccount, senders[foundFt], selectedBank);
         }
       }
       showToast(`Focus re-scan read ${found.length} FT${found.length === 1 ? '' : 's'} from the selected area`, 'success');
@@ -1126,7 +1180,7 @@ function ScanWorkflow() {
         showToast(`FT ${ft} is already recorded in this group — flagged as duplicate`, 'warning');
       }
       // One at a time — each reference gets a clean, precise bank lookup + pairing
-      await runLookup(ft, selectedGroupId, savedAccount);
+      await runLookup(ft, selectedGroupId, savedAccount, undefined, selectedBank);
       done += 1;
       setBulkProgress({ done, total: queue.length });
     }
@@ -1409,9 +1463,9 @@ function ScanWorkflow() {
         {!sessionActive && (
           <div className="card">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white/90 mb-4">
-              1. Select the equb group
+              1. Select the equb group and bank
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Equb Group
@@ -1435,7 +1489,34 @@ function ScanWorkflow() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Bank
+                </label>
+                <select
+                  className="input-field"
+                  value={selectedBank}
+                  onChange={(e) => setSelectedBank(e.target.value as BankCode | 'auto')}
+                >
+                  <option value="auto">
+                    Auto-detect from the reference
+                  </option>
+                  {(bankOptions.length > 0 ? bankOptions : DEFAULT_BANKS).map((b) => (
+                    <option key={b.bank} value={b.bank}>
+                      {b.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  {selectedBank === 'auto'
+                    ? 'The bank is worked out from each reference. Pick one if it guesses wrong.'
+                    : `Every reference in this session is checked against ${BANK_LABEL[selectedBank]}.`}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   CBE Receiver Account
+                  {selectedBank !== 'auto' && selectedBank !== 'cbe' && selectedBank !== 'boa' && (
+                    <span className="ml-1 font-normal text-gray-400">— not needed</span>
+                  )}
                 </label>
                 {receiverOptions.length > 0 && !addingAccount ? (
                   <div className="flex gap-2">
@@ -1537,7 +1618,7 @@ function ScanWorkflow() {
             {/* Manual FT entry — same CBE verification + pairing pipeline, no photo needed */}
             <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
               <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Or enter FT numbers manually — same CBE verification and member pairing, no photo needed
+                Or enter reference numbers manually — same bank verification and member pairing, no photo needed
               </label>
               <div className="flex gap-2">
                 <FtInput
@@ -1546,7 +1627,7 @@ function ScanWorkflow() {
                   onSubmit={addManualFt}
                   suggestions={ftSuggestions}
                   duplicate={typedDuplicate}
-                  placeholder="FT + 10 characters (e.g. FT253126QXMJ) — start typing to see stored FTs"
+                  placeholder="Any bank reference (e.g. FT253126QXMJ, or a Dashen 123ABCDEFGHIJKLM)"
                   disabled={!selectedGroupId || loadingGroup}
                 />
                 <Button
@@ -1569,7 +1650,7 @@ function ScanWorkflow() {
             <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Bulk import — paste or upload FT numbers, one per line
+                  Bulk import — paste or upload reference numbers, one per line
                 </label>
                 <input
                   ref={bulkFileRef}
@@ -1791,7 +1872,7 @@ function ScanWorkflow() {
                     onSubmit={addManualFt}
                     suggestions={ftSuggestions}
                     duplicate={typedDuplicate}
-                    placeholder="Add FT number manually (e.g. FT24AB12345) — start typing to see stored FTs"
+                    placeholder="Add a reference manually (e.g. FT24AB12345) — start typing to see stored ones"
                     disabled={scanning}
                   />
                   <Button variant="secondary" onClick={addManualFt} disabled={scanning} className="flex-shrink-0">
@@ -1922,7 +2003,8 @@ function ScanWorkflow() {
                       )}
                       {it.status === 'found' && !it.isDuplicate && (
                         <span className="text-xs text-green-700 dark:text-success-400 flex items-center gap-1">
-                          <CheckCircle className="h-3.5 w-3.5" /> Verified by the bank
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Verified{it.bankName ? ` by ${it.bankName}` : ' by the bank'}
                         </span>
                       )}
                       {it.status === 'found' && it.isDuplicate && !it.tx && (
@@ -1968,13 +2050,37 @@ function ScanWorkflow() {
                   )}
 
                   {it.status === 'error' && (
-                    <p className="text-xs text-error-600 dark:text-error-400 mb-3 flex items-start gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                      {it.error} — fill the details manually below or remove this item.
-                    </p>
+                    <div className="mb-3 space-y-2">
+                      <p className="text-xs text-error-600 dark:text-error-400 flex items-start gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                        <span>
+                          {it.error}
+                          {it.bankName && <> — checked against {it.bankName}.</>}
+                        </span>
+                      </p>
+                      {/* Wrong bank is the common cause of a failed lookup, so
+                          let the admin re-check this one reference elsewhere
+                          without changing the session-wide choice. */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                          Try another bank:
+                        </span>
+                        {(bankOptions.length > 0 ? bankOptions : DEFAULT_BANKS)
+                          .filter((b) => b.bank !== it.bank)
+                          .map((b) => (
+                            <button
+                              key={b.bank}
+                              onClick={() => void retryItem(it.ftNumber, b.bank)}
+                              className="px-2 py-0.5 rounded-full text-[11px] font-medium border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.06] transition-colors"
+                            >
+                              {b.label}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
                   )}
 
-                  {/* Full CBE data */}
+                  {/* Full bank data */}
                   {expandedRaw === idx && it.tx && (
                     <div className="mb-4">
                       <CbeTransactionCard tx={it.tx} />
