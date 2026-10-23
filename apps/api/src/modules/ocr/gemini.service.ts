@@ -18,7 +18,7 @@ export const FT_SYSTEM_PROMPT = `You are an OCR specialist for Ethiopian bank do
 Reference formats differ per bank — recognise ALL of these:
 - CBE (Commercial Bank of Ethiopia): "FT" followed by exactly 10 alphanumeric characters, e.g. FT24AB123456. Labels: "Reference No.", "FT No", "Transaction Ref", "VSC No".
 - Bank of Abyssinia: also FT-prefixed with the same shape as CBE. Use the bank name printed on the document to tell them apart.
-- Dashen Bank: a 3-digit prefix followed by 13 alphanumeric characters, e.g. 123ABCDEFGHIJKLM. Labels: "Transaction Reference", "Transfer Reference".
+- Dashen Bank: a 3-digit prefix followed by 13 alphanumeric characters, e.g. 123ABCDEFGHIJKLM. Use the value labelled "Transaction Reference". Do NOT use "Transfer Reference" — that is a long internal id (e.g. WDTS19566865173359472694) which the bank's receipt lookup rejects.
 - Awash Bank: an alphanumeric transaction number, usually labelled "Transaction No." or "Txn Ref".
 - Telebirr / M-Pesa: a 10-character alphanumeric transaction number, labelled "Transaction No." or "Txn ID".
 - Siinqee: an "E" followed by 11 or more alphanumeric characters.

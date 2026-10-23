@@ -42,6 +42,20 @@ export interface BankInference {
   candidates: BankCode[];
 }
 
+/**
+ * Drop keys whose value is undefined or empty, so merging cannot blank out a
+ * field that another source already filled.
+ */
+function definedOnly(identifiers: BankIdentifiers): BankIdentifiers {
+  const out: BankIdentifiers = {};
+  for (const [key, value] of Object.entries(identifiers)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' && value.trim() === '') continue;
+    out[key as keyof BankIdentifiers] = value as string;
+  }
+  return out;
+}
+
 @Injectable()
 export class BankVerificationService {
   private readonly logger = new Logger(BankVerificationService.name);
@@ -163,7 +177,12 @@ export class BankVerificationService {
       const parsed = this.parseInput(input.rawInput);
       if (parsed) {
         bank = bank ?? parsed.bank;
-        identifiers = { ...parsed.identifiers, ...identifiers };
+        // Caller-supplied values win, but only where they actually carry a
+        // value. A plain spread would let explicit `undefined` slots (the DTO
+        // always materialises every field, most of them empty) overwrite the
+        // reference parsed out of the link — so pasting a receipt URL failed
+        // with "needs a reference number" even though the link had one.
+        identifiers = { ...parsed.identifiers, ...definedOnly(identifiers) };
       } else if (!bank) {
         return failed(
           'cbe',
