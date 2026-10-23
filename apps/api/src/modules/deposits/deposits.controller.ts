@@ -303,14 +303,22 @@ export class DepositsController {
 
     const bank = this.normaliseBank(body.bank);
 
-    // Every identifier slot carries the reference: each adapter reads its own
-    // slot, and the router reports "ambiguous" rather than guessing when the
-    // shape genuinely matches more than one provider.
+    // Fill the slots the router discriminates on. The scan page only knows a
+    // bare reference, so the wallet-shaped ones are derived here; without this
+    // a Telebirr/M-Pesa number could never be inferred from a scan.
+    //
+    // Deliberately NOT auto-filling receiptNumber: CBE's Receipt ID pattern
+    // accepts any 12+ alphanumeric string, so it would swallow a Dashen
+    // reference and make every lookup ambiguous. CBE Receipt IDs are picked
+    // explicitly from the bank dropdown instead.
+    const rawRef = reference;
+    const isWalletShape = /^[A-Za-z0-9]{10}$/.test(rawRef);
     const accountDigits = (body.accountNumber ?? '').replace(/\D/g, '');
     const identifiers: BankIdentifiers = {
       referenceNumber: body.referenceNumber?.trim() || reference,
       receiptNumber: body.receiptNumber?.trim() || undefined,
-      transactionNumber: body.transactionNumber?.trim() || undefined,
+      transactionNumber:
+        body.transactionNumber?.trim() || (isWalletShape ? rawRef : undefined),
       accountSuffix: accountDigits.length >= 5 ? accountDigits.slice(-8) : undefined,
     };
 

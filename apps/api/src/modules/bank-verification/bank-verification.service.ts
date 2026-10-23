@@ -91,34 +91,51 @@ export class BankVerificationService {
    * Ambiguity is reported rather than silently resolved.
    */
   inferBank(identifiers: BankIdentifiers): BankInference | null {
-    const candidates: BankCode[] = [];
+    // Two tiers on purpose. A bank with an exact reference shape (Dashen,
+    // Siinqee, CBE/BOA) is a far stronger signal than the eBirr wallets, whose
+    // patterns are catch-alls that match almost any alphanumeric string. Left
+    // in one pool, a perfectly valid Dashen reference came back "could belong
+    // to Dashen, Kaafi eBirr or Coopay eBirr" and the lookup refused to run.
+    // A specific match now wins outright; the catch-alls only apply when
+    // nothing more specific matched.
+    const specific: BankCode[] = [];
+    const generic: BankCode[] = [];
     const ref = identifiers.referenceNumber?.trim();
     const receipt = identifiers.receiptNumber?.trim();
     const txn = identifiers.transactionNumber?.trim();
     const suffix = identifiers.accountSuffix?.trim();
 
     if (receipt && CBE_RECEIPT_ID_REGEX.test(receipt)) {
-      candidates.push('cbe');
+      specific.push('cbe');
     }
     if (ref && CBE_FT_REGEX.test(ref)) {
       // An FT reference with a 5-digit suffix is Bank of Abyssinia; 8 digits is CBE.
-      if (suffix && /^\d{5}$/.test(suffix)) candidates.push('boa');
-      else if (suffix && /^\d{8}$/.test(suffix)) candidates.push('cbe');
-      else {
-        candidates.push('cbe', 'boa');
-      }
+      // With no suffix the shape is genuinely shared — both are offered and the
+      // caller is asked, which is what the bank dropdown exists for.
+      if (suffix && /^\d{5}$/.test(suffix)) specific.push('boa');
+      else if (suffix && /^\d{8}$/.test(suffix)) specific.push('cbe');
+      else specific.push('cbe', 'boa');
     }
     if (txn && /^[A-Za-z0-9]{10}$/.test(txn)) {
-      candidates.push('telebirr', 'mpesa');
+      // Telebirr and M-Pesa issue the same 10-character shape.
+      specific.push('telebirr', 'mpesa');
     }
-    if (ref && /^\d{3}[A-Za-z0-9]{13}$/.test(ref)) candidates.push('dashen');
-    if (ref && /^E[A-Za-z0-9]{11,63}$/i.test(ref)) candidates.push('siinqee');
-    if (ref && /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9_-]{10,64}$/.test(ref)) {
-      candidates.push('kaafiebirr');
-    }
-    if (ref && /^[A-Za-z0-9_-]{16,64}$/.test(ref)) candidates.push('coopayebirr');
+    // Exactly 3 digits + 13 alphanumerics: distinctive to Dashen.
+    if (ref && /^\d{3}[A-Za-z0-9]{13}$/.test(ref)) specific.push('dashen');
+    if (ref && /^E[A-Za-z0-9]{11,63}$/i.test(ref)) specific.push('siinqee');
 
-    const unique = [...new Set(candidates)];
+    // eBirr wallets share a host and their references are near-indistinguishable
+    // by shape. Coopay is the 16+ character form; Kaafi is the shorter mixed
+    // alphanumeric form. Splitting on length keeps the common case unambiguous
+    // instead of always asking the caller.
+    if (ref && /^[A-Za-z0-9_-]{16,64}$/.test(ref) && /[A-Za-z]/.test(ref)) {
+      generic.push('coopayebirr');
+    }
+    if (ref && /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9_-]{10,15}$/.test(ref)) {
+      generic.push('kaafiebirr');
+    }
+
+    const unique = [...new Set(specific.length > 0 ? specific : generic)];
     if (unique.length === 0) return null;
 
     return {
