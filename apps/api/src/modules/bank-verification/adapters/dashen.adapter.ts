@@ -77,20 +77,43 @@ export class DashenAdapter implements BankAdapter {
 
     let lastResult: BankVerificationResult | null = null;
 
-    // Try the primary host, then the secondary one before giving up.
-    for (const host of DASHEN_HOSTS) {
-      const url = `${host}${encodeURIComponent(reference)}`;
-      const result = await this.queryHost(url, reference);
+    // Primary host first, with one retry.
+    //
+    // A transient failure gets a second attempt on the SAME host. The primary
+    // occasionally blips (a connection reset, a momentary upstream error) and
+    // one retry rides that out; without it a valid reference came back as
+    // "could not be checked". The secondary host is NOT a substitute — it
+    // answers 502 to every request — so it gets a single attempt as a last
+    // resort rather than a retry of its own.
+    for (const [index, host] of DASHEN_HOSTS.entries()) {
+      const attempts = index === 0 ? 2 : 1;
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        const url = `${host}${encodeURIComponent(reference)}`;
+        const result = await this.queryHost(url, reference);
 
-      // A definitive answer (found, or explicitly not found) ends the search.
-      if (result.status !== 'failed') return result;
-      lastResult = result;
+        // A definitive answer (found, or explicitly not found) ends the search.
+        if (result.status !== 'failed') return result;
+        lastResult = result;
+      }
     }
 
-    return (
-      lastResult ??
-      failed(this.bank, 'dashen', 0, 'upstream_unreachable', 'Dashen could not be reached.')
-    );
+    // Every host failed. Report the PRIMARY host's failure, not the last one
+    // tried: the secondary always answers 502, so surfacing it would tell the
+    // admin "Dashen returned HTTP 502" about a host that was never the real
+    // problem. The message also has to be clearly transient so a retry reads as
+    // sensible rather than pointless.
+    if (lastResult?.error) {
+      return {
+        ...lastResult,
+        error: {
+          ...lastResult.error,
+          message: `${lastResult.error.message} This is usually temporary — try again in a moment.`,
+          retryable: true,
+        },
+      };
+    }
+
+    return failed(this.bank, 'dashen', 0, 'upstream_unreachable', 'Dashen could not be reached.');
   }
 
   private async queryHost(url: string, reference: string): Promise<BankVerificationResult> {
